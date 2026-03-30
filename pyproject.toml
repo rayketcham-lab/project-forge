@@ -43,7 +43,7 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "S", "B", "UP"]
-ignore = ["S101", "S311", "S603", "S607", "S701"]  # assert, random, subprocess, partial path, jinja2 autoescape
+ignore = ["S101", "S311", "S314", "S603", "S607", "S701"]  # assert, random, xml parse, subprocess, partial path, jinja2
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

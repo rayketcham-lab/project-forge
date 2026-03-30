@@ -17,6 +17,10 @@ class IdeaCategory(StrEnum):
     PRIVACY = "privacy"
     COMPLIANCE = "compliance"
     OBSERVABILITY = "observability"
+    PQC_CRYPTOGRAPHY = "pqc-cryptography"
+    NIST_STANDARDS = "nist-standards"
+    RFC_SECURITY = "rfc-security"
+    CRYPTO_INFRASTRUCTURE = "crypto-infrastructure"
 
 
 IdeaStatus = Literal["new", "approved", "scaffolded", "rejected", "archived"]

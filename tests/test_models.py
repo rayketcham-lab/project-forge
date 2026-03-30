@@ -49,7 +49,7 @@ class TestIdea:
             )
 
     def test_all_categories_exist(self):
-        assert len(IdeaCategory) == 8
+        assert len(IdeaCategory) == 12
         expected = {
             "security-tool",
             "market-gap",
@@ -59,6 +59,10 @@ class TestIdea:
             "privacy",
             "compliance",
             "observability",
+            "pqc-cryptography",
+            "nist-standards",
+            "rfc-security",
+            "crypto-infrastructure",
         }
         assert {c.value for c in IdeaCategory} == expected
 
