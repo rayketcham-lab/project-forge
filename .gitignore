@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+data/
+*.db
+.env
+.venv/
+venv/
+.ruff_cache/
+.pytest_cache/
+*.log
+.claude/settings.local.json

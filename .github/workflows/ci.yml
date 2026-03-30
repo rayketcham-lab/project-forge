@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: [self-hosted, Linux]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint with ruff
+        run: python3 -m ruff check src/ tests/
+      - name: Check formatting
+        run: python3 -m ruff format --check src/ tests/
+
+  test:
+    runs-on: [self-hosted, Linux]
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install package
+        run: pip install --user --break-system-packages -e ".[test]"
+      - name: Run tests
+        run: python3 -m pytest tests/ -v --tb=short
+
+  security:
+    runs-on: [self-hosted, Linux]
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - name: Security lint
+        run: python3 -m ruff check src/ --select S
