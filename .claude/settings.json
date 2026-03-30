@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Edit",
+      "Write",
+      "Bash(python3 -m pytest *)",
+      "Bash(python3 -m ruff *)",
+      "Bash(git *)",
+      "Bash(gh *)",
+      "Bash(curl *)",
+      "Bash(pip install *)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(git push --force *)",
+      "Bash(git reset --hard *)"
+    ]
+  },
+  "env": {
+    "FORGE_DB_PATH": "/opt/project-forge/data/forge.db",
+    "FORGE_PORT": "55443"
+  }
+}
