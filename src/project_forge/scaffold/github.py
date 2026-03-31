@@ -1,8 +1,9 @@
-"""GitHub integration via gh CLI."""
+"""GitHub integration via gh CLI -- supports personal and org repos."""
 
 import logging
-import shlex
 import subprocess
+
+from project_forge.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -18,23 +19,29 @@ def _run_gh(args: list[str], cwd: str | None = None) -> str:
     return result.stdout.strip()
 
 
-def create_repo(name: str, description: str, public: bool = True) -> str:
-    """Create a GitHub repo and return its URL."""
-    args = ["repo", "create", f"rayketcham/{name}", f"--description={description}"]
-    if public:
-        args.append("--public")
-    else:
-        args.append("--private")
+def create_repo(
+    name: str,
+    description: str,
+    public: bool = True,
+    owner: str | None = None,
+) -> str:
+    """Create a GitHub repo under owner (personal or org) and return its URL."""
+    owner = owner or settings.github_owner
+    args = ["repo", "create", f"{owner}/{name}", f"--description={description}"]
+    args.append("--public" if public else "--private")
     url = _run_gh(args)
     logger.info("Created repo: %s", url)
     return url
 
 
-def create_issue(repo: str, title: str, body: str, labels: list[str] | None = None) -> str:
+def create_issue(
+    repo: str,
+    title: str,
+    body: str,
+    labels: list[str] | None = None,
+) -> str:
     """Create a GitHub issue and return its URL."""
-    safe_title = shlex.quote(title)
-    safe_body = shlex.quote(body)
-    args = ["issue", "create", "-R", repo, "--title", safe_title, "--body", safe_body]
+    args = ["issue", "create", "-R", repo, "--title", title, "--body", body]
     if labels:
         args.extend(["--label", ",".join(labels)])
     url = _run_gh(args)
@@ -75,7 +82,7 @@ def push_initial_commit(project_dir: str, remote_url: str) -> None:
     # Push with gh auth token
     result = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=10)
     token = result.stdout.strip()
-    push_url = remote_url.replace("https://", f"https://rayketcham:{token}@")
+    push_url = remote_url.replace("https://", f"https://x-access-token:{token}@")
     subprocess.run(
         ["git", "remote", "set-url", "origin", push_url],
         capture_output=True,

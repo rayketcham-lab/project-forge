@@ -24,8 +24,28 @@ async function rejectIdea(id) {
 }
 
 async function scaffoldIdea(id) {
-    const result = await apiAction('/ideas/' + id + '/scaffold');
-    if (result) location.reload();
+    const ownerEl = document.getElementById('scaffold-owner');
+    const visEl = document.getElementById('scaffold-visibility');
+    const btn = document.getElementById('scaffold-btn');
+
+    const owner = ownerEl ? ownerEl.value : 'rayketcham-lab';
+    const visibility = visEl ? visEl.value : 'public';
+
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Creating repo...';
+    }
+
+    const url = '/ideas/' + id + '/scaffold?owner=' + encodeURIComponent(owner) + '&visibility=' + encodeURIComponent(visibility);
+    const result = await apiAction(url);
+
+    if (result && result.repo_url) {
+        if (btn) btn.textContent = 'Created!';
+        setTimeout(() => location.reload(), 1000);
+    } else if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Create on GitHub';
+    }
 }
 
 // Auto-refresh stats on dashboard

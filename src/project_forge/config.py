@@ -14,7 +14,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-4-20250514"
     auto_scaffold_threshold: float = 0.7
-    github_owner: str = "rayketcham"
+    github_owner: str = "rayketcham-lab"
+    github_org: str = "rayketcham-lab"
+    github_personal: str = "rayketcham"
     github_repo: str = "project-forge"
     log_level: str = "INFO"
 

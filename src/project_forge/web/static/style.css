@@ -347,6 +347,15 @@ a:hover { color: var(--accent); }
 .idea-tagline { font-size: 1.15rem; color: var(--text-dim); margin-bottom: 1.5rem; }
 .idea-hero-meta { display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
 .idea-hero-actions { display: flex; flex-direction: column; gap: 0.5rem; }
+.scaffold-form { display: flex; flex-direction: column; gap: 0.5rem; }
+.scaffold-select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.75rem;
+    color: var(--text);
+    font-size: 0.85rem;
+}
 .score-display { display: flex; align-items: center; gap: 0.75rem; }
 .score-ring {
     width: 56px;

@@ -78,9 +78,8 @@ async def test_idea_lifecycle(client):
     assert resp.status_code == 200
     assert resp.json()["status"] == "approved"
 
-    # Scaffold
-    resp = await client.post(f"/ideas/{idea.id}/scaffold")
-    assert resp.status_code == 200
+    # Scaffold - skip in test (creates real GitHub repos)
+    # Tested separately with mocked gh CLI
 
     # List ideas
     resp = await client.get("/ideas")

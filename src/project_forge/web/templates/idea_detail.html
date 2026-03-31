@@ -28,7 +28,23 @@
                 <button class="btn btn-primary" onclick="approveIdea('{{ idea.id }}')">Approve</button>
                 <button class="btn btn-danger" onclick="rejectIdea('{{ idea.id }}')">Reject</button>
                 {% elif idea.status == 'approved' %}
-                <button class="btn btn-primary" onclick="scaffoldIdea('{{ idea.id }}')">Scaffold Project</button>
+                <div class="scaffold-form" id="scaffold-form">
+                    <select id="scaffold-owner" class="scaffold-select">
+                        <option value="rayketcham-lab">rayketcham-lab (org)</option>
+                        <option value="rayketcham">rayketcham (personal)</option>
+                    </select>
+                    <select id="scaffold-visibility" class="scaffold-select">
+                        <option value="public">Public</option>
+                        <option value="private">Private</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="scaffoldIdea('{{ idea.id }}')" id="scaffold-btn">
+                        Create on GitHub
+                    </button>
+                </div>
+                {% elif idea.status == 'scaffolded' %}
+                {% if idea.project_repo_url %}
+                <a href="{{ idea.project_repo_url }}" target="_blank" class="btn btn-primary">View Repository</a>
+                {% endif %}
                 {% endif %}
             </div>
         </div>

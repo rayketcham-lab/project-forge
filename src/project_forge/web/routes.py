@@ -112,14 +112,52 @@ async def reject_idea(idea_id: str):
 
 
 @router.post("/ideas/{idea_id}/scaffold")
-async def scaffold_idea(idea_id: str):
+async def scaffold_idea(
+    idea_id: str,
+    owner: str = Query(default=None),
+    visibility: str = Query(default="public"),
+):
+    """Create a real GitHub repo from an idea."""
+    import logging
+    import tempfile
+    from pathlib import Path
+
+    from project_forge.config import settings
+    from project_forge.scaffold.builder import build_scaffold_spec, render_scaffold
+    from project_forge.scaffold.github import create_issue, create_repo, push_initial_commit
+
+    logger = logging.getLogger(__name__)
     idea = await db.get_idea(idea_id)
     if not idea:
         raise HTTPException(status_code=404, detail="Idea not found")
     if idea.status not in ("new", "approved"):
         raise HTTPException(status_code=400, detail=f"Cannot scaffold idea with status: {idea.status}")
-    await db.update_idea_status(idea_id, "approved")
-    return {"status": "scaffold_queued", "id": idea_id}
+
+    owner = owner or settings.github_owner
+    is_public = visibility != "private"
+
+    try:
+        spec = build_scaffold_spec(idea)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_dir = render_scaffold(spec, idea, Path(tmpdir), owner=owner)
+            repo_url = create_repo(spec.repo_name, idea.tagline[:200], public=is_public, owner=owner)
+            push_initial_commit(str(project_dir), repo_url)
+
+            # Create initial issues (non-fatal if labels don't exist yet)
+            full_repo = f"{owner}/{spec.repo_name}"
+            for issue in spec.initial_issues:
+                try:
+                    create_issue(full_repo, issue["title"], issue["body"])
+                except RuntimeError:
+                    logger.warning("Failed to create issue: %s", issue["title"])
+
+        await db.update_idea_urls(idea_id, project_repo_url=repo_url)
+        await db.update_idea_status(idea_id, "scaffolded")
+        logger.info("Scaffolded %s to %s", idea.name, repo_url)
+        return {"status": "scaffolded", "id": idea_id, "repo_url": repo_url}
+    except Exception as e:
+        logger.error("Scaffold failed for %s: %s", idea.name, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/projects", response_class=HTMLResponse)

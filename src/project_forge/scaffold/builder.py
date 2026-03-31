@@ -55,8 +55,11 @@ def build_scaffold_spec(idea: Idea) -> ScaffoldSpec:
     )
 
 
-def render_scaffold(spec: ScaffoldSpec, idea: Idea, output_dir: Path) -> Path:
+def render_scaffold(spec: ScaffoldSpec, idea: Idea, output_dir: Path, owner: str | None = None) -> Path:
     """Render scaffold templates to output_dir. Returns the project root."""
+    from project_forge.config import settings
+
+    owner = owner or settings.github_owner
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=False)
     project_dir = output_dir / spec.repo_name
     project_dir.mkdir(parents=True, exist_ok=True)
@@ -69,7 +72,7 @@ def render_scaffold(spec: ScaffoldSpec, idea: Idea, output_dir: Path) -> Path:
         "mvp_scope": idea.mvp_scope,
         "tech_stack": idea.tech_stack,
         "repo_name": spec.repo_name,
-        "repo_url": f"https://github.com/rayketcham/{spec.repo_name}",
+        "repo_url": f"https://github.com/{owner}/{spec.repo_name}",
         "language": spec.language,
         "framework": spec.framework,
     }
