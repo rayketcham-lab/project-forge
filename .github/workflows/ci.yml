@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Install package
-        run: pip install --user --break-system-packages -e ".[test]"
+        run: pip install --user -e ".[test]" 2>/dev/null || pip install --user --break-system-packages -e ".[test]"
       - name: Run tests
         run: python3 -m pytest tests/ -v --tb=short
 
