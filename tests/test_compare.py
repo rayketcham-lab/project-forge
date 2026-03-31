@@ -129,8 +129,7 @@ class TestCompareLogic:
             name="PKI Certificate Issuance Engine",
             tagline="Automated X.509 cert issuance with ACME",
             description=(
-                "Build a PKI certificate authority that handles "
-                "X.509 certificate issuance with ACME protocol support."
+                "Build a PKI certificate authority that handles X.509 certificate issuance with ACME protocol support."
             ),
             category=IdeaCategory.CRYPTO_INFRASTRUCTURE,
             market_analysis="Growing demand for PKI automation.",
@@ -163,8 +162,7 @@ class TestCompareLogic:
             name="SSH Honeypot Analytics Dashboard",
             tagline="Visualize attacker patterns from honeypot logs",
             description=(
-                "Build a real-time dashboard for analyzing SSH honeypot "
-                "data, tracking attacker IPs and techniques."
+                "Build a real-time dashboard for analyzing SSH honeypot data, tracking attacker IPs and techniques."
             ),
             category=IdeaCategory.SECURITY_TOOL,
             market_analysis="Security monitoring market growing.",

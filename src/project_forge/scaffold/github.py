@@ -71,11 +71,13 @@ def list_org_repos(org: str | None = None) -> list[dict]:
     for line in output.strip().split("\n"):
         parts = line.split("\t")
         if len(parts) >= 3:
-            repos.append({
-                "name": parts[0],
-                "description": parts[1],
-                "visibility": parts[2],
-            })
+            repos.append(
+                {
+                    "name": parts[0],
+                    "description": parts[1],
+                    "visibility": parts[2],
+                }
+            )
     return repos
 
 
@@ -92,8 +94,7 @@ def get_repo_details(owner: str, repo: str) -> dict:
 
     # Fetch README (non-fatal)
     try:
-        readme = _run_gh(["api", f"repos/{owner}/{repo}/readme",
-                           "--jq", ".content"])
+        readme = _run_gh(["api", f"repos/{owner}/{repo}/readme", "--jq", ".content"])
         details["readme"] = readme
     except RuntimeError:
         details["readme"] = ""

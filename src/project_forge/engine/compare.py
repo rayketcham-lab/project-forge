@@ -5,13 +5,56 @@ import re
 from project_forge.models import Idea
 
 # Common stop words to exclude from keyword matching
-_STOP_WORDS = frozenset({
-    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
-    "of", "with", "by", "from", "is", "it", "as", "be", "was", "are",
-    "that", "this", "has", "had", "not", "no", "all", "can", "will",
-    "do", "if", "so", "up", "out", "about", "into", "over", "after",
-    "build", "tool", "based", "using", "support", "new", "use",
-})
+_STOP_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "and",
+        "or",
+        "but",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "of",
+        "with",
+        "by",
+        "from",
+        "is",
+        "it",
+        "as",
+        "be",
+        "was",
+        "are",
+        "that",
+        "this",
+        "has",
+        "had",
+        "not",
+        "no",
+        "all",
+        "can",
+        "will",
+        "do",
+        "if",
+        "so",
+        "up",
+        "out",
+        "about",
+        "into",
+        "over",
+        "after",
+        "build",
+        "tool",
+        "based",
+        "using",
+        "support",
+        "new",
+        "use",
+    }
+)
 
 
 def _extract_keywords(text: str) -> set[str]:
@@ -26,20 +69,29 @@ def compare_idea_to_repo(idea: Idea, repo_details: dict) -> dict:
     Returns dict with overlap_score (0-1), verdict, reason, matching_keywords.
     """
     # Build keyword sets from idea
-    idea_text = " ".join([
-        idea.name, idea.tagline, idea.description,
-        " ".join(idea.tech_stack),
-    ])
+    idea_text = " ".join(
+        [
+            idea.name,
+            idea.tagline,
+            idea.description,
+            " ".join(idea.tech_stack),
+        ]
+    )
     idea_keywords = _extract_keywords(idea_text)
 
     # Build keyword sets from repo
-    repo_text = " ".join(filter(None, [
-        repo_details.get("name", ""),
-        repo_details.get("description", ""),
-        " ".join(repo_details.get("topics", [])),
-        repo_details.get("language", "") or "",
-        repo_details.get("readme", ""),
-    ]))
+    repo_text = " ".join(
+        filter(
+            None,
+            [
+                repo_details.get("name", ""),
+                repo_details.get("description", ""),
+                " ".join(repo_details.get("topics", [])),
+                repo_details.get("language", "") or "",
+                repo_details.get("readme", ""),
+            ],
+        )
+    )
     repo_keywords = _extract_keywords(repo_text)
 
     # Calculate overlap

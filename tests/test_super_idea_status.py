@@ -50,8 +50,7 @@ class TestSuperIdeaDefaultStatus:
         stats = await seeded_db.get_stats()
         approved_count = stats["ideas_by_status"].get("approved", 0)
         assert approved_count == 0, (
-            f"Expected 0 approved ideas (no manual approvals), "
-            f"got {approved_count}. Super ideas inflating the count."
+            f"Expected 0 approved ideas (no manual approvals), got {approved_count}. Super ideas inflating the count."
         )
 
     @pytest.mark.asyncio
@@ -79,9 +78,7 @@ class TestDashboardSuperVsRegular:
         await gen.generate(count=3)
 
         stats = await seeded_db.get_stats()
-        assert "super_ideas" in stats, (
-            "Stats should include 'super_ideas' count"
-        )
+        assert "super_ideas" in stats, "Stats should include 'super_ideas' count"
         assert stats["super_ideas"] >= 3
 
     @pytest.mark.asyncio
@@ -94,9 +91,7 @@ class TestDashboardSuperVsRegular:
         total = stats["total_ideas"]
         super_count = stats["super_ideas"]
         regular_count = total - super_count
-        assert regular_count == 50, (
-            f"Expected 50 regular ideas, got {regular_count}"
-        )
+        assert regular_count == 50, f"Expected 50 regular ideas, got {regular_count}"
 
 
 class TestDashboardRendering:
@@ -108,9 +103,7 @@ class TestDashboardRendering:
         gen = SuperIdeaGenerator(db)
         await gen.generate(count=2)
         transport = ASGITransport(app=app)
-        async with AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
             yield client
         await db.close()
 

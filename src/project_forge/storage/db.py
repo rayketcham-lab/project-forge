@@ -305,9 +305,7 @@ class Database:
         row = await cursor.fetchone()
         avg_score = round(row[0], 2) if row and row[0] else 0.0
 
-        cursor = await self.db.execute(
-            "SELECT COUNT(*) FROM ideas WHERE name LIKE '[SUPER]%'"
-        )
+        cursor = await self.db.execute("SELECT COUNT(*) FROM ideas WHERE name LIKE '[SUPER]%'")
         row = await cursor.fetchone()
         super_count = row[0] if row else 0
 
