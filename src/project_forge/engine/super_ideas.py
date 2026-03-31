@@ -213,15 +213,88 @@ def synthesize_super_idea(cluster: dict) -> SuperIdea:
     )
 
 
+# 5 daily slots, each with a different category focus lens.
+# The slot index rotates through these perspectives so each
+# time-of-day run sees the idea pool through a different filter.
+DAILY_ROTATION = [
+    {
+        "slot": 0,
+        "label": "PQC & Crypto",
+        "seed_categories": {
+            IdeaCategory.PQC_CRYPTOGRAPHY,
+            IdeaCategory.CRYPTO_INFRASTRUCTURE,
+        },
+        "perspective": "post-quantum migration and cryptographic operations",
+    },
+    {
+        "slot": 1,
+        "label": "Standards & Compliance",
+        "seed_categories": {
+            IdeaCategory.NIST_STANDARDS,
+            IdeaCategory.COMPLIANCE,
+            IdeaCategory.RFC_SECURITY,
+        },
+        "perspective": "standards compliance, regulatory automation, and RFC implementation",
+    },
+    {
+        "slot": 2,
+        "label": "Attack & Defense",
+        "seed_categories": {
+            IdeaCategory.SECURITY_TOOL,
+            IdeaCategory.VULNERABILITY_RESEARCH,
+        },
+        "perspective": "offensive security testing and defensive tooling",
+    },
+    {
+        "slot": 3,
+        "label": "Platform & DevOps",
+        "seed_categories": {
+            IdeaCategory.DEVOPS_TOOLING,
+            IdeaCategory.OBSERVABILITY,
+            IdeaCategory.AUTOMATION,
+        },
+        "perspective": "developer experience, infrastructure, and operational excellence",
+    },
+    {
+        "slot": 4,
+        "label": "Privacy & Market",
+        "seed_categories": {
+            IdeaCategory.PRIVACY,
+            IdeaCategory.MARKET_GAP,
+        },
+        "perspective": "privacy-preserving technology and untapped market opportunities",
+    },
+]
+
+
 class SuperIdeaGenerator:
     def __init__(self, db: Database):
         self.db = db
 
+    async def _store_super(self, si: SuperIdea) -> None:
+        """Store a super idea as a regular idea in the DB."""
+        idea = Idea(
+            id=si.id,
+            name=f"[SUPER] {si.name}",
+            tagline=si.tagline,
+            description=si.description + f"\n\n**Vision:** {si.vision}",
+            category=(si.categories_spanned[0] if si.categories_spanned else IdeaCategory.SECURITY_TOOL),
+            market_analysis=si.vision,
+            feasibility_score=si.combined_feasibility,
+            mvp_scope="\n".join(si.mvp_phases),
+            tech_stack=si.tech_stack,
+            status="approved",
+        )
+        await self.db.save_idea(idea)
+
     async def generate(self, count: int = 5) -> list[SuperIdea]:
-        """Generate super ideas by clustering and synthesizing existing ideas."""
+        """Generate super ideas by clustering and synthesizing all ideas."""
         all_ideas = await self.db.list_ideas(limit=1000)
         if len(all_ideas) < 10:
-            logger.warning("Not enough ideas to generate super ideas (need 10+, have %d)", len(all_ideas))
+            logger.warning(
+                "Not enough ideas for super synthesis (need 10+, have %d)",
+                len(all_ideas),
+            )
             return []
 
         clusters = find_idea_clusters(all_ideas)
@@ -235,21 +308,7 @@ class SuperIdeaGenerator:
             if si.name in used_names:
                 continue
             used_names.add(si.name)
-
-            # Store as a regular idea in the DB so it shows up in the dashboard
-            idea = Idea(
-                id=si.id,
-                name=f"[SUPER] {si.name}",
-                tagline=si.tagline,
-                description=si.description + f"\n\n**Vision:** {si.vision}",
-                category=si.categories_spanned[0] if si.categories_spanned else IdeaCategory.SECURITY_TOOL,
-                market_analysis=si.vision,
-                feasibility_score=si.combined_feasibility,
-                mvp_scope="\n".join(si.mvp_phases),
-                tech_stack=si.tech_stack,
-                status="approved",
-            )
-            await self.db.save_idea(idea)
+            await self._store_super(si)
             supers.append(si)
             logger.info(
                 "Super idea: %s (impact: %.2f, %d components)",
@@ -259,3 +318,66 @@ class SuperIdeaGenerator:
             )
 
         return supers
+
+    async def generate_seeded(self, slot: int = 0) -> SuperIdea | None:
+        """Generate ONE super idea using a rotated category seed.
+
+        Each slot focuses on a different category lens so that running
+        at different times of day produces different perspectives.
+        """
+        rotation = DAILY_ROTATION[slot % len(DAILY_ROTATION)]
+        seed_cats = rotation["seed_categories"]
+        perspective = rotation["perspective"]
+        label = rotation["label"]
+
+        all_ideas = await self.db.list_ideas(limit=1000)
+        if len(all_ideas) < 10:
+            return None
+
+        # Weight the pool: seed categories get full weight,
+        # others contribute at half probability for cross-pollination
+        weighted: list[Idea] = []
+        for idea in all_ideas:
+            if idea.category in seed_cats:
+                weighted.append(idea)
+            elif random.random() < 0.3:
+                weighted.append(idea)
+
+        if len(weighted) < 6:
+            weighted = all_ideas  # fallback to full pool
+
+        clusters = find_idea_clusters(weighted)
+        if not clusters:
+            return None
+
+        # Pick the best cluster that overlaps with seed categories
+        best = None
+        for cluster in clusters:
+            cat_overlap = cluster["categories"] & seed_cats
+            if cat_overlap or best is None:
+                best = cluster
+                if cat_overlap:
+                    break
+
+        if not best:
+            return None
+
+        si = synthesize_super_idea(best)
+        # Tag with the perspective
+        si.description += f"\n\n**Perspective:** {label} — synthesized through the lens of {perspective}."
+
+        # Check for duplicate names in DB
+        existing = await self.db.list_ideas(limit=1000)
+        existing_names = {i.name for i in existing}
+        if f"[SUPER] {si.name}" in existing_names:
+            si.name = f"{si.name} ({label})"
+
+        await self._store_super(si)
+        logger.info(
+            "Seeded super [%s]: %s (impact: %.2f, %d components)",
+            label,
+            si.name,
+            si.impact_score,
+            len(si.component_idea_ids),
+        )
+        return si
