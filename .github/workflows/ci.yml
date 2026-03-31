@@ -26,6 +26,39 @@ jobs:
       - name: Run tests
         run: python3 -m pytest tests/ -v --tb=short
 
+  build:
+    runs-on: [self-hosted, Linux]
+    needs: test
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Build wheel and sdist
+        run: python3 -m build --outdir dist/
+      - name: Verify wheel contents
+        run: |
+          WHEEL=$(ls dist/*.whl)
+          echo "Built: $WHEEL ($(stat -c%s "$WHEEL") bytes)"
+          python3 -c "
+          import zipfile, sys
+          with zipfile.ZipFile('$WHEEL') as zf:
+              names = zf.namelist()
+              required = ['project_forge/models.py', 'project_forge/web/', 'templates/', 'static/']
+              for r in required:
+                  if not any(r in n for n in names):
+                      print(f'MISSING: {r}')
+                      sys.exit(1)
+                  print(f'FOUND: {r}')
+          print(f'Wheel contains {len(names)} files')
+          "
+      - name: Test install in venv
+        run: |
+          python3 -m venv /tmp/forge-test-venv
+          /tmp/forge-test-venv/bin/pip install dist/*.whl
+          /tmp/forge-test-venv/bin/python -c "import project_forge; print('OK:', project_forge.__file__)"
+          test -f /tmp/forge-test-venv/bin/forge-generate || { echo "FAIL: forge-generate not found"; exit 1; }
+          test -f /tmp/forge-test-venv/bin/forge-serve || { echo "FAIL: forge-serve not found"; exit 1; }
+          echo "PASS: All entry points installed"
+          rm -rf /tmp/forge-test-venv
+
   security:
     runs-on: [self-hosted, Linux]
     needs: lint

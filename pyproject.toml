@@ -30,6 +30,7 @@ test = [
 dev = [
     "ruff>=0.15.0",
     "pip-audit>=2.0.0",
+    "build>=1.0.0",
 ]
 
 [project.scripts]
@@ -51,3 +52,11 @@ asyncio_mode = "auto"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+project_forge = [
+    "web/templates/*.html",
+    "web/static/*.js",
+    "web/static/*.css",
+    "scaffold/templates/**/*",
+]
