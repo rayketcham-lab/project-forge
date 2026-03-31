@@ -120,7 +120,7 @@ async def test_generate_and_store_records_failure(mock_anthropic_cls, db):
 @patch("project_forge.cron.scheduler.create_label")
 @pytest.mark.asyncio
 async def test_create_github_issue_for_idea(mock_label, mock_issue):
-    mock_issue.return_value = "https://github.com/rayketcham/project-forge/issues/1"
+    mock_issue.return_value = "https://github.com/rayketcham-lab/project-forge/issues/1"
     idea = _make_idea()
 
     url = await create_github_issue_for_idea(idea)
