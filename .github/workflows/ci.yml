@@ -31,6 +31,8 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Install build tools
+        run: pip install --user build 2>/dev/null || pip install --user --break-system-packages build
       - name: Build wheel and sdist
         run: python3 -m build --outdir dist/
       - name: Verify wheel contents
