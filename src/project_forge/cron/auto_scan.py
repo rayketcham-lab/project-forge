@@ -92,6 +92,166 @@ TECH_STACKS = {
 }
 
 
+def _build_rich_content(
+    concept: str,
+    domain: str,
+    category: IdeaCategory,
+    direction: str,
+    cat_desc: str,
+) -> tuple[str, str, str]:
+    """Build rich description, market analysis, and MVP scope.
+
+    Returns (description, market_analysis, mvp_scope) with real substance.
+    """
+    cat_name = category.value.replace("-", " ")
+    concept_short = concept.split("—")[0].split("(")[0].strip()
+
+    # --- DESCRIPTION (3+ sentences, explains problem + solution + why) ---
+    problem_starters = [
+        f"Organizations working in {domain} face a critical gap: {concept_short} "
+        f"is either done manually, done poorly, or not done at all.",
+        f"The {domain} sector has no good solution for {concept_short}. "
+        f"Teams waste hours on manual processes that should be automated.",
+        f"As {domain} grows in complexity, the need for {concept_short} "
+        f"becomes acute. Current tools are fragmented and incomplete.",
+        f"In {domain}, {concept_short} is a blind spot. Teams don't realize "
+        f"how exposed they are until an incident forces the conversation.",
+    ]
+    solution_middles = [
+        f"This project builds a purpose-built tool that handles {concept_short} "
+        f"specifically for {domain} environments. It integrates with existing "
+        f"workflows rather than replacing them, reducing adoption friction.",
+        f"The solution is a focused {cat_name} tool that automates "
+        f"{concept_short} for {domain}. It provides clear visibility into "
+        f"what's happening, actionable recommendations, and measurable outcomes.",
+        f"This tool brings {cat_name} discipline to {domain} by providing "
+        f"automated {concept_short} with clear reporting, integration hooks, "
+        f"and a developer-first CLI interface.",
+    ]
+    why_enders = [
+        f"The timing is right because {domain} is under increasing regulatory "
+        f"and security pressure, and teams need tools that work today, not "
+        f"frameworks that require months of customization.",
+        f"This matters now because the intersection of {cat_name} and {domain} "
+        f"is rapidly growing, but tooling hasn't kept pace with the demand. "
+        f"Early movers in this space will define the category.",
+        f"The {domain} market is actively looking for solutions in this space. "
+        f"Existing tools are either too generic or too expensive for most teams.",
+    ]
+
+    if direction == "contrarian":
+        prompt = random.choice(CONTRARIAN_PROMPTS)
+        description = (
+            f"**Contrarian angle:** {prompt}\n\n"
+            + random.choice(problem_starters)
+            + " "
+            + random.choice(solution_middles)
+            + " "
+            + random.choice(why_enders)
+        )
+    elif direction == "combinatoric":
+        template = random.choice(COMBINATORIC_TEMPLATES)
+        other_cat = random.choice([c for c in IdeaCategory if c != category])
+        other_concept = random.choice(CATEGORY_SEEDS[other_cat]["seed_concepts"])
+        filled = template.format(
+            concept_a=concept_short,
+            concept_b=other_concept.split("—")[0].strip(),
+            domain_a=cat_name,
+            domain_b=other_cat.value.replace("-", " "),
+        )
+        description = (
+            f"**Cross-domain insight:** {filled}\n\n"
+            + random.choice(problem_starters)
+            + " "
+            + random.choice(solution_middles)
+            + " "
+            + random.choice(why_enders)
+        )
+    elif direction == "crossover":
+        other_cat = random.choice([c for c in IdeaCategory if c != category])
+        other_domain = random.choice(CATEGORY_SEEDS[other_cat]["domains_to_cross"])
+        description = (
+            f"**Crossover concept:** What happens when {concept_short} "
+            f"meets the needs of {other_domain}?\n\n"
+            + random.choice(problem_starters)
+            + " "
+            + random.choice(solution_middles)
+            + " "
+            + random.choice(why_enders)
+        )
+    else:
+        description = (
+            random.choice(problem_starters) + " " + random.choice(solution_middles) + " " + random.choice(why_enders)
+        )
+
+    # --- MARKET ANALYSIS (specific to category + domain, not generic) ---
+    market_templates = [
+        (
+            f"The {domain} market is estimated at billions globally, and "
+            f"{cat_name} tooling within it is severely underserved. "
+            f"Most teams rely on general-purpose tools that weren't designed "
+            f"for {concept_short}. A focused solution captures a niche that "
+            f"larger vendors ignore because it's too specialized for them "
+            f"but critical for practitioners."
+        ),
+        (
+            f"Demand for {cat_name} solutions in {domain} is growing due to "
+            f"increasing regulatory requirements, security threats, and "
+            f"operational complexity. The current tooling landscape is "
+            f"fragmented — teams stitch together 3-5 different tools to "
+            f"accomplish what a single focused product should handle. "
+            f"This is the right time to build a unified approach."
+        ),
+        (
+            f"Three trends drive demand: (1) {domain} is facing unprecedented "
+            f"security and compliance pressure, (2) existing {cat_name} tools "
+            f"don't address the specific needs of {concept_short}, and "
+            f"(3) teams are willing to pay for tools that save them time "
+            f"and reduce risk. The competitive landscape is sparse — mostly "
+            f"manual processes and internal scripts."
+        ),
+    ]
+    market_analysis = random.choice(market_templates)
+
+    # --- MVP SCOPE (concrete deliverables, not generic filler) ---
+    mvp_templates = [
+        (
+            f"**Phase 1 (Weeks 1-2):** Core engine for {concept_short} "
+            f"targeting {domain}. CLI interface with JSON/table output. "
+            f"Support for the top 3 most common {domain} configurations.\n"
+            f"**Phase 2 (Weeks 3-4):** Web dashboard for results "
+            f"visualization. Integration with CI/CD pipelines (GitHub Actions). "
+            f"Export to common formats (CSV, SARIF, JSON).\n"
+            f"**Out of scope for MVP:** Multi-tenant SaaS, custom plugins, "
+            f"enterprise SSO. Keep it focused and shippable."
+        ),
+        (
+            f"**Core deliverable:** A working {cat_name} tool that handles "
+            f"{concept_short} for {domain} environments.\n"
+            f"**Must-haves:** CLI with clear output, configuration via YAML, "
+            f"documented API for automation, basic test suite.\n"
+            f"**Nice-to-haves:** Web UI, Slack/webhook notifications, "
+            f"scheduled scanning.\n"
+            f"**Explicitly excluded:** Cloud-hosted SaaS version, mobile app, "
+            f"AI/ML features. Ship a solid tool first."
+        ),
+        (
+            f"**Week 1:** Implement the core {concept_short} logic. "
+            f"Write 10+ tests covering happy path and edge cases. "
+            f"Support {domain} as the primary target.\n"
+            f"**Week 2:** Build the CLI interface with rich output "
+            f"(tables, color, progress bars). Add configuration file support.\n"
+            f"**Week 3:** CI/CD integration — GitHub Action, pre-commit hook, "
+            f"or cron-compatible runner. Add documentation and README.\n"
+            f"**Week 4:** Beta testing, bug fixes, and initial public release. "
+            f"Publish to PyPI/npm/crates.io as appropriate."
+        ),
+    ]
+    mvp_scope = random.choice(mvp_templates)
+
+    return description, market_analysis, mvp_scope
+
+
 def _content_hash(category: str, concept_idx: int, domain_idx: int, direction: str) -> str:
     """Deterministic content fingerprint from the generation inputs."""
     key = f"{category}:{concept_idx}:{domain_idx}:{direction}"
@@ -150,44 +310,15 @@ def generate_local_idea(
     domain = domains[domain_idx]
     ch = _content_hash(category.value, concept_idx, domain_idx, direction)
 
-    # Build description based on direction
-    if direction == "contrarian":
-        prompt = random.choice(CONTRARIAN_PROMPTS)
-        description = (
-            f"Inspired by the question: {prompt}\n\n"
-            f"{concept} applied to {domain}. "
-            f"This project tackles an overlooked problem in {category.value} "
-            "by approaching it from an unexpected angle."
-        )
-    elif direction == "combinatoric":
-        template = random.choice(COMBINATORIC_TEMPLATES)
-        other_cat = random.choice([c for c in IdeaCategory if c != category])
-        other_concept = random.choice(CATEGORY_SEEDS[other_cat]["seed_concepts"])
-        filled = template.format(
-            concept_a=concept,
-            concept_b=other_concept,
-            domain_a=category.value,
-            domain_b=other_cat.value,
-        )
-        description = (
-            f"Cross-pollination: {filled}\n\n"
-            f"Bridging {category.value} and {other_cat.value} "
-            "to create something neither domain has alone."
-        )
-    elif direction == "crossover":
-        other_cat = random.choice([c for c in IdeaCategory if c != category])
-        other_domain = random.choice(CATEGORY_SEEDS[other_cat]["domains_to_cross"])
-        description = (
-            f"What happens when {concept} meets {other_domain}? "
-            f"This project brings {category.value} thinking to {other_domain}, "
-            "solving problems that domain experts haven't recognized yet."
-        )
-    else:
-        description = (
-            f"{concept} applied to {domain}. "
-            f"This is a gap in the {category.value} space that nobody has filled. "
-            "The intersection of these domains creates unique value."
-        )
+    # Build rich description, market analysis, and MVP scope
+    cat_desc = seeds["description"]
+    description, market_analysis, mvp_scope = _build_rich_content(
+        concept,
+        domain,
+        category,
+        direction,
+        cat_desc,
+    )
 
     # Generate unique name with variant fallback
     name = _make_name(concept, domain, direction)
@@ -206,9 +337,9 @@ def generate_local_idea(
         tagline=tagline[:120],
         description=description,
         category=category,
-        market_analysis=(f"The {category.value} space lacks good tooling for {domain}. This fills a real gap."),
+        market_analysis=market_analysis,
         feasibility_score=score,
-        mvp_scope=(f"Build an MVP focused on {concept.split(',')[0].strip()} for {domain}. Target 2-4 week delivery."),
+        mvp_scope=mvp_scope,
         tech_stack=tech_stack,
         content_hash=ch,
     )
