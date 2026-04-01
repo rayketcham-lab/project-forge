@@ -215,7 +215,7 @@ class TestIdeaFromUrl:
             tech_stack=["rust", "x509"],
         )
 
-        with patch("project_forge.engine.url_ingest.IdeaGenerator") as mock_gen:
+        with patch("project_forge.engine.generator.IdeaGenerator") as mock_gen:
             mock_instance = AsyncMock()
             mock_instance.generate_from_content = AsyncMock(return_value=mock_idea)
             mock_gen.return_value = mock_instance
@@ -248,7 +248,7 @@ class TestIdeaFromUrl:
             tech_stack=["rust", "tls"],
         )
 
-        with patch("project_forge.engine.url_ingest.IdeaGenerator") as mock_gen:
+        with patch("project_forge.engine.generator.IdeaGenerator") as mock_gen:
             mock_instance = AsyncMock()
             mock_instance.generate_from_content = AsyncMock(return_value=mock_idea)
             mock_gen.return_value = mock_instance
@@ -279,7 +279,7 @@ class TestIdeaFromUrl:
             source_url="https://feistyduck.com/article",
         )
 
-        with patch("project_forge.engine.url_ingest.IdeaGenerator") as mock_gen:
+        with patch("project_forge.engine.generator.IdeaGenerator") as mock_gen:
             mock_instance = AsyncMock()
             mock_instance.generate_from_content = AsyncMock(return_value=mock_idea)
             mock_gen.return_value = mock_instance

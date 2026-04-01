@@ -6,9 +6,6 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 
-from project_forge.engine.generator import IdeaGenerator  # noqa: F401 — needed for mock patch targets
-
-
 # Tracking parameters to strip from URLs
 TRACKING_PARAMS = {
     "utm_source",
@@ -97,6 +94,8 @@ async def fetch_url_content(url: str) -> UrlContent:
 
 async def generate_idea_from_url(content: UrlContent, category_hint: str | None = None):
     """Generate an idea from URL content via IdeaGenerator."""
+    from project_forge.engine.generator import IdeaGenerator
+
     content.url = clean_url(content.url)
     generator = IdeaGenerator()
     idea = await generator.generate_from_content(content, category_hint=category_hint)
