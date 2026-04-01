@@ -1,5 +1,7 @@
 """Tests for project scaffold builder."""
 
+import re
+
 from project_forge.models import Idea, IdeaCategory
 from project_forge.scaffold.builder import build_scaffold_spec, render_scaffold, sanitize_repo_name
 
@@ -32,6 +34,26 @@ class TestSanitizeRepoName:
     def test_truncate_long_name(self):
         result = sanitize_repo_name("x" * 200)
         assert len(result) <= 100
+
+
+    def test_sanitize_repo_name_all_special_chars(self):
+        result = sanitize_repo_name("!@#$%^&*()")
+        assert result != "", "All-special-char input must not produce an empty repo name"
+        assert re.match(r"^[a-z0-9][a-z0-9\-]*$", result), f"Result '{result}' contains invalid chars"
+
+    def test_sanitize_repo_name_unicode(self):
+        result = sanitize_repo_name("Idée de Sécurité")
+        assert re.match(r"^[a-z0-9\-]+$", result), f"Result '{result}' contains non-[a-z0-9-] chars"
+        assert result != "", "Unicode input must not produce an empty repo name"
+
+    def test_sanitize_repo_name_numeric(self):
+        result = sanitize_repo_name("12345")
+        assert result == "12345"
+
+    def test_sanitize_repo_name_empty_string(self):
+        result = sanitize_repo_name("")
+        assert result != "", "Empty string input must not produce an empty repo name"
+        assert re.match(r"^[a-z0-9][a-z0-9\-]*$", result), f"Result '{result}' contains invalid chars"
 
 
 class TestBuildScaffoldSpec:

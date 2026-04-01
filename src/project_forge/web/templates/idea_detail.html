@@ -25,8 +25,8 @@
             </div>
             <div class="idea-hero-actions">
                 {% if idea.status == 'new' %}
-                <button class="btn btn-primary" onclick="approveIdea('{{ idea.id }}')">Approve</button>
-                <button class="btn btn-danger" onclick="rejectIdea('{{ idea.id }}')">Reject</button>
+                <button class="btn btn-primary" data-action="approve-idea" data-idea-id="{{ idea.id }}">Approve</button>
+                <button class="btn btn-danger" data-action="reject-idea" data-idea-id="{{ idea.id }}">Reject</button>
                 {% elif idea.status == 'approved' %}
                 <div class="scaffold-form" id="scaffold-form">
                     <select id="scaffold-owner" class="scaffold-select">
@@ -37,7 +37,7 @@
                         <option value="public">Public</option>
                         <option value="private">Private</option>
                     </select>
-                    <button class="btn btn-primary" onclick="scaffoldIdea('{{ idea.id }}')" id="scaffold-btn">
+                    <button class="btn btn-primary" data-action="scaffold-idea" data-idea-id="{{ idea.id }}" id="scaffold-btn">
                         Create on GitHub
                     </button>
                 </div>
@@ -57,7 +57,7 @@
             <div class="pitch-main">
                 <div class="pitch-card">
                     <h2>The Problem &amp; Solution</h2>
-                    <div class="prose">{{ idea.description | replace('\n', '<br>') }}</div>
+                    <div class="prose">{{ idea.description }}</div>
                 </div>
 
                 <div class="pitch-card">
@@ -116,7 +116,7 @@
                 <select id="compare-repo" class="scaffold-select" style="min-width: 220px;">
                     <option value="">Loading repos...</option>
                 </select>
-                <button class="btn btn-primary" id="compare-btn" onclick="compareIdea('{{ idea.id }}')" disabled>
+                <button class="btn btn-primary" id="compare-btn" data-action="compare-idea" data-idea-id="{{ idea.id }}" disabled>
                     Compare
                 </button>
             </div>

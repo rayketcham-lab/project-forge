@@ -16,25 +16,26 @@
 <section class="stats-section">
     <div class="container">
         <div class="stats-grid">
-            <div class="stat-card stat-accent">
+            <a href="/explore" class="stat-card stat-accent">
                 <div class="stat-number">{{ stats.total_ideas }}</div>
                 <div class="stat-label">Total Ideas</div>
-            </div>
-            <div class="stat-card stat-green">
+            </a>
+            <a href="/explore?status=approved" class="stat-card stat-green">
                 <div class="stat-number">{{ stats.ideas_by_status.get('approved', 0) }}</div>
                 <div class="stat-label">Approved</div>
-            </div>
-            <div class="stat-card stat-purple">
+            </a>
+            <a href="/projects" class="stat-card stat-purple">
                 <div class="stat-number">{{ stats.ideas_by_status.get('scaffolded', 0) }}</div>
                 <div class="stat-label">Scaffolded</div>
-            </div>
-            <div class="stat-card stat-blue">
+            </a>
+            <a href="#tab-super-ideas" class="stat-card stat-blue" data-tab="super-ideas">
                 <div class="stat-number">{{ stats.super_ideas }}</div>
                 <div class="stat-label">Super Ideas</div>
-            </div>
-            <div class="stat-card stat-orange">
+            </a>
+            <div class="stat-card stat-orange" title="Average feasibility score across all ideas. Each idea is scored 0.0-1.0 by the AI engine based on how achievable the MVP is, market need, and technical clarity.">
                 <div class="stat-number">{{ stats.avg_feasibility_score }}</div>
                 <div class="stat-label">Avg Score</div>
+                <div class="stat-subtitle">AI-assessed feasibility</div>
             </div>
         </div>
     </div>
@@ -43,9 +44,9 @@
 <section class="section">
     <div class="container">
         <div class="tab-bar">
-            <button class="tab-btn active" data-tab="ideas" onclick="switchTab('ideas')">Ideas</button>
-            <button class="tab-btn" data-tab="super-ideas" onclick="switchTab('super-ideas')">Super Ideas</button>
-            <button class="tab-btn" data-tab="add-idea" onclick="switchTab('add-idea')">Add Idea</button>
+            <button class="tab-btn active" data-tab="ideas">Ideas</button>
+            <button class="tab-btn" data-tab="super-ideas">Super Ideas</button>
+            <button class="tab-btn" data-tab="add-idea">Add Idea</button>
         </div>
 
         <div id="tab-ideas" class="tab-panel active">
@@ -123,7 +124,7 @@
                         <option value="{{ cat_name.name }}">{{ cat_name.name }}</option>
                         {% endfor %}
                     </select>
-                    <button id="url-submit-btn" class="btn btn-primary" onclick="submitUrl()">Generate Idea</button>
+                    <button id="url-submit-btn" class="btn btn-primary">Generate Idea</button>
                 </div>
                 <div id="url-result" class="url-result" style="display:none"></div>
             </div>

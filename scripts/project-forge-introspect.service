@@ -1,0 +1,14 @@
+[Unit]
+Description=Project Forge self-introspection
+After=network.target
+
+[Service]
+Type=oneshot
+User=claude
+WorkingDirectory=/opt/project-forge
+EnvironmentFile=-/opt/project-forge/.env
+ExecStart=/opt/project-forge/scripts/introspect-daily.sh
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

@@ -11,10 +11,18 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
 def sanitize_repo_name(name: str) -> str:
-    """Sanitize a string into a valid GitHub repo name."""
+    """Sanitize a string into a valid GitHub repo name.
+
+    Replaces all characters outside [a-z0-9-] with dashes, collapses runs of
+    dashes, then strips leading/trailing dashes.  If the result is empty (e.g.
+    the input was all special characters or the empty string) a fallback of
+    ``"project"`` is returned so that ``gh repo create`` never receives a blank
+    name.
+    """
     sanitized = re.sub(r"[^a-zA-Z0-9_\-]", "-", name.lower().strip())
     sanitized = re.sub(r"-+", "-", sanitized).strip("-")
-    return sanitized[:100]
+    sanitized = sanitized[:100]
+    return sanitized if sanitized else "project"
 
 
 def build_scaffold_spec(idea: Idea) -> ScaffoldSpec:

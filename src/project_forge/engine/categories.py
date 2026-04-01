@@ -212,6 +212,33 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
         ],
         "domains_to_cross": ["cloud-native", "embedded/IoT", "automotive V2X", "telecom 5G", "smart grid", "banking"],
     },
+    IdeaCategory.SELF_IMPROVEMENT: {
+        "description": (
+            "Self-improvement ideas for Project Forge itself — "
+            "missing tests, CI gaps, UX enhancements, security hardening, and performance wins"
+        ),
+        "seed_concepts": [
+            "automated test coverage enforcement for untested modules",
+            "CI pipeline gap detection and remediation",
+            "security hardening of API endpoints and input validation",
+            "dashboard UX improvements and accessibility gaps",
+            "database query performance profiling and indexing",
+            "error handling gaps in async code paths",
+            "missing rate limiting on generation endpoints",
+            "idea deduplication algorithm improvements",
+            "observability additions — structured logging, metrics, tracing",
+            "dependency audit automation and CVE alerting",
+            "scaffold quality validation and rollback safety",
+            "self-hosted runner health monitoring",
+        ],
+        "domains_to_cross": [
+            "test engineering",
+            "DevSecOps",
+            "developer experience",
+            "reliability engineering",
+            "performance engineering",
+        ],
+    },
 }
 
 COMBINATORIC_TEMPLATES = [

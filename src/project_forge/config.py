@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     expand_ideas_per_run: int = 2
     expand_cross_weight: float = 0.7
+    api_token: str = ""
 
 
 settings = Settings()

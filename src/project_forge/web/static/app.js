@@ -1,5 +1,52 @@
 // === Tab Switching ===
 
+// Delegated click handler — replaces all onclick= attributes in templates
+document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('click', function(e) {
+        // Tab switching: any [data-tab] inside a .tab-bar
+        var tabBtn = e.target.closest('.tab-bar [data-tab]');
+        if (tabBtn) {
+            e.preventDefault();
+            switchTab(tabBtn.getAttribute('data-tab'));
+            return;
+        }
+
+        // Stat card tab links: [data-tab] outside .tab-bar (e.g. super-ideas stat card)
+        var statTab = e.target.closest('a[data-tab]');
+        if (statTab) {
+            e.preventDefault();
+            switchTab(statTab.getAttribute('data-tab'));
+            return;
+        }
+
+        // Idea detail and thinktank action buttons
+        var actionBtn = e.target.closest('[data-action]');
+        if (actionBtn) {
+            var action = actionBtn.getAttribute('data-action');
+            var ideaId = actionBtn.getAttribute('data-idea-id');
+            if (action === 'approve-idea') {
+                approveIdea(ideaId);
+            } else if (action === 'reject-idea') {
+                rejectIdea(ideaId);
+            } else if (action === 'scaffold-idea') {
+                scaffoldIdea(ideaId);
+            } else if (action === 'compare-idea') {
+                compareIdea(ideaId);
+            } else if (action === 'promote-proposal') {
+                promoteProposal(ideaId);
+            } else if (action === 'reject-proposal') {
+                rejectProposal(ideaId);
+            }
+        }
+    });
+
+    // URL submit button
+    var urlBtn = document.getElementById('url-submit-btn');
+    if (urlBtn) {
+        urlBtn.addEventListener('click', submitUrl);
+    }
+});
+
 function switchTab(tabName) {
     // Deactivate all tabs and panels
     document.querySelectorAll('.tab-btn').forEach(function(btn) {
@@ -38,6 +85,34 @@ async function approveIdea(id) {
 async function rejectIdea(id) {
     const result = await apiAction('/ideas/' + id + '/reject');
     if (result) location.reload();
+}
+
+// === Think Tank Proposal Actions ===
+
+async function promoteProposal(ideaId) {
+    if (!confirm('Promote this proposal to a GitHub issue?')) return;
+    try {
+        var r = await fetch('/api/thinktank/' + ideaId + '/promote', { method: 'POST' });
+        var data = await r.json();
+        if (data.issue_url) {
+            location.reload();
+        } else {
+            alert('Failed to promote: ' + (data.detail || 'Unknown error'));
+        }
+    } catch (err) {
+        alert('Error: ' + err);
+    }
+}
+
+async function rejectProposal(ideaId) {
+    if (!confirm('Reject this proposal?')) return;
+    try {
+        var r = await fetch('/api/thinktank/' + ideaId + '/reject', { method: 'POST' });
+        await r.json();
+        location.reload();
+    } catch (err) {
+        alert('Error: ' + err);
+    }
 }
 
 async function scaffoldIdea(id) {

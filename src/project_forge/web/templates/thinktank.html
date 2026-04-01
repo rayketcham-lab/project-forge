@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Think Tank - Project Forge{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div class="container">
+        <h1 class="hero-title">Think Tank</h1>
+        <p class="hero-subtitle">Self-improvement engine. The Forge Lab generates AI proposals for what's missing, broken, or could be better. The Roadmap tracks decided work.</p>
+    </div>
+</section>
+
+<section class="stats-section">
+    <div class="container">
+        <div class="stats-grid">
+            <div class="stat-card stat-purple">
+                <div class="stat-number">{{ proposal_count }}</div>
+                <div class="stat-label">Proposals</div>
+            </div>
+            <div class="stat-card stat-green">
+                <div class="stat-number">{{ promoted_count }}</div>
+                <div class="stat-label">Promoted</div>
+            </div>
+            <div class="stat-card stat-red">
+                <div class="stat-number">{{ rejected_count }}</div>
+                <div class="stat-label">Rejected</div>
+            </div>
+            <div class="stat-card stat-accent">
+                <div class="stat-number">{{ open_count }}</div>
+                <div class="stat-label">Roadmap Open</div>
+            </div>
+            <div class="stat-card stat-blue">
+                <div class="stat-number">{{ closed_count }}</div>
+                <div class="stat-label">Roadmap Done</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ── FORGE LAB: AI-generated proposals ── #}
+
+<section class="section">
+    <div class="container">
+        <div class="section-header">
+            <h2>Forge Lab</h2>
+        </div>
+        <div class="tab-bar">
+            <button class="tab-btn active" data-tab="proposals">Proposals ({{ proposal_count }})</button>
+            <button class="tab-btn" data-tab="promoted">Promoted ({{ promoted_count }})</button>
+            <button class="tab-btn" data-tab="rejected">Rejected ({{ rejected_count }})</button>
+        </div>
+
+        <div id="tab-proposals" class="tab-panel active">
+            {% if proposals %}
+            <div class="card-grid">
+                {% for idea in proposals %}
+                <div class="idea-card" id="proposal-{{ idea.id }}">
+                    <div class="card-badge">
+                        <span class="badge badge-self-improvement">self-improvement</span>
+                        <span class="score-pill">{{ "%.0f" | format(idea.feasibility_score * 100) }}%</span>
+                    </div>
+                    <h3 class="card-title">{{ idea.name }}</h3>
+                    <p class="card-tagline">{{ idea.tagline }}</p>
+                    <div class="card-meta">
+                        <div class="score-bar">
+                            <div class="score-fill" style="width: {{ idea.feasibility_score * 100 }}%"></div>
+                        </div>
+                    </div>
+                    <div class="card-actions" style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
+                        <button class="btn btn-sm btn-primary" data-action="promote-proposal" data-idea-id="{{ idea.id }}">Promote to Issue</button>
+                        <button class="btn btn-sm btn-outline" data-action="reject-proposal" data-idea-id="{{ idea.id }}">Reject</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <h3>No proposals yet</h3>
+                <p>The introspection engine runs daily, analyzing the codebase for gaps, missing tests, security issues, and improvement opportunities.</p>
+                <p style="margin-top: 0.5rem; color: var(--text-dim); font-size: 0.85rem;"><strong>Tip:</strong> You can also generate proposals manually: <code>python3 -m project_forge.cron.introspect_runner</code></p>
+            </div>
+            {% endif %}
+        </div>
+
+        <div id="tab-promoted" class="tab-panel">
+            {% if promoted %}
+            <div class="card-grid">
+                {% for idea in promoted %}
+                <a href="{{ idea.github_issue_url or '#' }}" target="_blank" class="idea-card">
+                    <div class="card-badge">
+                        <span class="badge badge-self-improvement">self-improvement</span>
+                        <span class="score-pill" style="background: var(--green)">Promoted</span>
+                    </div>
+                    <h3 class="card-title">{{ idea.name }}</h3>
+                    <p class="card-tagline">{{ idea.tagline }}</p>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="empty-state">No promoted proposals yet. Review proposals above and promote the good ones.</p>
+            {% endif %}
+        </div>
+
+        <div id="tab-rejected" class="tab-panel">
+            {% if rejected %}
+            <div class="card-grid">
+                {% for idea in rejected %}
+                <div class="idea-card" style="opacity: 0.6;">
+                    <div class="card-badge">
+                        <span class="badge badge-self-improvement">self-improvement</span>
+                        <span class="score-pill" style="background: var(--red, #ef4444)">Rejected</span>
+                    </div>
+                    <h3 class="card-title">{{ idea.name }}</h3>
+                    <p class="card-tagline">{{ idea.tagline }}</p>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="empty-state">No rejected proposals. Everything proposed was either promoted or is still pending.</p>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+{# ── ROADMAP: GitHub issues ── #}
+
+<section class="section section-alt">
+    <div class="container">
+        <div class="section-header">
+            <h2>Roadmap</h2>
+        </div>
+        {% if error %}
+        <p class="empty-state">{{ error }}</p>
+        {% else %}
+        <div class="tab-bar">
+            <button class="tab-btn active" data-tab="roadmap-done">Done ({{ closed_count }})</button>
+            <button class="tab-btn" data-tab="roadmap-open">Open ({{ open_count }})</button>
+        </div>
+
+        <div id="tab-roadmap-done" class="tab-panel active">
+            {% if closed_issues %}
+            <div class="card-grid">
+                {% for issue in closed_issues %}
+                <a href="{{ issue.url }}" target="_blank" class="idea-card">
+                    <div class="card-badge">
+                        {% for label in issue.get('labels', []) %}
+                        <span class="badge">{{ label.name }}</span>
+                        {% endfor %}
+                        <span class="score-pill" style="background: var(--green)">Done</span>
+                    </div>
+                    <h3 class="card-title">#{{ issue.number }} {{ issue.title }}</h3>
+                    <div class="card-meta">
+                        <span class="tech-chip">Closed {{ issue.closedAt[:10] if issue.closedAt else '' }}</span>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="empty-state">No completed improvements yet.</p>
+            {% endif %}
+        </div>
+
+        <div id="tab-roadmap-open" class="tab-panel">
+            {% if open_issues %}
+            <div class="card-grid">
+                {% for issue in open_issues %}
+                <a href="{{ issue.url }}" target="_blank" class="idea-card">
+                    <div class="card-badge">
+                        {% for label in issue.get('labels', []) %}
+                        <span class="badge">{{ label.name }}</span>
+                        {% endfor %}
+                        <span class="score-pill">Open</span>
+                    </div>
+                    <h3 class="card-title">#{{ issue.number }} {{ issue.title }}</h3>
+                    <div class="card-meta">
+                        <span class="tech-chip">Opened {{ issue.createdAt[:10] if issue.createdAt else '' }}</span>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="empty-state">No open improvements. Everything is done!</p>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

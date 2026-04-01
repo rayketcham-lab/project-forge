@@ -47,7 +47,7 @@ async def test_api_categories(client):
     resp = await client.get("/api/categories")
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data) == 12  # All categories
+    assert len(data) == 13  # All categories
     for cat in data:
         assert "name" in cat
         assert "count" in cat

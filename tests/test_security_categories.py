@@ -71,5 +71,5 @@ def test_new_categories_have_prompts():
 
 
 def test_total_category_count():
-    # 8 original + 4 new = 12
-    assert len(IdeaCategory) == 12
+    # 8 original + 4 new + 1 self-improvement = 13
+    assert len(IdeaCategory) == 13

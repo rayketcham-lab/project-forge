@@ -51,7 +51,13 @@ async def explore(
 ):
     limit = 12
     offset = (page - 1) * limit
-    cat = IdeaCategory(category) if category else None
+    if category:
+        try:
+            cat = IdeaCategory(category)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown category: {category!r}") from exc
+    else:
+        cat = None
     if q:
         ideas = await db.search_ideas(q, limit=limit, offset=offset)
         total = len(await db.search_ideas(q, limit=10000))
@@ -165,6 +171,47 @@ async def scaffold_idea(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@router.get("/thinktank", response_class=HTMLResponse)
+async def thinktank_page(request: Request):
+    """Think Tank — Forge Lab (AI proposals) + Roadmap (GitHub issues)."""
+    from project_forge.scaffold.github import list_self_issues
+
+    # Roadmap: GitHub issues
+    try:
+        all_issues = list_self_issues()
+        open_issues = [i for i in all_issues if i.get("state") == "OPEN"]
+        closed_issues = [i for i in all_issues if i.get("state") == "CLOSED"]
+        error = None
+    except RuntimeError:
+        open_issues = []
+        closed_issues = []
+        error = "Could not fetch issues from GitHub."
+
+    # Forge Lab: self-improvement ideas from DB, split by status
+    all_si = await db.list_ideas(category=IdeaCategory.SELF_IMPROVEMENT, limit=100)
+    proposals = [i for i in all_si if i.status == "new"]
+    promoted = [i for i in all_si if i.status == "approved"]
+    rejected = [i for i in all_si if i.status == "rejected"]
+
+    return templates.TemplateResponse(
+        request,
+        "thinktank.html",
+        {
+            "open_issues": open_issues,
+            "closed_issues": closed_issues,
+            "open_count": len(open_issues),
+            "closed_count": len(closed_issues),
+            "proposals": proposals,
+            "proposal_count": len(proposals),
+            "promoted": promoted,
+            "promoted_count": len(promoted),
+            "rejected": rejected,
+            "rejected_count": len(rejected),
+            "error": error,
+        },
+    )
+
+
 @router.get("/projects", response_class=HTMLResponse)
 async def projects_list(request: Request):
     ideas = await db.list_ideas(status="scaffolded")
@@ -214,6 +261,68 @@ async def api_ideas(
     ideas = await db.list_ideas(status=status, category=cat, limit=limit, offset=offset)
     total = await db.count_ideas(status=status)
     return {"ideas": [i.model_dump() for i in ideas], "total": total}
+
+
+@router.get("/api/thinktank")
+async def api_thinktank():
+    """Think Tank API — returns Project Forge's own improvement issues and proposals."""
+    from project_forge.scaffold.github import list_self_issues
+
+    try:
+        all_issues = list_self_issues()
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    open_issues = [i for i in all_issues if i.get("state") == "OPEN"]
+    closed_issues = [i for i in all_issues if i.get("state") == "CLOSED"]
+    all_si = await db.list_ideas(category=IdeaCategory.SELF_IMPROVEMENT, limit=100)
+    proposals = [i for i in all_si if i.status == "new"]
+    promoted = [i for i in all_si if i.status == "approved"]
+    rejected = [i for i in all_si if i.status == "rejected"]
+    return {
+        "open": open_issues,
+        "closed": closed_issues,
+        "open_count": len(open_issues),
+        "closed_count": len(closed_issues),
+        "proposals": [p.model_dump() for p in proposals],
+        "proposal_count": len(proposals),
+        "promoted": [p.model_dump() for p in promoted],
+        "promoted_count": len(promoted),
+        "rejected": [p.model_dump() for p in rejected],
+        "rejected_count": len(rejected),
+    }
+
+
+@router.post("/api/thinktank/{idea_id}/promote")
+async def promote_proposal(idea_id: str):
+    """Promote a self-improvement proposal to a GitHub issue."""
+    from project_forge.config import settings
+    from project_forge.scaffold.github import create_issue
+
+    idea = await db.get_idea(idea_id)
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+
+    repo = f"{settings.github_owner}/{settings.github_repo}"
+    body = (
+        f"## {idea.tagline}\n\n"
+        f"{idea.description}\n\n"
+        f"**Feasibility:** {idea.feasibility_score:.2f}\n"
+        f"**MVP Scope:** {idea.mvp_scope}"
+    )
+    url = create_issue(repo, f"[Think Tank] {idea.name}", body)
+    await db.update_idea_urls(idea_id, github_issue_url=url)
+    await db.update_idea_status(idea_id, "approved")
+    return {"status": "promoted", "issue_url": url}
+
+
+@router.post("/api/thinktank/{idea_id}/reject")
+async def reject_proposal(idea_id: str):
+    """Reject a self-improvement proposal."""
+    idea = await db.get_idea(idea_id)
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+    await db.update_idea_status(idea_id, "rejected")
+    return {"status": "rejected", "id": idea_id}
 
 
 @router.get("/api/repos")

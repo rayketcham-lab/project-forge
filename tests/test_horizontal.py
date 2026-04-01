@@ -39,7 +39,7 @@ class TestCategoryPairLog:
     @pytest.mark.asyncio
     async def test_record_category_pair(self, db):
         await db.record_category_pair("automation", "security-tool", "idea123")
-        pairs = await db.get_least_explored_pairs(limit=66)
+        pairs = await db.get_least_explored_pairs(limit=78)
         # The recorded pair should appear with count=1
         recorded = [p for p in pairs if p[0] == "automation" and p[1] == "security-tool"]
         assert len(recorded) == 1
@@ -50,7 +50,7 @@ class TestCategoryPairLog:
         """cat_a < cat_b alphabetically, regardless of insertion order."""
         await db.record_category_pair("security-tool", "automation", "idea1")
         await db.record_category_pair("automation", "security-tool", "idea2")
-        pairs = await db.get_least_explored_pairs(limit=66)
+        pairs = await db.get_least_explored_pairs(limit=78)
         # Both should be normalized to (automation, security-tool)
         matching = [p for p in pairs if p[0] == "automation" and p[1] == "security-tool"]
         assert len(matching) == 1
@@ -59,8 +59,8 @@ class TestCategoryPairLog:
     @pytest.mark.asyncio
     async def test_least_explored_returns_zeros(self, db):
         """Pairs with no entries should appear with count=0."""
-        pairs = await db.get_least_explored_pairs(limit=66)
-        assert len(pairs) == 66  # 12 choose 2
+        pairs = await db.get_least_explored_pairs(limit=78)
+        assert len(pairs) == 78  # 13 choose 2
         assert all(p[2] == 0 for p in pairs)
 
     @pytest.mark.asyncio
@@ -69,7 +69,7 @@ class TestCategoryPairLog:
         await db.record_category_pair("automation", "security-tool", "idea1")
         await db.record_category_pair("automation", "security-tool", "idea2")
         await db.record_category_pair("compliance", "privacy", "idea3")
-        pairs = await db.get_least_explored_pairs(limit=66)
+        pairs = await db.get_least_explored_pairs(limit=78)
         counts = [p[2] for p in pairs]
         assert counts == sorted(counts)
 
@@ -139,7 +139,7 @@ class TestRunHorizontalCycle:
     @pytest.mark.asyncio
     async def test_records_category_pairs(self, seeded_db):
         await run_horizontal_cycle(seeded_db)
-        pairs = await seeded_db.get_least_explored_pairs(limit=66)
+        pairs = await seeded_db.get_least_explored_pairs(limit=78)
         explored = [p for p in pairs if p[2] > 0]
         assert len(explored) >= 1
 

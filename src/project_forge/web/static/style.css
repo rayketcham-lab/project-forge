@@ -154,6 +154,11 @@ a:hover { color: var(--accent); }
 .stat-green .stat-number { color: var(--green); }
 .stat-purple .stat-number { color: var(--purple); }
 .stat-orange .stat-number { color: var(--orange); }
+.stat-red .stat-number { color: var(--red); }
+.stat-blue .stat-number { color: var(--blue, #3b82f6); }
+a.stat-card { text-decoration: none; color: inherit; cursor: pointer; }
+a.stat-card:hover { transform: translateY(-3px); border-color: var(--accent); }
+.stat-subtitle { color: var(--text-dim); font-size: 0.7rem; margin-top: 0.25rem; opacity: 0.7; }
 
 /* === SECTIONS === */
 .section { padding: 3rem 0; }
@@ -218,6 +223,7 @@ a:hover { color: var(--accent); }
 .badge-nist-standards { background: #14b8a620; color: #5eead4; }
 .badge-rfc-security { background: #8b5cf620; color: #a78bfa; }
 .badge-crypto-infrastructure { background: #eab30820; color: #fde047; }
+.badge-self-improvement { background: #f4364420; color: #f97066; }
 
 .score-pill {
     background: rgba(99,102,241,0.15);
@@ -394,7 +400,7 @@ a:hover { color: var(--accent); }
 }
 .pitch-card h2 { font-size: 1.2rem; margin-bottom: 1rem; color: var(--text); }
 .pitch-card h3 { font-size: 1rem; margin-bottom: 0.75rem; color: var(--text-dim); }
-.prose { color: var(--text-dim); line-height: 1.8; font-size: 0.95rem; }
+.prose { color: var(--text-dim); line-height: 1.8; font-size: 0.95rem; white-space: pre-line; }
 
 /* === PAGINATION === */
 .pagination { display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 2rem; }

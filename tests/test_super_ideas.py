@@ -134,3 +134,37 @@ class TestSuperIdeaGenerator:
         supers = await gen.generate(count=5)
         names = [s.name for s in supers]
         assert len(set(names)) == 5
+
+
+class TestSuperIdeaGeneratorEmptyPool:
+    """Verify the early-exit guard when the idea pool is too small."""
+
+    @pytest_asyncio.fixture
+    async def sparse_db(self, tmp_path: Path):
+        """A fresh DB with fewer than 10 ideas."""
+        from project_forge.models import Idea, IdeaCategory
+
+        database = Database(tmp_path / "sparse.db")
+        await database.connect()
+        for i in range(5):
+            idea = Idea(
+                name=f"Sparse Idea {i}",
+                tagline="Tag",
+                description="Desc",
+                category=IdeaCategory.SECURITY_TOOL,
+                market_analysis="Market",
+                feasibility_score=0.5,
+                mvp_scope="MVP",
+            )
+            await database.save_idea(idea)
+        yield database
+        await database.close()
+
+    @pytest.mark.asyncio
+    async def test_generate_returns_empty_when_too_few_ideas(self, sparse_db):
+        """generate() must return [] when there are fewer than 10 ideas."""
+        gen = SuperIdeaGenerator(sparse_db)
+        result = await gen.generate(count=5)
+        assert result == [], (
+            f"Expected empty list with only 5 ideas in pool, got {result}"
+        )

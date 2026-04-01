@@ -163,3 +163,71 @@ async def test_save_generation_run(db):
     run = GenerationRun(category=IdeaCategory.MARKET_GAP, success=False, error="API timeout")
     saved = await db.save_run(run)
     assert saved.id == run.id
+
+
+@pytest.mark.asyncio
+async def test_list_ideas_pagination(db):
+    """Pagination: limit=5 offset=0 and limit=5 offset=5 must return disjoint sets."""
+    for i in range(10):
+        idea = Idea(
+            name=f"Paginated Idea {i:02d}",
+            tagline=f"Tag {i}",
+            description=f"Desc {i}",
+            category=IdeaCategory.AUTOMATION,
+            market_analysis="Market",
+            feasibility_score=0.5,
+            mvp_scope="MVP",
+        )
+        await db.save_idea(idea)
+
+    page1 = await db.list_ideas(limit=5, offset=0)
+    page2 = await db.list_ideas(limit=5, offset=5)
+
+    assert len(page1) == 5
+    assert len(page2) == 5
+
+    ids_page1 = {i.id for i in page1}
+    ids_page2 = {i.id for i in page2}
+    assert ids_page1.isdisjoint(ids_page2), "Paginated pages must not share any ideas"
+
+
+@pytest.mark.asyncio
+async def test_list_ideas_offset_beyond_end(db):
+    """Querying past the last row must return an empty list."""
+    idea = Idea(
+        name="Only Idea",
+        tagline="Tag",
+        description="Desc",
+        category=IdeaCategory.AUTOMATION,
+        market_analysis="Market",
+        feasibility_score=0.5,
+        mvp_scope="MVP",
+    )
+    await db.save_idea(idea)
+
+    result = await db.list_ideas(limit=5, offset=100)
+    assert result == [], f"Expected empty list, got {result}"
+
+
+@pytest.mark.asyncio
+async def test_list_super_ideas_deduplicates_by_name(db):
+    """list_super_ideas must return exactly one row per unique name, with the highest score."""
+    for score in (0.7, 0.8, 0.9):
+        idea = Idea(
+            name="[SUPER] Quantum PKI Platform",
+            tagline="Unified platform",
+            description="Desc",
+            category=IdeaCategory.PQC_CRYPTOGRAPHY,
+            market_analysis="Market",
+            feasibility_score=score,
+            mvp_scope="Build it.",
+        )
+        await db.save_idea(idea)
+
+    results = await db.list_super_ideas(limit=10)
+    assert len(results) == 1, (
+        f"Expected exactly 1 deduplicated super idea, got {len(results)}"
+    )
+    assert results[0].feasibility_score == 0.9, (
+        f"Expected highest-scoring row (0.9), got {results[0].feasibility_score}"
+    )

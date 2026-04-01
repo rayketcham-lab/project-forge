@@ -16,6 +16,7 @@
                 <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">Dashboard</a>
                 <a href="/explore" class="nav-link {% if request.url.path == '/explore' or request.url.path == '/ideas' %}active{% endif %}">Explore</a>
                 <a href="/projects" class="nav-link {% if request.url.path == '/projects' %}active{% endif %}">Projects</a>
+                <a href="/thinktank" class="nav-link {% if request.url.path == '/thinktank' %}active{% endif %}">Think Tank</a>
                 <a href="/docs" class="nav-link">API</a>
             </div>
             <div class="nav-search">
@@ -46,7 +47,7 @@
             </p>
         </div>
     </footer>
-    <script src="/static/app.js?v=3"></script>
+    <script src="/static/app.js?v=4"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

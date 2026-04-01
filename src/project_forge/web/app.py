@@ -14,6 +14,7 @@ from starlette.responses import Response
 
 from project_forge.config import settings
 from project_forge.storage.db import Database
+from project_forge.web.auth import BearerTokenMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ class CSPMiddleware(BaseHTTPMiddleware):
         response: Response = await call_next(request)
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "script-src 'self' https://cdn.jsdelivr.net; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "img-src 'self' data: https://fastapi.tiangolo.com; "
             "font-src 'self'"
@@ -57,6 +58,7 @@ app = FastAPI(
 )
 
 app.add_middleware(CSPMiddleware)
+app.add_middleware(BearerTokenMiddleware)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 

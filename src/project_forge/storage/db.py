@@ -287,7 +287,7 @@ class Database:
         )
         await self.db.commit()
 
-    async def get_least_explored_pairs(self, limit: int = 66) -> list[tuple[str, str, int]]:
+    async def get_least_explored_pairs(self, limit: int = 78) -> list[tuple[str, str, int]]:
         """Return all 66 category pairs sorted by exploration count ascending."""
         all_cats = [c.value for c in IdeaCategory]
         all_pairs = []
@@ -308,10 +308,25 @@ class Database:
     # === SUPER IDEAS ===
 
     async def list_super_ideas(self, limit: int = 6) -> list[Idea]:
-        """List super ideas (name starts with [SUPER]) by score descending, deduped by name."""
+        """List super ideas (name starts with [SUPER]) by score descending, deduped by name.
+
+        Uses a subquery to deterministically select the highest-scoring row per
+        unique name, avoiding SQLite's undefined behaviour when GROUP BY is used
+        without an aggregate on non-grouped columns.
+        """
         cursor = await self.db.execute(
-            "SELECT * FROM ideas WHERE name LIKE '[SUPER]%' "
-            "GROUP BY name ORDER BY feasibility_score DESC LIMIT ?",
+            """
+            SELECT i.*
+            FROM ideas i
+            INNER JOIN (
+                SELECT name, MAX(feasibility_score) AS max_score
+                FROM ideas
+                WHERE name LIKE '[SUPER]%'
+                GROUP BY name
+            ) best ON i.name = best.name AND i.feasibility_score = best.max_score
+            ORDER BY i.feasibility_score DESC
+            LIMIT ?
+            """,
             (limit,),
         )
         rows = await cursor.fetchall()

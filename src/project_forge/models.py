@@ -22,6 +22,7 @@ class IdeaCategory(StrEnum):
     NIST_STANDARDS = "nist-standards"
     RFC_SECURITY = "rfc-security"
     CRYPTO_INFRASTRUCTURE = "crypto-infrastructure"
+    SELF_IMPROVEMENT = "self-improvement"
 
 
 IdeaStatus = Literal["new", "approved", "scaffolded", "rejected", "archived"]

@@ -104,6 +104,29 @@ def get_repo_details(owner: str, repo: str) -> dict:
     return details
 
 
+def list_self_issues(state: str = "all") -> list[dict]:
+    """List GitHub issues on the project-forge repo itself (self-improvement tracker).
+
+    Args:
+        state: Filter by state — "all", "open", or "closed".
+
+    Returns:
+        List of issue dicts with number, title, state, labels, url, createdAt, closedAt.
+    """
+    args = [
+        "issue",
+        "list",
+        "--state",
+        state,
+        "--limit",
+        "100",
+        "--json",
+        "number,title,state,labels,url,createdAt,closedAt",
+    ]
+    output = _run_gh(args)
+    return json.loads(output) if output else []
+
+
 def push_initial_commit(project_dir: str, remote_url: str) -> None:
     """Initialize git, commit all files, and push to remote."""
     cmds = [
@@ -123,7 +146,7 @@ def push_initial_commit(project_dir: str, remote_url: str) -> None:
         if result.returncode != 0:
             raise RuntimeError(f"Git command failed: {' '.join(cmd)}: {result.stderr}")
 
-    # Push with gh auth token
+    # Push with gh auth token; always restore the clean URL afterward.
     result = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=10)
     token = result.stdout.strip()
     push_url = remote_url.replace("https://", f"https://x-access-token:{token}@")
@@ -134,21 +157,23 @@ def push_initial_commit(project_dir: str, remote_url: str) -> None:
         cwd=project_dir,
         timeout=10,
     )
-    result = subprocess.run(
-        ["git", "push", "-u", "origin", "main"],
-        capture_output=True,
-        text=True,
-        cwd=project_dir,
-        timeout=60,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"Git push failed: {result.stderr}")
-    # Clean up token from remote URL
-    subprocess.run(
-        ["git", "remote", "set-url", "origin", remote_url],
-        capture_output=True,
-        text=True,
-        cwd=project_dir,
-        timeout=10,
-    )
+    try:
+        result = subprocess.run(
+            ["git", "push", "-u", "origin", "main"],
+            capture_output=True,
+            text=True,
+            cwd=project_dir,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Git push failed: {result.stderr}")
+    finally:
+        # Remove the embedded token from the remote URL regardless of push outcome.
+        subprocess.run(
+            ["git", "remote", "set-url", "origin", remote_url],
+            capture_output=True,
+            text=True,
+            cwd=project_dir,
+            timeout=10,
+        )
     logger.info("Pushed initial commit to %s", remote_url)
