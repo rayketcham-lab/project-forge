@@ -21,11 +21,14 @@ async def seeded_client(tmp_path):
     await db.connect()
 
     # Insert 3 super ideas with old timestamps
-    cols = ("id, name, tagline, description, category, market_analysis, "
-            "feasibility_score, mvp_scope, tech_stack, generated_at, status")
+    sql = (
+        "INSERT INTO ideas (id, name, tagline, description, category, market_analysis, "
+        "feasibility_score, mvp_scope, tech_stack, generated_at, status) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+    )
     for i in range(3):
         await db.db.execute(
-            f"INSERT INTO ideas ({cols}) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            sql,
             (f"super-{i}", f"[SUPER] Mega Project {i}", f"Super tagline {i}",
              f"Super description {i}", "security-tool", "N/A", 0.9, "N/A",
              "[]", "2025-01-01T00:00:00", "new"),
@@ -34,7 +37,7 @@ async def seeded_client(tmp_path):
     # Insert 25 regular ideas with RECENT timestamps (push supers out of top 20)
     for i in range(25):
         await db.db.execute(
-            f"INSERT INTO ideas ({cols}) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            sql,
             (f"regular-{i}", f"Regular Idea {i}", f"Tagline {i}",
              f"Description {i}", "security-tool", "N/A", 0.5, "N/A",
              "[]", "2026-04-01T00:00:00", "new"),

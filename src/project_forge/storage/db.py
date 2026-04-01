@@ -308,9 +308,10 @@ class Database:
     # === SUPER IDEAS ===
 
     async def list_super_ideas(self, limit: int = 6) -> list[Idea]:
-        """List super ideas (name starts with [SUPER]) by score descending."""
+        """List super ideas (name starts with [SUPER]) by score descending, deduped by name."""
         cursor = await self.db.execute(
-            "SELECT * FROM ideas WHERE name LIKE '[SUPER]%' ORDER BY feasibility_score DESC LIMIT ?",
+            "SELECT * FROM ideas WHERE name LIKE '[SUPER]%' "
+            "GROUP BY name ORDER BY feasibility_score DESC LIMIT ?",
             (limit,),
         )
         rows = await cursor.fetchall()
