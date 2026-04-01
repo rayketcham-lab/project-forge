@@ -6,7 +6,8 @@ import logging
 import anthropic
 
 from project_forge.config import settings
-from project_forge.engine.prompts import SYSTEM_PROMPT, build_generation_prompt
+from project_forge.engine.prompts import SYSTEM_PROMPT, build_generation_prompt, build_url_ingest_prompt
+from project_forge.engine.url_ingest import UrlContent
 from project_forge.models import Idea, IdeaCategory
 
 logger = logging.getLogger(__name__)
@@ -66,4 +67,50 @@ class IdeaGenerator:
         )
 
         logger.info("Generated idea: %s (score: %.2f)", idea.name, idea.feasibility_score)
+        return idea
+
+    async def generate_from_content(
+        self,
+        content: UrlContent,
+        category_hint: str | None = None,
+    ) -> Idea:
+        """Generate an idea from URL content."""
+        prompt = build_url_ingest_prompt(
+            title=content.title,
+            url=content.url,
+            domain=content.domain,
+            content=content.text,
+            category_hint=category_hint,
+        )
+
+        logger.info("Generating idea from URL: %s", content.url)
+
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=2000,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        text = response.content[0].text
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0]
+        elif "```" in text:
+            text = text.split("```")[1].split("```")[0]
+
+        data = json.loads(text.strip())
+
+        idea = Idea(
+            name=data["name"],
+            tagline=data["tagline"],
+            description=data["description"],
+            category=IdeaCategory(data["category"]),
+            market_analysis=data["market_analysis"],
+            feasibility_score=max(0.0, min(1.0, float(data["feasibility_score"]))),
+            mvp_scope=data["mvp_scope"],
+            tech_stack=data.get("tech_stack", []),
+            source_url=content.url,
+        )
+
+        logger.info("Generated idea from URL: %s (score: %.2f)", idea.name, idea.feasibility_score)
         return idea

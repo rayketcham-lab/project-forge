@@ -16,16 +16,19 @@ from project_forge.web.app import app, db
 class TestListOrgRepos:
     @patch("project_forge.scaffold.github.subprocess.run")
     def test_list_org_repos_returns_list(self, mock_run):
+        """gh repo list returns owner/name — list_org_repos must strip the prefix."""
         mock_run.return_value.returncode = 0
+        # Real gh output uses owner/name format in the first column
         mock_run.return_value.stdout = (
-            "pki-ca-engine\tPKI Certificate Authority Engine\tpublic\n"
-            "project-forge\tAutonomous project think-tank\tpublic\n"
-            "honeypot\tSSH honeypot\tprivate\n"
+            "rayketcham-lab/pki-ca-engine\tPKI Certificate Authority Engine\tpublic\n"
+            "rayketcham-lab/project-forge\tAutonomous project think-tank\tpublic\n"
+            "rayketcham-lab/honeypot\tSSH honeypot\tprivate\n"
         )
         mock_run.return_value.stderr = ""
 
         repos = list_org_repos("rayketcham-lab")
         assert len(repos) == 3
+        # Names must be short (repo only), not owner/repo
         assert repos[0]["name"] == "pki-ca-engine"
         assert repos[0]["description"] == "PKI Certificate Authority Engine"
         assert repos[0]["visibility"] == "public"
@@ -44,12 +47,14 @@ class TestListOrgRepos:
     @patch("project_forge.scaffold.github.subprocess.run")
     def test_list_org_repos_uses_default_org(self, mock_run):
         mock_run.return_value.returncode = 0
-        mock_run.return_value.stdout = "repo1\tDesc\tpublic\n"
+        mock_run.return_value.stdout = "rayketcham-lab/repo1\tDesc\tpublic\n"
         mock_run.return_value.stderr = ""
 
-        list_org_repos()
+        repos = list_org_repos()
         call_args = mock_run.call_args[0][0]
         assert "rayketcham-lab" in " ".join(call_args)
+        # Should strip org prefix
+        assert repos[0]["name"] == "repo1"
 
     @patch("project_forge.scaffold.github.subprocess.run")
     def test_list_org_repos_failure(self, mock_run):
@@ -262,6 +267,42 @@ async def client_with_idea(tmp_path):
 
 
 class TestCompareAPI:
+    @pytest.mark.asyncio
+    async def test_compare_with_repo_from_list(self, client_with_idea):
+        """Full flow: list repos → pick one → compare. Must not 404."""
+        client, idea = client_with_idea
+        with (
+            patch("project_forge.scaffold.github.subprocess.run") as mock_run,
+            patch("project_forge.scaffold.github.get_repo_details") as mock_details,
+        ):
+            # Simulate list_org_repos returning realistic gh output
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = (
+                "rayketcham-lab/pki-ca-engine\tPKI CA\tpublic\n"
+            )
+            mock_run.return_value.stderr = ""
+
+            resp = await client.get("/api/repos")
+            assert resp.status_code == 200
+            repo_name = resp.json()["repos"][0]["name"]
+
+            # Now use that repo_name in compare — this is what the frontend does
+            mock_details.return_value = {
+                "name": "pki-ca-engine",
+                "description": "PKI CA engine",
+                "topics": ["pki"],
+                "language": "Rust",
+                "readme": "A cert authority.",
+            }
+            resp = await client.post(
+                f"/api/ideas/{idea.id}/compare",
+                params={"owner": "rayketcham-lab", "repo": repo_name},
+            )
+            # This must succeed — not 502 from a gh 404
+            assert resp.status_code == 200
+            data = resp.json()
+            assert "overlap_score" in data
+
     @pytest.mark.asyncio
     async def test_compare_endpoint_exists(self, client_with_idea):
         """POST /api/ideas/{id}/compare should exist and accept repo param."""

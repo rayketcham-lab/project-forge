@@ -71,9 +71,11 @@ def list_org_repos(org: str | None = None) -> list[dict]:
     for line in output.strip().split("\n"):
         parts = line.split("\t")
         if len(parts) >= 3:
+            # gh repo list returns "owner/name" — strip the owner prefix
+            name = parts[0].split("/", 1)[-1] if "/" in parts[0] else parts[0]
             repos.append(
                 {
-                    "name": parts[0],
+                    "name": name,
                     "description": parts[1],
                     "visibility": parts[2],
                 }

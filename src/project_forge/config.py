@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     github_personal: str = "rayketcham"
     github_repo: str = "project-forge"
     log_level: str = "INFO"
+    expand_ideas_per_run: int = 2
+    expand_cross_weight: float = 0.7
 
 
 settings = Settings()

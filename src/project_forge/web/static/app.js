@@ -48,6 +48,93 @@ async function scaffoldIdea(id) {
     }
 }
 
+// === URL Ingestion ===
+
+async function submitUrl() {
+    var input = document.getElementById('url-input');
+    var catSelect = document.getElementById('url-category');
+    var btn = document.getElementById('url-submit-btn');
+    var resultDiv = document.getElementById('url-result');
+
+    if (!input || !input.value.trim()) {
+        alert('Please enter a URL');
+        return;
+    }
+
+    var body = { url: input.value.trim() };
+    if (catSelect && catSelect.value) {
+        body.category = catSelect.value;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+    resultDiv.style.display = 'none';
+
+    try {
+        var resp = await fetch('/api/ideas/from-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+
+        if (!resp.ok) {
+            var err = await resp.json();
+            throw new Error(err.detail || 'Failed to generate idea');
+        }
+
+        var idea = await resp.json();
+
+        // Show success result
+        while (resultDiv.firstChild) resultDiv.removeChild(resultDiv.firstChild);
+
+        var successDiv = document.createElement('div');
+        successDiv.className = 'url-result-success';
+
+        var heading = document.createElement('h3');
+        heading.textContent = idea.name;
+        successDiv.appendChild(heading);
+
+        var tagline = document.createElement('p');
+        tagline.textContent = idea.tagline;
+        successDiv.appendChild(tagline);
+
+        var meta = document.createElement('div');
+        meta.className = 'url-result-meta';
+
+        var scoreBadge = document.createElement('span');
+        scoreBadge.className = 'score-pill';
+        scoreBadge.textContent = Math.round(idea.feasibility_score * 100) + '%';
+        meta.appendChild(scoreBadge);
+
+        var catBadge = document.createElement('span');
+        catBadge.className = 'badge';
+        catBadge.textContent = idea.category;
+        meta.appendChild(catBadge);
+
+        successDiv.appendChild(meta);
+
+        var viewLink = document.createElement('a');
+        viewLink.href = '/ideas/' + idea.id;
+        viewLink.className = 'btn btn-primary btn-sm';
+        viewLink.textContent = 'View Idea';
+        successDiv.appendChild(viewLink);
+
+        resultDiv.appendChild(successDiv);
+        resultDiv.style.display = 'block';
+        input.value = '';
+    } catch (err) {
+        while (resultDiv.firstChild) resultDiv.removeChild(resultDiv.firstChild);
+        var errP = document.createElement('p');
+        errP.style.color = '#e74c3c';
+        errP.textContent = 'Error: ' + err.message;
+        resultDiv.appendChild(errP);
+        resultDiv.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate Idea';
+    }
+}
+
 // === Compare to GitHub Project ===
 
 async function loadRepos() {

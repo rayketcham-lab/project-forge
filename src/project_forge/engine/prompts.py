@@ -52,6 +52,69 @@ The feasibility_score should be between 0.0 and 1.0 where:
 - 0.9-1.0: Obviously needed, straightforward to build, immediate value"""
 
 
+URL_INGEST_PROMPT_TEMPLATE = """Analyze the following content from a URL and generate ONE novel IT project idea \
+inspired by the technologies, problems, or opportunities described.
+
+**Source:** {title}
+**URL:** {url}
+**Domain:** {domain}
+
+**Content excerpt:**
+{content}
+
+{category_section}
+
+Based on this content, identify:
+1. What technology or trend is being described
+2. What gap or opportunity exists for a new tool/project
+3. How a small team could build something valuable in this space
+
+Respond with ONLY valid JSON in this exact format:
+{{
+    "name": "Short Project Name (2-4 words)",
+    "tagline": "One-sentence hook (under 100 chars)",
+    "description": "2-3 paragraph pitch explaining the problem, the solution, and why now",
+    "category": "{category_value}",
+    "market_analysis": "2-3 sentences on why this matters now, what's the gap, who needs it",
+    "feasibility_score": 0.75,
+    "mvp_scope": "Concrete description of what the MVP includes and doesn't include",
+    "tech_stack": ["python", "fastapi", "sqlite"]
+}}
+
+The feasibility_score should be between 0.0 and 1.0 where:
+- 0.0-0.3: Interesting but very hard to build or unclear market
+- 0.3-0.5: Feasible but significant unknowns
+- 0.5-0.7: Solid idea, clear path to MVP
+- 0.7-0.9: Strong idea, achievable MVP, clear market need
+- 0.9-1.0: Obviously needed, straightforward to build, immediate value"""
+
+
+def build_url_ingest_prompt(
+    title: str,
+    url: str,
+    domain: str,
+    content: str,
+    category_hint: str | None = None,
+) -> str:
+    """Build a prompt for generating an idea from URL content."""
+    if category_hint:
+        category_section = f"SUGGESTED CATEGORY: {category_hint} (use this if the content fits)"
+        category_value = category_hint
+    else:
+        all_cats = ", ".join(c.value for c in IdeaCategory)
+        category_section = f"Choose the most fitting category from: {all_cats}"
+        category_value = "security-tool"  # default placeholder, Claude will pick
+
+    return URL_INGEST_PROMPT_TEMPLATE.format(
+        title=title,
+        url=url,
+        domain=domain,
+        content=content[:3000],
+        category_section=category_section,
+        category_value=category_value,
+    )
+
+
 def build_generation_prompt(
     category: IdeaCategory,
     recent_ideas: list[str],

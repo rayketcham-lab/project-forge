@@ -4,6 +4,7 @@ TDD RED phase: All tests written before implementation.
 Feature: Generate project ideas from URLs + track source domains as resources.
 """
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -570,3 +571,74 @@ class TestUrlUtilities:
         assert validate_url("not-a-url") is False
         assert validate_url("ftp://files.example.com") is False
         assert validate_url("") is False
+
+
+# === Generator.generate_from_content tests ===
+
+
+MOCK_IDEA_JSON = json.dumps({
+    "name": "Merkle Certificate Verifier",
+    "tagline": "Validate Merkle Tree certificates against transparency logs",
+    "description": "A tool to verify and audit Merkle Tree-based certificates.",
+    "category": "pqc-cryptography",
+    "market_analysis": "Web PKI is evolving toward certificate transparency.",
+    "feasibility_score": 0.82,
+    "mvp_scope": "CLI tool that validates certificates against Merkle proofs.",
+    "tech_stack": ["python", "cryptography", "httpx"],
+})
+
+
+class TestGenerateFromContent:
+    @pytest.mark.asyncio
+    async def test_generate_from_content_returns_idea(self):
+        from project_forge.engine.generator import IdeaGenerator
+        from project_forge.engine.url_ingest import UrlContent
+
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text=MOCK_IDEA_JSON)]
+
+        with patch.object(IdeaGenerator, "__init__", lambda self, **kw: None):
+            gen = IdeaGenerator()
+            gen.client = MagicMock()
+            gen.model = "test-model"
+            gen.client.messages.create = MagicMock(return_value=mock_response)
+
+            content = UrlContent(
+                url="https://feistyduck.com/newsletter/issue_135",
+                domain="feistyduck.com",
+                title="Web PKI Reimagined with Merkle Tree Certificates",
+                text="Chrome is experimenting with Merkle Tree Certificates...",
+            )
+            idea = await gen.generate_from_content(content)
+
+        assert isinstance(idea, Idea)
+        assert idea.name == "Merkle Certificate Verifier"
+        assert idea.source_url == "https://feistyduck.com/newsletter/issue_135"
+
+    @pytest.mark.asyncio
+    async def test_generate_from_content_with_category_hint(self):
+        from project_forge.engine.generator import IdeaGenerator
+        from project_forge.engine.url_ingest import UrlContent
+
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text=MOCK_IDEA_JSON)]
+
+        with patch.object(IdeaGenerator, "__init__", lambda self, **kw: None):
+            gen = IdeaGenerator()
+            gen.client = MagicMock()
+            gen.model = "test-model"
+            gen.client.messages.create = MagicMock(return_value=mock_response)
+
+            content = UrlContent(
+                url="https://example.com/article",
+                domain="example.com",
+                title="Test Article",
+                text="Some content about security.",
+            )
+            idea = await gen.generate_from_content(content, category_hint="security-tool")
+
+        assert isinstance(idea, Idea)
+        # Verify the prompt included the category hint
+        call_args = gen.client.messages.create.call_args
+        prompt_text = call_args.kwargs["messages"][0]["content"]
+        assert "security-tool" in prompt_text

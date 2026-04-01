@@ -54,6 +54,14 @@ CREATE TABLE IF NOT EXISTS used_tuples (
     PRIMARY KEY (category, concept_idx, domain_idx, direction)
 );
 
+CREATE TABLE IF NOT EXISTS category_pair_log (
+    cat_a TEXT NOT NULL,
+    cat_b TEXT NOT NULL,
+    idea_id TEXT NOT NULL,
+    generated_at TEXT NOT NULL,
+    PRIMARY KEY (cat_a, cat_b, idea_id)
+);
+
 CREATE TABLE IF NOT EXISTS resources (
     id TEXT PRIMARY KEY,
     domain TEXT NOT NULL UNIQUE,
@@ -266,6 +274,36 @@ class Database:
         row = await cursor.fetchone()
         used = row[0] if row else 0
         return max(0, total - used)
+
+    # === CATEGORY PAIR TRACKING (horizontal expansion) ===
+
+    async def record_category_pair(self, cat_a: str, cat_b: str, idea_id: str) -> None:
+        """Record that an idea bridges two categories. Normalizes cat_a < cat_b."""
+        a, b = (cat_a, cat_b) if cat_a < cat_b else (cat_b, cat_a)
+        await self.db.execute(
+            """INSERT OR IGNORE INTO category_pair_log
+            (cat_a, cat_b, idea_id, generated_at) VALUES (?, ?, ?, ?)""",
+            (a, b, idea_id, datetime.now(UTC).isoformat()),
+        )
+        await self.db.commit()
+
+    async def get_least_explored_pairs(self, limit: int = 66) -> list[tuple[str, str, int]]:
+        """Return all 66 category pairs sorted by exploration count ascending."""
+        all_cats = [c.value for c in IdeaCategory]
+        all_pairs = []
+        for i, a in enumerate(all_cats):
+            for b in all_cats[i + 1 :]:
+                all_pairs.append((a, b) if a < b else (b, a))
+
+        cursor = await self.db.execute(
+            "SELECT cat_a, cat_b, COUNT(*) as cnt FROM category_pair_log GROUP BY cat_a, cat_b"
+        )
+        rows = await cursor.fetchall()
+        counts = {(row[0], row[1]): row[2] for row in rows}
+
+        result = [(a, b, counts.get((a, b), 0)) for a, b in all_pairs]
+        result.sort(key=lambda x: x[2])
+        return result[:limit]
 
     # === GENERATION RUNS ===
 

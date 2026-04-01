@@ -71,6 +71,28 @@
     </div>
 </section>
 
+<section class="section">
+    <div class="container">
+        <div class="section-header">
+            <h2>Add Idea from URL</h2>
+        </div>
+        <div class="url-ingest-form">
+            <p class="url-ingest-desc">Paste a URL to an article, RFC, newsletter, or tech blog and generate a project idea from it.</p>
+            <div class="url-ingest-row">
+                <input type="url" id="url-input" placeholder="https://example.com/article-about-new-tech" class="search-input url-input-field" required>
+                <select id="url-category" class="url-category-select">
+                    <option value="">Auto-detect category</option>
+                    {% for cat_name in categories %}
+                    <option value="{{ cat_name.name }}">{{ cat_name.name }}</option>
+                    {% endfor %}
+                </select>
+                <button id="url-submit-btn" class="btn btn-primary" onclick="submitUrl()">Generate Idea</button>
+            </div>
+            <div id="url-result" class="url-result" style="display:none"></div>
+        </div>
+    </div>
+</section>
+
 <section class="section section-alt">
     <div class="container">
         <div class="section-header">
