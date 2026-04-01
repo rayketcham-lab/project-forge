@@ -54,18 +54,20 @@
             <div class="card-grid">
                 {% for idea in proposals %}
                 <div class="idea-card" id="proposal-{{ idea.id }}">
-                    <div class="card-badge">
-                        <span class="badge badge-self-improvement">self-improvement</span>
-                        <span class="score-pill">{{ "%.0f" | format(idea.feasibility_score * 100) }}%</span>
-                    </div>
-                    <h3 class="card-title">{{ idea.name }}</h3>
-                    <p class="card-tagline">{{ idea.tagline }}</p>
-                    <div class="card-meta">
-                        <div class="score-bar">
-                            <div class="score-fill" style="width: {{ idea.feasibility_score * 100 }}%"></div>
+                    <a href="/ideas/{{ idea.id }}" class="card-link">
+                        <div class="card-badge">
+                            <span class="badge badge-self-improvement">self-improvement</span>
+                            <span class="score-pill">{{ "%.0f" | format(idea.feasibility_score * 100) }}%</span>
                         </div>
-                    </div>
-                    <div class="card-actions" style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
+                        <h3 class="card-title">{{ idea.name }}</h3>
+                        <p class="card-tagline">{{ idea.tagline }}</p>
+                        <div class="card-meta">
+                            <div class="score-bar">
+                                <div class="score-fill" style="width: {{ idea.feasibility_score * 100 }}%"></div>
+                            </div>
+                        </div>
+                    </a>
+                    <div class="card-actions">
                         <button class="btn btn-sm btn-primary" data-action="promote-proposal" data-idea-id="{{ idea.id }}">Promote to Issue</button>
                         <button class="btn btn-sm btn-outline" data-action="reject-proposal" data-idea-id="{{ idea.id }}">Reject</button>
                     </div>
@@ -85,14 +87,21 @@
             {% if promoted %}
             <div class="card-grid">
                 {% for idea in promoted %}
-                <a href="{{ idea.github_issue_url or '#' }}" target="_blank" class="idea-card">
-                    <div class="card-badge">
-                        <span class="badge badge-self-improvement">self-improvement</span>
-                        <span class="score-pill" style="background: var(--green)">Promoted</span>
+                <div class="idea-card">
+                    <a href="/ideas/{{ idea.id }}" class="card-link">
+                        <div class="card-badge">
+                            <span class="badge badge-self-improvement">self-improvement</span>
+                            <span class="score-pill score-pill--promoted">Promoted</span>
+                        </div>
+                        <h3 class="card-title">{{ idea.name }}</h3>
+                        <p class="card-tagline">{{ idea.tagline }}</p>
+                    </a>
+                    {% if idea.github_issue_url %}
+                    <div class="card-actions">
+                        <a href="{{ idea.github_issue_url }}" target="_blank" class="btn btn-sm btn-outline">View Issue</a>
                     </div>
-                    <h3 class="card-title">{{ idea.name }}</h3>
-                    <p class="card-tagline">{{ idea.tagline }}</p>
-                </a>
+                    {% endif %}
+                </div>
                 {% endfor %}
             </div>
             {% else %}
@@ -104,14 +113,14 @@
             {% if rejected %}
             <div class="card-grid">
                 {% for idea in rejected %}
-                <div class="idea-card" style="opacity: 0.6;">
+                <a href="/ideas/{{ idea.id }}" class="idea-card" style="opacity: 0.6;">
                     <div class="card-badge">
                         <span class="badge badge-self-improvement">self-improvement</span>
-                        <span class="score-pill" style="background: var(--red, #ef4444)">Rejected</span>
+                        <span class="score-pill score-pill--rejected">Rejected</span>
                     </div>
                     <h3 class="card-title">{{ idea.name }}</h3>
                     <p class="card-tagline">{{ idea.tagline }}</p>
-                </div>
+                </a>
                 {% endfor %}
             </div>
             {% else %}
