@@ -24,6 +24,7 @@ STATIC_DIR = WEB_DIR / "static"
 
 db = Database(settings.db_path)
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates.env.globals["get_api_token"] = lambda: settings.api_token
 
 
 class CSPMiddleware(BaseHTTPMiddleware):
