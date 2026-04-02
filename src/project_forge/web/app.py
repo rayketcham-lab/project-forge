@@ -26,6 +26,14 @@ db = Database(settings.db_path)
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
+def _get_api_token() -> str:
+    """Return the configured API token (empty string if unset)."""
+    return settings.api_token
+
+
+templates.env.globals["get_api_token"] = _get_api_token
+
+
 class CSPMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response: Response = await call_next(request)
