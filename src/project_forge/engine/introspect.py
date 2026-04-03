@@ -77,13 +77,13 @@ def gather_self_context() -> dict:
         logger.warning("Could not fetch git log: %s", exc)
 
     # --- Test file count ---
-    test_dir = Path("tests")
+    test_dir = _PROJECT_ROOT / "tests"
     test_count = len(list(test_dir.glob("test_*.py")))
 
     # --- Lint status ---
     lint_status = "unknown"
     try:
-        result = _run(["ruff", "check", "src/", "tests/", "--statistics"])
+        result = _run(["ruff", "check", str(_PROJECT_ROOT / "src"), str(_PROJECT_ROOT / "tests"), "--statistics"])
         # ruff exits non-zero when violations exist; we want the output either way
         lint_status = result.stdout.strip() or result.stderr.strip() or "clean"
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
@@ -96,19 +96,41 @@ def gather_self_context() -> dict:
         "tests": _count_lines(_PROJECT_ROOT / "tests"),
     }
 
+    # --- File tree (key .py files) ---
+    file_tree: list[str] = []
+    src_dir = _PROJECT_ROOT / "src"
+    if src_dir.exists():
+        file_tree = sorted(
+            str(p.relative_to(_PROJECT_ROOT)) for p in src_dir.rglob("*.py") if "__pycache__" not in str(p)
+        )
+
     return {
         "open_issues": open_issues,
         "recent_commits": recent_commits,
         "test_count": test_count,
         "lint_status": lint_status,
         "code_stats": code_stats,
+        "file_tree": file_tree,
     }
 
 
 _INTROSPECTION_PROMPT_TEMPLATE = """\
-You are analyzing the Project Forge codebase to suggest ONE targeted self-improvement idea.
+You are analyzing the Project Forge codebase to suggest ONE targeted improvement \
+to the EXISTING code in THIS repository. You are NOT proposing a new project, product, \
+or tool. You are proposing a specific code change to improve project-forge itself.
+
+CRITICAL RULES:
+- This is about modifying existing code in src/project_forge/ or tests/
+- Do NOT propose building new external tools, CLI apps, SaaS products, or services
+- Do NOT use language like "Phase 1", "Phase 2", "ship to customers", "market demand"
+- Your description MUST reference specific files in src/project_forge/ that need changing
+- Your mvp_scope MUST name the exact files to modify or create within this repo
+- Your affected_files MUST list real paths that exist (or will be created) in this project
 
 ## Project Health Snapshot
+
+### Source Files in src/project_forge/
+{file_tree_section}
 
 ### Open GitHub Issues ({issue_count} open)
 {issues_section}
@@ -130,25 +152,21 @@ You are analyzing the Project Forge codebase to suggest ONE targeted self-improv
 
 ## Your Task
 
-Analyze the above and identify the SINGLE most impactful improvement for Project Forge itself. \
-Focus on areas like:
-- Missing tests or low coverage for existing modules
-- CI pipeline gaps or missing checks
-- Security issues in the web layer or data handling
-- UX improvements in the dashboard
-- Missing features that would make the engine smarter
-- Performance bottlenecks or reliability issues
+Look at the actual source files listed above. Identify ONE concrete improvement — \
+a bug fix, a missing test, a security hardening, a refactor, or a UX tweak to the \
+existing dashboard/API. Reference specific files by path.
 
 Respond with ONLY valid JSON in this exact format:
 {{
     "name": "Short Improvement Name (2-4 words)",
     "tagline": "One-sentence description (under 100 chars)",
-    "description": "2-3 paragraphs: what problem exists, what the fix is, why it matters",
+    "description": "What the problem is, which files are affected, what the fix is",
     "category": "self-improvement",
-    "market_analysis": "Why this improvement matters for Project Forge's reliability/usefulness",
+    "market_analysis": "Why this matters for Project Forge reliability or usability",
     "feasibility_score": 0.85,
-    "mvp_scope": "Exact scope: what to build/fix, what to skip",
-    "tech_stack": ["python", "pytest"]
+    "mvp_scope": "Exact files to change: src/project_forge/... and tests/...",
+    "tech_stack": ["python", "pytest"],
+    "affected_files": ["src/project_forge/web/routes.py", "tests/test_routes.py"]
 }}
 
 The feasibility_score should reflect how quickly this can be implemented (0.7–1.0 for small fixes, \
@@ -189,6 +207,10 @@ def build_introspection_prompt(context: dict, recent_improvements: list[str]) ->
     else:
         recent_section = "(none yet)"
 
+    # File tree section
+    file_tree = context.get("file_tree", [])
+    file_tree_section = "\n".join(f"- {f}" for f in file_tree) if file_tree else "(not available)"
+
     return _INTROSPECTION_PROMPT_TEMPLATE.format(
         issue_count=len(issues),
         issues_section=issues_lines,
@@ -197,4 +219,44 @@ def build_introspection_prompt(context: dict, recent_improvements: list[str]) ->
         lint_status=context.get("lint_status", "unknown"),
         code_stats_section=code_stats_section,
         recent_improvements_section=recent_section,
+        file_tree_section=file_tree_section,
     )
+
+
+# ---------------------------------------------------------------------------
+# Validation: reject ideas that are really new-project proposals
+# ---------------------------------------------------------------------------
+
+_NEW_PROJECT_SIGNALS = [
+    "phase 1",
+    "phase 2",
+    "ship to",
+    "early adopters",
+    "multi-tenant",
+    "enterprise sso",
+    "saas",
+    "willing to pay",
+    "competitive landscape",
+    "market demand",
+    "go-to-market",
+    "pricing model",
+    "weeks 1-2",
+    "weeks 3-4",
+]
+
+
+def validate_self_improvement(idea) -> bool:
+    """Check if a self-improvement idea is actually about improving project-forge.
+
+    Returns True if the idea looks like a genuine code improvement.
+    Returns False if it reads like a new external project proposal.
+    """
+    text = f"{idea.description} {idea.mvp_scope} {idea.market_analysis}".lower()
+
+    # Check for new-project language
+    for signal in _NEW_PROJECT_SIGNALS:
+        if signal in text:
+            logger.info("SI idea '%s' rejected: contains new-project signal %r", idea.name, signal)
+            return False
+
+    return True

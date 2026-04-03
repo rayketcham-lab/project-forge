@@ -84,6 +84,10 @@ class TestDashboardSuperVsRegular:
     @pytest.mark.asyncio
     async def test_stats_regular_count_excludes_supers(self, seeded_db):
         """Regular idea count should exclude super ideas."""
+        # Count baseline regular ideas (dedup may reduce from the requested 50)
+        baseline_stats = await seeded_db.get_stats()
+        baseline_regular = baseline_stats["total_ideas"] - baseline_stats["super_ideas"]
+
         gen = SuperIdeaGenerator(seeded_db)
         await gen.generate(count=3)
 
@@ -91,7 +95,9 @@ class TestDashboardSuperVsRegular:
         total = stats["total_ideas"]
         super_count = stats["super_ideas"]
         regular_count = total - super_count
-        assert regular_count == 50, f"Expected 50 regular ideas, got {regular_count}"
+        assert regular_count == baseline_regular, (
+            f"Expected {baseline_regular} regular ideas, got {regular_count}"
+        )
 
 
 class TestDashboardRendering:

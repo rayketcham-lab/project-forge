@@ -1,0 +1,14 @@
+[Unit]
+Description=Project Forge autonomous self-improvement
+After=network.target
+
+[Service]
+Type=oneshot
+User=claude
+WorkingDirectory=/opt/project-forge
+EnvironmentFile=-/opt/project-forge/.env
+ExecStart=/opt/project-forge/scripts/self-improve.sh
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

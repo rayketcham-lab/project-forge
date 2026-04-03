@@ -131,3 +131,36 @@ async def test_no_auth_required_when_token_not_set(client):
     resp = await client.post(f"/ideas/{idea.id}/approve")
     assert resp.status_code == 200
     assert resp.json()["status"] == "approved"
+
+
+# ---------------------------------------------------------------------------
+# Tests — API token injection into templates (issue #17)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_api_token_injected_in_meta_tag_when_set(authed_client):
+    """When FORGE_API_TOKEN is set, pages must include a <meta name='api-token'> tag."""
+    resp = await authed_client.get("/")
+    assert resp.status_code == 200
+    assert 'name="api-token"' in resp.text
+    assert 'content="test-secret"' in resp.text
+
+
+@pytest.mark.asyncio
+async def test_api_token_meta_tag_absent_when_not_set(client):
+    """When FORGE_API_TOKEN is empty, no api-token meta tag should be rendered."""
+    resp = await client.get("/")
+    assert resp.status_code == 200
+    assert 'name="api-token"' not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_idea_detail_includes_api_token_meta(authed_client):
+    """Idea detail page must include the api-token meta tag for approve/reject to work."""
+    idea = _make_idea(status="new")
+    await db.save_idea(idea)
+
+    resp = await authed_client.get(f"/ideas/{idea.id}")
+    assert resp.status_code == 200
+    assert 'name="api-token"' in resp.text

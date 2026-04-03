@@ -271,8 +271,9 @@ class TestThinkTankProposals:
         """GET /api/thinktank returns correct proposal_count."""
         from project_forge.web.app import db as app_db
 
+        taglines = ["add rate limiting to endpoints", "structured logging overhaul", "CI pipeline hardening"]
         for i in range(3):
-            await app_db.save_idea(_make_self_improvement_idea(name=f"Proposal {i}"))
+            await app_db.save_idea(_make_self_improvement_idea(name=f"Proposal {i}", tagline=taglines[i]))
 
         with patch("project_forge.scaffold.github.list_self_issues", return_value=[]):
             resp = await client.get("/api/thinktank")
@@ -311,7 +312,7 @@ class TestThinkTankProposals:
         await app_db.save_idea(idea)
 
         with patch(
-            "project_forge.scaffold.github.create_issue",
+            "project_forge.web.routes.create_issue",
             return_value="https://github.com/rayketcham-lab/project-forge/issues/42",
         ) as mock_create:
             resp = await client.post(f"/api/thinktank/{idea.id}/promote")
@@ -389,11 +390,100 @@ class TestThinkTankProposals:
         """GET /api/thinktank includes rejected and promoted counts."""
         from project_forge.web.app import db as app_db
 
-        await app_db.save_idea(_make_self_improvement_idea(name="P1", status="approved"))
-        await app_db.save_idea(_make_self_improvement_idea(name="P2", status="approved"))
-        await app_db.save_idea(_make_self_improvement_idea(name="R1", status="rejected"))
+        await app_db.save_idea(
+            _make_self_improvement_idea(name="P1", status="approved", tagline="rate limiting for API")
+        )
+        await app_db.save_idea(
+            _make_self_improvement_idea(name="P2", status="approved", tagline="structured logging overhaul")
+        )
+        await app_db.save_idea(
+            _make_self_improvement_idea(name="R1", status="rejected", tagline="CI pipeline hardening")
+        )
         with patch("project_forge.scaffold.github.list_self_issues", return_value=[]):
             resp = await client.get("/api/thinktank")
         data = resp.json()
         assert data["promoted_count"] == 2
         assert data["rejected_count"] == 1
+
+
+# --- Promote → ci-queue label tests (issue #19) ---
+
+
+class TestPromoteCIQueue:
+    """Promoting a self-improvement proposal must create an issue with ci-queue label."""
+
+    @pytest.mark.asyncio
+    async def test_promote_passes_ci_queue_label(self, client):
+        """Promote must call create_issue with labels=['ci-queue']."""
+        from project_forge.web.app import db as app_db
+
+        idea = _make_self_improvement_idea(name="CI label test")
+        await app_db.save_idea(idea)
+
+        with patch(
+            "project_forge.web.routes.create_issue",
+            return_value="https://github.com/rayketcham-lab/project-forge/issues/50",
+        ) as mock_create:
+            resp = await client.post(f"/api/thinktank/{idea.id}/promote")
+
+        assert resp.status_code == 200
+        # Verify create_issue was called with the ci-queue label
+        mock_create.assert_called_once()
+        call_kwargs = mock_create.call_args
+        # create_issue(repo, title, body, labels=["ci-queue"])
+        if call_kwargs.kwargs.get("labels"):
+            assert "ci-queue" in call_kwargs.kwargs["labels"]
+        else:
+            # positional args: repo, title, body, labels
+            assert len(call_kwargs.args) >= 4
+            assert "ci-queue" in call_kwargs.args[3]
+
+    @pytest.mark.asyncio
+    async def test_promote_issue_title_has_think_tank_prefix(self, client):
+        """Promoted issue title should still have [Think Tank] prefix."""
+        from project_forge.web.app import db as app_db
+
+        idea = _make_self_improvement_idea(name="Title prefix test")
+        await app_db.save_idea(idea)
+
+        with patch(
+            "project_forge.web.routes.create_issue",
+            return_value="https://github.com/rayketcham-lab/project-forge/issues/51",
+        ) as mock_create:
+            await client.post(f"/api/thinktank/{idea.id}/promote")
+
+        title_arg = mock_create.call_args.args[1]
+        assert title_arg.startswith("[Think Tank]")
+
+
+class TestCIQueueWorkflow:
+    """CI workflow must include a self-improvement-queue job."""
+
+    def test_ci_yaml_has_queue_check_job(self):
+        """ci.yml must contain a self-improvement-queue job."""
+        from pathlib import Path
+
+        import yaml
+
+        ci_path = Path("/opt/vmdata/project-forge/.github/workflows/ci.yml")
+        ci = yaml.safe_load(ci_path.read_text())
+        assert "self-improvement-queue" in ci["jobs"], (
+            "CI workflow missing 'self-improvement-queue' job"
+        )
+
+    def test_ci_queue_job_checks_ci_queue_label(self):
+        """The queue check job must query for the ci-queue label."""
+        from pathlib import Path
+
+        ci_text = Path("/opt/vmdata/project-forge/.github/workflows/ci.yml").read_text()
+        assert "ci-queue" in ci_text, "CI workflow must reference 'ci-queue' label"
+
+    def test_ci_queue_job_fails_on_open_issues(self):
+        """The queue check job must exit non-zero when open ci-queue issues exist."""
+        from pathlib import Path
+
+        ci_text = Path("/opt/vmdata/project-forge/.github/workflows/ci.yml").read_text()
+        # Should contain logic that fails when count > 0
+        assert "exit 1" in ci_text or "::error" in ci_text, (
+            "CI queue job must fail when open ci-queue issues exist"
+        )

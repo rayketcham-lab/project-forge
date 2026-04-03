@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    model_config = {"env_prefix": "FORGE_"}
+    model_config = {"env_prefix": "FORGE_", "env_file": ".env", "env_file_encoding": "utf-8"}
 
     db_path: Path = Path("data/forge.db")
     host: str = "0.0.0.0"  # noqa: S104

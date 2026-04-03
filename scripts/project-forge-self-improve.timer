@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Project Forge self-improvement every 30 minutes
+
+[Timer]
+OnCalendar=*:0/30
+RandomizedDelaySec=60
+Persistent=true
+
+[Install]
+WantedBy=timers.target

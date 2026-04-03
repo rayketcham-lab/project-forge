@@ -11,6 +11,7 @@ import random
 from datetime import UTC, datetime
 
 from project_forge.engine.categories import CATEGORY_SEEDS, COMBINATORIC_TEMPLATES, CONTRARIAN_PROMPTS
+from project_forge.engine.quality_review import review_idea
 from project_forge.models import GenerationRun, Idea, IdeaCategory
 from project_forge.storage.db import Database
 
@@ -361,7 +362,8 @@ async def run_auto_scan(db: Database, count: int = 5) -> list[Idea]:
     used_tuples = {_content_hash(r[0], r[1], r[2], r[3]) for r in rows}
 
     ideas = []
-    categories = list(IdeaCategory)
+    # Exclude SELF_IMPROVEMENT — that category is only for the introspection engine
+    categories = [c for c in IdeaCategory if c != IdeaCategory.SELF_IMPROVEMENT]
     random.shuffle(categories)
 
     for i in range(count):
@@ -373,9 +375,14 @@ async def run_auto_scan(db: Database, count: int = 5) -> list[Idea]:
                 recent_names=list(recent_names),
                 used_tuples=used_tuples,
             )
-            await db.save_idea(idea)
+            # Record tuple regardless of review outcome (avoid regenerating bad combos)
             await db.record_used_tuple(cat_val, c_idx, d_idx, direction)
             used_tuples.add(_content_hash(cat_val, c_idx, d_idx, direction))
+            qr = review_idea(idea)
+            if not qr.passed:
+                logger.warning("Auto-scan idea '%s' rejected: %s", idea.name, "; ".join(qr.reasons))
+                continue
+            await db.save_idea(idea)
             recent_names.add(idea.name)
             ideas.append(idea)
             run.idea_id = idea.id

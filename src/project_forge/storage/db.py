@@ -5,12 +5,13 @@ and input-tuple tracking for deduplication at scale.
 """
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import aiosqlite
 
-from project_forge.models import GenerationRun, Idea, IdeaCategory, IdeaStatus, Resource
+from project_forge.engine.dedup import SIMILARITY_THRESHOLD, tagline_similarity
+from project_forge.models import Challenge, GenerationRun, Idea, IdeaCategory, IdeaStatus, Resource
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS ideas (
@@ -61,6 +62,35 @@ CREATE TABLE IF NOT EXISTS category_pair_log (
     generated_at TEXT NOT NULL,
     PRIMARY KEY (cat_a, cat_b, idea_id)
 );
+
+CREATE TABLE IF NOT EXISTS idea_reviews (
+    id TEXT PRIMARY KEY,
+    idea_id TEXT NOT NULL,
+    verdict TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 0.5,
+    reasoning TEXT NOT NULL DEFAULT '',
+    suggestions TEXT NOT NULL DEFAULT '[]',
+    reviewed_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_reviews_idea ON idea_reviews(idea_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_at ON idea_reviews(reviewed_at);
+
+CREATE TABLE IF NOT EXISTS challenges (
+    id TEXT PRIMARY KEY,
+    idea_id TEXT NOT NULL,
+    question TEXT NOT NULL,
+    challenge_type TEXT NOT NULL DEFAULT 'freeform',
+    focus_area TEXT NOT NULL DEFAULT 'all',
+    tone TEXT NOT NULL DEFAULT 'skeptical',
+    response TEXT NOT NULL DEFAULT '',
+    verdict TEXT NOT NULL DEFAULT 'no_change',
+    confidence REAL NOT NULL DEFAULT 0.5,
+    changes TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_challenges_idea ON challenges(idea_id);
 
 CREATE TABLE IF NOT EXISTS resources (
     id TEXT PRIMARY KEY,
@@ -126,6 +156,18 @@ class Database:
             existing = await cursor.fetchone()
             if existing:
                 return idea  # Silently skip duplicate content
+
+        # Fuzzy dedup for self-improvement ideas: check tagline similarity
+        # Only block against non-rejected ideas (rejected ideas can be re-proposed)
+        if idea.category == IdeaCategory.SELF_IMPROVEMENT:
+            cursor = await self.db.execute(
+                "SELECT tagline FROM ideas WHERE category = ? AND status != 'rejected'",
+                (IdeaCategory.SELF_IMPROVEMENT.value,),
+            )
+            rows = await cursor.fetchall()
+            for (existing_tagline,) in rows:
+                if tagline_similarity(idea.tagline, existing_tagline) >= SIMILARITY_THRESHOLD:
+                    return idea  # Silently skip near-duplicate
 
         await self.db.execute(
             """INSERT OR REPLACE INTO ideas
@@ -374,6 +416,10 @@ class Database:
         row = await cursor.fetchone()
         super_count = row[0] if row else 0
 
+        cursor = await self.db.execute("SELECT COUNT(*) FROM challenges")
+        row = await cursor.fetchone()
+        challenge_count = row[0] if row else 0
+
         return {
             "total_ideas": sum(ideas_by_status.values()),
             "ideas_by_status": ideas_by_status,
@@ -381,7 +427,191 @@ class Database:
             "total_runs": total_runs,
             "avg_feasibility_score": avg_score,
             "super_ideas": super_count,
+            "total_challenges": challenge_count,
         }
+
+    # === CHALLENGES ===
+
+    async def save_challenge(self, challenge: Challenge) -> Challenge:
+        await self.db.execute(
+            """INSERT INTO challenges
+            (id, idea_id, question, challenge_type, focus_area, tone,
+             response, verdict, confidence, changes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                challenge.id,
+                challenge.idea_id,
+                challenge.question,
+                challenge.challenge_type,
+                challenge.focus_area,
+                challenge.tone,
+                challenge.response,
+                challenge.verdict,
+                challenge.confidence,
+                json.dumps(challenge.changes),
+                challenge.created_at.isoformat(),
+            ),
+        )
+        await self.db.commit()
+        return challenge
+
+    async def list_challenges(self, idea_id: str) -> list[Challenge]:
+        cursor = await self.db.execute(
+            "SELECT * FROM challenges WHERE idea_id = ? ORDER BY created_at ASC",
+            (idea_id,),
+        )
+        rows = await cursor.fetchall()
+        return [
+            Challenge(
+                id=row["id"],
+                idea_id=row["idea_id"],
+                question=row["question"],
+                challenge_type=row["challenge_type"],
+                focus_area=row["focus_area"],
+                tone=row["tone"],
+                response=row["response"],
+                verdict=row["verdict"],
+                confidence=row["confidence"],
+                changes=json.loads(row["changes"]),
+                created_at=datetime.fromisoformat(row["created_at"]).replace(tzinfo=UTC)
+                if "+" not in row["created_at"]
+                else datetime.fromisoformat(row["created_at"]),
+            )
+            for row in rows
+        ]
+
+    # === IDEA REVIEWS ===
+
+    async def fetch_ideas_for_review(self, limit: int = 10, min_age_days: int = 7) -> list[Idea]:
+        """Fetch ideas needing review: never reviewed or reviewed > min_age_days ago.
+
+        Skips rejected/archived ideas. Returns oldest-generated first.
+        """
+        cutoff = (datetime.now(UTC) - timedelta(days=min_age_days)).isoformat()
+        cursor = await self.db.execute(
+            """SELECT i.* FROM ideas i
+            LEFT JOIN (
+                SELECT idea_id, MAX(reviewed_at) AS last_reviewed
+                FROM idea_reviews GROUP BY idea_id
+            ) r ON i.id = r.idea_id
+            WHERE i.status NOT IN ('rejected', 'archived')
+              AND (r.last_reviewed IS NULL OR r.last_reviewed < ?)
+            ORDER BY i.generated_at ASC
+            LIMIT ?""",
+            (cutoff, limit),
+        )
+        rows = await cursor.fetchall()
+        return [self._row_to_idea(row) for row in rows]
+
+    async def record_review(self, idea_id: str, verdict: str, confidence: float,
+                            reasoning: str = "", suggestions: list | None = None,
+                            reviewed_at: datetime | None = None) -> None:
+        """Store a review verdict for an idea."""
+        from uuid import uuid4
+
+        review_id = uuid4().hex[:12]
+        ts = (reviewed_at or datetime.now(UTC)).isoformat()
+        await self.db.execute(
+            """INSERT INTO idea_reviews (id, idea_id, verdict, confidence, reasoning, suggestions, reviewed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (review_id, idea_id, verdict, confidence, reasoning,
+             json.dumps(suggestions or []), ts),
+        )
+        await self.db.commit()
+
+    async def get_idea_reviews(self, idea_id: str) -> list[dict]:
+        """Return all reviews for an idea, oldest first."""
+        cursor = await self.db.execute(
+            "SELECT * FROM idea_reviews WHERE idea_id = ? ORDER BY reviewed_at ASC",
+            (idea_id,),
+        )
+        rows = await cursor.fetchall()
+        return [
+            {
+                "id": row["id"],
+                "idea_id": row["idea_id"],
+                "verdict": row["verdict"],
+                "confidence": row["confidence"],
+                "reasoning": row["reasoning"],
+                "suggestions": json.loads(row["suggestions"]),
+                "reviewed_at": row["reviewed_at"],
+            }
+            for row in rows
+        ]
+
+    # === DEDUP CLEANUP ===
+
+    async def deduplicate_si_ideas(self) -> dict:
+        """Deduplicate existing self-improvement ideas by normalized tagline.
+
+        Groups active (non-rejected) SI ideas by normalized tagline.
+        Within each group, keeps the best one (approved beats new; then highest score).
+        Rejects the rest.
+
+        Returns dict with 'kept', 'rejected', and 'groups' counts.
+        """
+        from project_forge.engine.dedup import SIMILARITY_THRESHOLD, _normalize
+
+        cursor = await self.db.execute(
+            "SELECT id, tagline, feasibility_score, status FROM ideas "
+            "WHERE category = ? AND status != 'rejected'",
+            (IdeaCategory.SELF_IMPROVEMENT.value,),
+        )
+        rows = await cursor.fetchall()
+
+        # Group by normalized tagline
+        groups: dict[str, list[dict]] = {}
+        for row in rows:
+            key = _normalize(row["tagline"])
+            entry = {
+                "id": row["id"],
+                "tagline": row["tagline"],
+                "score": row["feasibility_score"],
+                "status": row["status"],
+            }
+            # Find existing group with similar key (Jaccard >= threshold)
+            matched_key = None
+            for existing_key in groups:
+                existing_tokens = set(existing_key.split())
+                new_tokens = set(key.split())
+                if not existing_tokens and not new_tokens:
+                    matched_key = existing_key
+                    break
+                if existing_tokens and new_tokens:
+                    jaccard = len(existing_tokens & new_tokens) / len(existing_tokens | new_tokens)
+                    if jaccard >= SIMILARITY_THRESHOLD:
+                        matched_key = existing_key
+                        break
+            if matched_key is not None:
+                groups[matched_key].append(entry)
+            else:
+                groups[key] = [entry]
+
+        rejected_count = 0
+        kept_count = 0
+
+        for _key, members in groups.items():
+            if len(members) <= 1:
+                kept_count += 1
+                continue
+
+            # Sort: approved first, then by score descending
+            def sort_key(m: dict) -> tuple:
+                status_priority = 0 if m["status"] == "approved" else 1
+                return (status_priority, -m["score"])
+
+            members.sort(key=sort_key)
+            kept_count += 1
+
+            for dup in members[1:]:
+                await self.db.execute(
+                    "UPDATE ideas SET status = 'rejected' WHERE id = ?",
+                    (dup["id"],),
+                )
+                rejected_count += 1
+
+        await self.db.commit()
+        return {"kept": kept_count, "rejected": rejected_count, "groups": len(groups)}
 
     # === HELPERS ===
 

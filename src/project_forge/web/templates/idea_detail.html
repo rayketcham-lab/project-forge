@@ -27,7 +27,8 @@
                 {% if idea.status == 'new' %}
                 <button class="btn btn-primary" data-action="approve-idea" data-idea-id="{{ idea.id }}">Approve</button>
                 <button class="btn btn-danger" data-action="reject-idea" data-idea-id="{{ idea.id }}">Reject</button>
-                {% elif idea.status == 'approved' %}
+                <button class="btn btn-outline" data-action="challenge-idea" data-idea-id="{{ idea.id }}">Challenge</button>
+                {% elif idea.status == 'approved' and idea.category.value != 'self-improvement' %}
                 <div class="scaffold-form" id="scaffold-form">
                     <select id="scaffold-owner" class="scaffold-select">
                         <option value="rayketcham-lab">rayketcham-lab (org)</option>
@@ -45,6 +46,9 @@
                 {% if idea.project_repo_url %}
                 <a href="{{ idea.project_repo_url }}" target="_blank" class="btn btn-primary">View Repository</a>
                 {% endif %}
+                {% endif %}
+                {% if idea.status != 'new' %}
+                <button class="btn btn-outline" data-action="challenge-idea" data-idea-id="{{ idea.id }}">Challenge</button>
                 {% endif %}
             </div>
         </div>
@@ -122,6 +126,95 @@
             </div>
             <div id="compare-results" style="display: none; margin-top: 1.5rem;">
                 <div class="compare-verdict" id="compare-verdict"></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="section" id="challenge-section">
+    <div class="container">
+        <div class="pitch-card">
+            <h2>Challenge Thread</h2>
+            <p class="prose">Push back on this idea. Ask questions, challenge assumptions, fork the direction, or kill it.</p>
+
+            <div class="challenge-composer" style="display:none;" id="challenge-input">
+                <div class="challenge-options-row">
+                    <div class="challenge-option-group">
+                        <label class="challenge-label">Challenge Type</label>
+                        <div class="challenge-type-grid" id="challenge-type-grid">
+                            <button type="button" class="challenge-chip" data-type="feasibility">Feasibility</button>
+                            <button type="button" class="challenge-chip" data-type="market">Market</button>
+                            <button type="button" class="challenge-chip" data-type="security">Security</button>
+                            <button type="button" class="challenge-chip" data-type="scope">Scope</button>
+                            <button type="button" class="challenge-chip" data-type="differentiation">Differentiation</button>
+                            <button type="button" class="challenge-chip challenge-chip-kill" data-type="kill">Kill Review</button>
+                            <button type="button" class="challenge-chip active" data-type="freeform">Open Question</button>
+                        </div>
+                    </div>
+                    <div class="challenge-selects-row">
+                        <div class="challenge-option-group">
+                            <label class="challenge-label" for="challenge-focus">Focus Area</label>
+                            <select id="challenge-focus" class="challenge-select">
+                                <option value="all" selected>Entire Proposal</option>
+                                <option value="description">Problem &amp; Solution</option>
+                                <option value="market_analysis">Market Analysis</option>
+                                <option value="mvp_scope">MVP Scope</option>
+                                <option value="tech_stack">Tech Stack</option>
+                                <option value="feasibility_score">Feasibility Score</option>
+                            </select>
+                        </div>
+                        <div class="challenge-option-group">
+                            <label class="challenge-label" for="challenge-tone">Tone</label>
+                            <select id="challenge-tone" class="challenge-select">
+                                <option value="curious">Curious</option>
+                                <option value="skeptical" selected>Skeptical</option>
+                                <option value="adversarial">Adversarial</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <textarea id="challenge-question" class="challenge-textarea" rows="3" maxlength="2000" placeholder="What's your question, concern, or pushback?"></textarea>
+                <div class="challenge-submit-row">
+                    <button class="btn btn-primary" id="challenge-submit-btn" data-idea-id="{{ idea.id }}">Submit Challenge</button>
+                    <span class="challenge-hint" id="challenge-hint"></span>
+                </div>
+            </div>
+
+            <div id="challenge-thread" style="margin-top: 1.5rem;">
+                {% for c in challenges %}
+                <div class="challenge-entry">
+                    <div class="challenge-entry-header">
+                        <span class="challenge-type-badge challenge-type-{{ c.challenge_type }}">{{ c.challenge_type }}</span>
+                        {% if c.verdict != 'no_change' %}
+                        <span class="challenge-verdict challenge-verdict-{{ c.verdict }}">{{ c.verdict }}</span>
+                        {% endif %}
+                        {% if c.confidence %}
+                        <span class="challenge-confidence">{{ "%.0f" | format(c.confidence * 100) }}% confidence</span>
+                        {% endif %}
+                        <span class="challenge-meta">{{ c.created_at.strftime('%b %d, %Y %H:%M') }}</span>
+                    </div>
+                    <div class="challenge-question">
+                        <strong>Q:</strong> {{ c.question }}
+                    </div>
+                    <div class="challenge-response">{{ c.response }}</div>
+                    {% if c.changes %}
+                    <div class="challenge-changes">
+                        {% for change in c.changes %}
+                        {% if change.action == 'removed' %}
+                        <span class="change-removed">{{ change.field }}: {{ change.text }}</span>
+                        {% elif change.action == 'added' %}
+                        <span class="change-added">{{ change.field }}: {{ change.text }}</span>
+                        {% elif change.action == 'modified' %}
+                        <span class="change-modified">{{ change.field }}: {{ change.text }}</span>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                {% if not challenges %}
+                <p class="text-dim" id="no-challenges-msg">No challenges yet. Click "Challenge" to start the conversation.</p>
+                {% endif %}
             </div>
         </div>
     </div>

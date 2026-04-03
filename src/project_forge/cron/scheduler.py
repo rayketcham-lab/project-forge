@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 
 from project_forge.config import settings
 from project_forge.engine.generator import IdeaGenerator
+from project_forge.engine.quality_review import review_idea
 from project_forge.engine.scorer import is_high_value
 from project_forge.models import GenerationRun, Idea, IdeaCategory
 from project_forge.scaffold.builder import build_scaffold_spec, render_scaffold
@@ -47,6 +48,13 @@ async def generate_and_store(db: Database, generator: IdeaGenerator) -> Idea:
             use_contrarian=use_contrarian,
             use_combinatoric=use_combinatoric,
         )
+        result = review_idea(idea)
+        if not result.passed:
+            logger.warning("Idea '%s' rejected by quality review: %s", idea.name, "; ".join(result.reasons))
+            run.error = f"Quality review failed: {'; '.join(result.reasons)}"
+            run.completed_at = datetime.now(UTC)
+            await db.save_run(run)
+            return None
         await db.save_idea(idea)
         run.idea_id = idea.id
         run.success = True

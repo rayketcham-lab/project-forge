@@ -7,6 +7,7 @@ import sys
 
 from project_forge.config import settings
 from project_forge.engine.introspect import build_introspection_prompt, gather_self_context
+from project_forge.engine.quality_review import review_idea
 from project_forge.models import IdeaCategory
 from project_forge.storage.db import Database
 
@@ -34,6 +35,12 @@ async def run_introspect_cycle(db: Database, generator) -> "Idea":  # noqa: F821
         category=IdeaCategory.SELF_IMPROVEMENT,
         prompt_override=prompt,
     )
+
+    # Quality review: reject low-quality or new-project proposals
+    result = review_idea(idea)
+    if not result.passed:
+        logger.warning("Rejected SI idea '%s': %s", idea.name, "; ".join(result.reasons))
+        return None
 
     await db.save_idea(idea)
     logger.info("Introspection generated: %s (score: %.2f)", idea.name, idea.feasibility_score)

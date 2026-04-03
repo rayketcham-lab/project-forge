@@ -1,0 +1,11 @@
+[Unit]
+Description=Project Forge idea review cycle
+After=network.target
+
+[Service]
+Type=oneshot
+User=claude
+EnvironmentFile=/opt/project-forge/.env
+ExecStart=/opt/project-forge/scripts/review-cycle.sh
+WorkingDirectory=/opt/project-forge
+TimeoutStartSec=600

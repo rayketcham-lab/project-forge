@@ -63,6 +63,7 @@ jobs:
           /tmp/forge-install-test/bin/python -c "import project_forge; print('OK:', project_forge.__file__)"
           test -f /tmp/forge-install-test/bin/forge-generate && echo "PASS: forge-generate"
           test -f /tmp/forge-install-test/bin/forge-serve && echo "PASS: forge-serve"
+          test -f /tmp/forge-install-test/bin/forge-self-improve && echo "PASS: forge-self-improve"
           rm -rf /tmp/forge-install-test
 
   security:
@@ -88,3 +89,26 @@ jobs:
           if [ "$TEST_COUNT" -lt "$ISSUE_COUNT" ]; then
             echo "::warning::Test count ($TEST_COUNT) is below feature issue count ($ISSUE_COUNT)"
           fi
+
+  self-improvement-queue:
+    runs-on: [self-hosted, Linux]
+    needs: [test]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Check for open ci-queue items
+        env:
+          GH_REPO: rayketcham-lab/project-forge
+        run: |
+          set -euo pipefail
+          QUEUE=$(gh issue list -R "$GH_REPO" --state open --label ci-queue --json number,title -q '.[] | "#\(.number) \(.title)"' 2>/dev/null || true)
+          COUNT=$(echo "$QUEUE" | grep -c '^#' || true)
+          echo "Open ci-queue items: $COUNT"
+          if [ "$COUNT" -gt 0 ]; then
+            echo ""
+            echo "=== Self-improvement items awaiting action ==="
+            echo "$QUEUE"
+            echo ""
+            echo "::error::$COUNT open self-improvement item(s) in the ci-queue. Address these before merging."
+            exit 1
+          fi
+          echo "No pending self-improvement items. Queue is clear."

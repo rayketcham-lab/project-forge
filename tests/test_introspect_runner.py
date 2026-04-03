@@ -40,11 +40,14 @@ class TestIntrospectRunner:
         fake_idea = Idea(
             name="Add structured logging",
             tagline="Better observability",
-            description="Add structlog for correlation IDs.",
+            description=(
+                "The engine module in src/project_forge/engine/ lacks structured logging. "
+                "Add structlog with correlation IDs for better observability and debugging."
+            ),
             category=IdeaCategory.SELF_IMPROVEMENT,
-            market_analysis="Internal improvement.",
+            market_analysis="Improves debugging and observability of the forge engine.",
             feasibility_score=0.85,
-            mvp_scope="Add structlog to engine module.",
+            mvp_scope="Add structlog to src/project_forge/engine/ and tests/test_logging.py.",
             tech_stack=["python", "structlog"],
         )
         mock_generator.generate = AsyncMock(return_value=fake_idea)

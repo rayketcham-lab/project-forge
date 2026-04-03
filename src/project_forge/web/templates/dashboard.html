@@ -4,11 +4,48 @@
 {% block content %}
 <section class="hero">
     <div class="container">
-        <h1 class="hero-title">Your IT Think Tank</h1>
-        <p class="hero-subtitle">{{ stats.total_ideas }} project ideas generated across {{ stats.ideas_by_category | length }} categories. Discover, evaluate, and build the next big thing.</p>
-        <div class="hero-actions">
-            <a href="/explore" class="btn btn-primary btn-lg">Explore Ideas</a>
-            <a href="/explore?category=pqc-cryptography" class="btn btn-outline btn-lg">PQC Security</a>
+        <div class="hero-grid">
+            <div class="hero-main">
+                <h1 class="hero-title">Your IT Think Tank</h1>
+                <p class="hero-subtitle">{{ stats.total_ideas }} ideas across {{ stats.ideas_by_category | length }} categories. Autonomous generation, human-directed governance.</p>
+                <div class="hero-actions">
+                    <a href="/explore" class="btn btn-primary btn-lg">Explore Ideas</a>
+                    <a href="/thinktank" class="btn btn-outline btn-lg">Think Tank</a>
+                </div>
+            </div>
+            <div class="hero-pipeline" id="hero-pipeline">
+                <div class="hero-pipeline-title">Pipeline</div>
+                <div class="hero-pipeline-stats">
+                    <div class="hero-pipe-stat">
+                        <span class="hero-pipe-num">{{ stats.ideas_by_status.get('new', 0) }}</span>
+                        <span class="hero-pipe-label">Pending</span>
+                    </div>
+                    <div class="hero-pipe-arrow">&rarr;</div>
+                    <div class="hero-pipe-stat">
+                        <span class="hero-pipe-num hero-pipe-approved">{{ stats.ideas_by_status.get('approved', 0) }}</span>
+                        <span class="hero-pipe-label">Approved</span>
+                    </div>
+                    <div class="hero-pipe-arrow">&rarr;</div>
+                    <div class="hero-pipe-stat">
+                        <span class="hero-pipe-num hero-pipe-scaffolded">{{ stats.ideas_by_status.get('scaffolded', 0) }}</span>
+                        <span class="hero-pipe-label">Built</span>
+                    </div>
+                </div>
+                <div class="hero-activity">
+                    <div class="hero-activity-item">
+                        <span class="hero-activity-num">{{ stats.ideas_by_category.get('self-improvement', 0) }}</span>
+                        <span class="hero-activity-label">Self-Improvement Proposals</span>
+                    </div>
+                    <div class="hero-activity-item">
+                        <span class="hero-activity-num">{{ stats.total_challenges }}</span>
+                        <span class="hero-activity-label">Challenges Filed</span>
+                    </div>
+                    <div class="hero-activity-item">
+                        <span class="hero-activity-num">{{ stats.ideas_by_status.get('rejected', 0) }}</span>
+                        <span class="hero-activity-label">Rejected</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </section>

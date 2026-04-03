@@ -38,6 +38,7 @@ dev = [
 forge-generate = "project_forge.cron.runner:main"
 forge-serve = "project_forge.web.app:run"
 forge-expand = "project_forge.cron.expand_runner:main"
+forge-self-improve = "project_forge.cron.self_improve_runner:main"
 
 [tool.ruff]
 target-version = "py312"

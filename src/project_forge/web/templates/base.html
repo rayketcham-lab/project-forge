@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Project Forge{% endblock %}</title>
     <link rel="stylesheet" href="/static/style.css?v=3">
+    {% if get_api_token() %}<meta name="api-token" content="{{ get_api_token() }}">{% endif %}
 </head>
 <body>
     <nav class="navbar">
@@ -47,7 +48,52 @@
             </p>
         </div>
     </footer>
-    <script src="/static/app.js?v=4"></script>
+    <!-- Issue Reporter Floating Action Button -->
+    <button id="issue-reporter-fab" class="issue-fab" title="Report an issue" aria-label="Report an issue">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+    </button>
+
+    <!-- Issue Reporter Modal -->
+    <div id="issue-reporter-modal" class="issue-modal-overlay" style="display:none">
+        <div class="issue-modal" role="dialog" aria-label="Report an issue">
+            <div class="issue-modal-header">
+                <h3>Report an Issue</h3>
+                <button id="issue-modal-close" class="issue-modal-close" aria-label="Close">&times;</button>
+            </div>
+            <div class="issue-modal-body">
+                <div id="issue-step-1" class="issue-step">
+                    <label class="issue-label">Issue Type</label>
+                    <div id="issue-type-list" class="issue-type-grid"></div>
+                </div>
+                <div id="issue-step-2" class="issue-step" style="display:none">
+                    <label class="issue-label" for="issue-description">Description</label>
+                    <textarea id="issue-description" class="issue-textarea" rows="4" minlength="5" maxlength="5000" placeholder="Describe the issue..."></textarea>
+                    <label class="issue-label" for="issue-severity">Severity</label>
+                    <select id="issue-severity" class="issue-select">
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                    </select>
+                    <label class="issue-label" for="issue-expected">Expected Behavior (optional)</label>
+                    <textarea id="issue-expected" class="issue-textarea" rows="2" maxlength="2000" placeholder="What did you expect to happen?"></textarea>
+                </div>
+                <div id="issue-step-result" class="issue-step" style="display:none">
+                    <div id="issue-result-content"></div>
+                </div>
+            </div>
+            <div class="issue-modal-footer">
+                <button id="issue-back-btn" class="btn btn-outline" style="display:none">Back</button>
+                <button id="issue-next-btn" class="btn btn-primary" disabled>Select a type</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js?v=5"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

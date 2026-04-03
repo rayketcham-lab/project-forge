@@ -71,6 +71,20 @@ class UrlIngestRequest(BaseModel):
         return v
 
 
+class Challenge(BaseModel):
+    id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    idea_id: str
+    question: str = Field(min_length=1)
+    challenge_type: str = "freeform"
+    focus_area: str = "all"
+    tone: str = "skeptical"
+    response: str = ""
+    verdict: str = "no_change"
+    confidence: float = 0.5
+    changes: list[dict] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class ScaffoldSpec(BaseModel):
     idea_id: str
     repo_name: str
