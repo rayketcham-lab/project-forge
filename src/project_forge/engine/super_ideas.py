@@ -366,11 +366,20 @@ class SuperIdeaGenerator:
         # Tag with the perspective
         si.description += f"\n\n**Perspective:** {label} — synthesized through the lens of {perspective}."
 
-        # Check for duplicate names in DB
-        existing = await self.db.list_ideas(limit=1000)
-        existing_names = {i.name for i in existing}
-        if f"[SUPER] {si.name}" in existing_names:
-            si.name = f"{si.name} ({label})"
+        # Check for duplicate base names in DB — skip if already exists
+        import re
+
+        existing = await self.db.list_ideas(limit=2000)
+        existing_base_names = set()
+        for ex in existing:
+            if ex.name.startswith("[SUPER]"):
+                raw = ex.name.replace("[SUPER] ", "")
+                base = re.sub(r"\s*\([^)]+\)\s*$", "", raw).strip()
+                existing_base_names.add(base.lower())
+
+        if si.name.lower() in existing_base_names:
+            logger.info("Skipping duplicate super idea: %s (base name exists)", si.name)
+            return None
 
         await self._store_super(si)
         logger.info(

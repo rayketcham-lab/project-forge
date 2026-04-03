@@ -613,6 +613,54 @@ class Database:
         await self.db.commit()
         return {"kept": kept_count, "rejected": rejected_count, "groups": len(groups)}
 
+    async def deduplicate_super_ideas(self) -> dict:
+        """Deduplicate super ideas by base name (stripping parenthetical suffixes).
+
+        Groups [SUPER] ideas by base name, keeps the highest-scored per group,
+        archives the rest. Returns dict with 'kept', 'archived', 'groups' counts.
+        """
+        import re
+
+        cursor = await self.db.execute(
+            "SELECT id, name, feasibility_score, status FROM ideas "
+            "WHERE name LIKE '[SUPER]%' AND status NOT IN ('rejected', 'archived')",
+        )
+        rows = await cursor.fetchall()
+
+        groups: dict[str, list[dict]] = {}
+        for row in rows:
+            # Strip "[SUPER] " prefix and any parenthetical suffix
+            raw_name = row["name"].replace("[SUPER] ", "")
+            base = re.sub(r"\s*\([^)]+\)\s*$", "", raw_name).strip()
+            entry = {
+                "id": row["id"],
+                "name": row["name"],
+                "score": row["feasibility_score"],
+                "status": row["status"],
+            }
+            groups.setdefault(base, []).append(entry)
+
+        archived_count = 0
+        kept_count = 0
+
+        for _base, members in groups.items():
+            if len(members) <= 1:
+                kept_count += 1
+                continue
+
+            members.sort(key=lambda m: -m["score"])
+            kept_count += 1
+
+            for dup in members[1:]:
+                await self.db.execute(
+                    "UPDATE ideas SET status = 'archived' WHERE id = ?",
+                    (dup["id"],),
+                )
+                archived_count += 1
+
+        await self.db.commit()
+        return {"kept": kept_count, "archived": archived_count, "groups": len(groups)}
+
     # === HELPERS ===
 
     @staticmethod
