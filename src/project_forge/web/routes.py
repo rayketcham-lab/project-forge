@@ -133,8 +133,9 @@ def _promote_to_ci_queue(idea) -> str:
 
 
 @router.post("/ideas/{idea_id}/approve")
-async def approve_idea(idea_id: str):
-    _check_rate_limit("approve")
+async def approve_idea(idea_id: str, request: Request):
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"approve:{client_ip}")
     idea = await db.get_idea(idea_id)
     if not idea:
         raise HTTPException(status_code=404, detail="Idea not found")
@@ -209,8 +210,8 @@ async def scaffold_idea(
         logger.info("Scaffolded %s to %s", idea.name, repo_url)
         return {"status": "scaffolded", "id": idea_id, "repo_url": repo_url}
     except Exception as e:
-        logger.error("Scaffold failed for %s: %s", idea.name, e)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error("Scaffold failed for %s: %s", idea_id, e)
+        raise HTTPException(status_code=500, detail="Scaffolding failed. Check server logs.") from e
 
 
 @router.get("/thinktank", response_class=HTMLResponse)
@@ -335,9 +336,10 @@ async def api_thinktank():
 
 
 @router.post("/api/thinktank/{idea_id}/promote")
-async def promote_proposal(idea_id: str):
+async def promote_proposal(idea_id: str, request: Request):
     """Promote a self-improvement proposal to a GitHub issue."""
-    _check_rate_limit("promote")
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"promote:{client_ip}")
     idea = await db.get_idea(idea_id)
     if not idea:
         raise HTTPException(status_code=404, detail="Idea not found")
@@ -555,9 +557,10 @@ async def create_gh_issue(title: str, body: str, labels: list[str]) -> str | Non
 
 
 @router.post("/api/issues/report")
-async def report_issue(report: IssueReport) -> dict:
+async def report_issue(report: IssueReport, request: Request) -> dict:
     """Accept user feedback and create a GitHub issue."""
-    _check_rate_limit("local")
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"report:{client_ip}")
     logger.info("Issue report received: type=%s, page=%s", report.issue_type, report.page_url)
 
     issue = _fallback_issue(report)
