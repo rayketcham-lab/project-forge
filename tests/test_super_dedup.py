@@ -102,7 +102,7 @@ class TestSuperIdeaGenerationDedup:
         await db.save_idea(_super("[SUPER] Autonomous Security Testing Platform"))
 
         gen = SuperIdeaGenerator(db)
-        result = await gen.generate_seeded(slot=2)  # Attack & Defense slot
+        await gen.generate_seeded(slot=2)  # Attack & Defense slot
 
         # Should skip because base name already exists
         supers = [i for i in await db.list_ideas(limit=200) if i.name.startswith("[SUPER]")]
