@@ -36,6 +36,21 @@ async def test_csp_no_unsafe_inline_scripts(client):
     assert "'unsafe-inline'" not in script_src, f"'unsafe-inline' must not appear in script-src. Got: {script_src!r}"
 
 
+@pytest.mark.asyncio
+async def test_docs_page_has_no_csp_blocking_inline_scripts(client):
+    """/docs Swagger UI uses inline scripts — CSP must not block them."""
+    resp = await client.get("/docs")
+    assert resp.status_code == 200
+    csp = resp.headers.get("Content-Security-Policy", "")
+    # Either no CSP on docs, or CSP allows unsafe-inline for script-src
+    if csp:
+        directives = {p.strip().split()[0]: p.strip() for p in csp.split(";") if p.strip()}
+        script_src = directives.get("script-src", "")
+        assert "'unsafe-inline'" in script_src or not script_src, (
+            f"/docs has inline scripts but CSP blocks them. script-src: {script_src!r}"
+        )
+
+
 def test_no_inline_script_blocks_in_templates():
     """No template should contain a bare <script> block (only <script src=…> is allowed)."""
     html_files = list(TEMPLATES_DIR.glob("*.html"))
