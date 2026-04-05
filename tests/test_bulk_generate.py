@@ -102,11 +102,30 @@ class TestBulkGenerator:
     async def test_generate_batch_stores_ideas(self, mock_anthropic_cls, db):
         mock_client = MagicMock()
         mock_anthropic_cls.return_value = mock_client
-        mock_content = MagicMock()
-        mock_content.text = MOCK_IDEA_JSON
-        mock_response = MagicMock()
-        mock_response.content = [mock_content]
-        mock_client.messages.create.return_value = mock_response
+
+        # Return unique taglines per call so universal dedup doesn't block
+        call_count = 0
+
+        def _make_response(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            idea_json = json.dumps({
+                "name": f"CRL Quantum Guard {call_count}",
+                "tagline": f"PQC-safe CRL management variant {call_count}",
+                "description": "Manages CRLs with PQC signatures.",
+                "category": "pqc-cryptography",
+                "market_analysis": "PQC transition is happening now.",
+                "feasibility_score": 0.8,
+                "mvp_scope": "CRL signing tool with ML-DSA.",
+                "tech_stack": ["python", "openssl", "cryptography"],
+            })
+            mock_content = MagicMock()
+            mock_content.text = idea_json
+            mock_response = MagicMock()
+            mock_response.content = [mock_content]
+            return mock_response
+
+        mock_client.messages.create.side_effect = _make_response
 
         config = BulkConfig(target_count=2, batch_size=2)
         bulk = BulkGenerator(db=db, api_key="test-key", config=config)

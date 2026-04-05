@@ -57,6 +57,18 @@ document.addEventListener('DOMContentLoaded', function() {
     if (urlBtn) {
         urlBtn.addEventListener('click', submitUrl);
     }
+
+    // Add as Issue static button
+    var addStaticBtn = document.getElementById('add-to-project-static-btn');
+    if (addStaticBtn) {
+        addStaticBtn.addEventListener('click', function() {
+            var ideaId = addStaticBtn.getAttribute('data-idea-id');
+            var select = document.getElementById('compare-repo');
+            if (select && select.value) {
+                addToProject(ideaId, select.value);
+            }
+        });
+    }
 });
 
 function switchTab(tabName) {
@@ -412,6 +424,8 @@ async function loadRepos() {
         select.addEventListener('change', function() {
             var btn = document.getElementById('compare-btn');
             if (btn) btn.disabled = !select.value;
+            var addBtn = document.getElementById('add-to-project-static-btn');
+            if (addBtn) addBtn.disabled = !select.value;
         });
     } catch (err) {
         while (select.firstChild) select.removeChild(select.firstChild);
@@ -435,7 +449,7 @@ async function compareIdea(id) {
 
     try {
         var url = '/api/ideas/' + id + '/compare?repo=' + encodeURIComponent(select.value);
-        var resp = await fetch(url, { method: 'POST' });
+        var resp = await fetch(url, { method: 'POST', headers: getAuthHeaders() });
         if (!resp.ok) {
             var err = await resp.json();
             throw new Error(err.detail || 'Compare failed');
@@ -481,6 +495,19 @@ async function compareIdea(id) {
             verdictDiv.appendChild(kwP);
         }
 
+        // Show "Add as Issue" button for enhance/duplicate verdicts
+        if (data.verdict === 'enhance' || data.verdict === 'duplicate') {
+            var addBtn = document.createElement('button');
+            addBtn.className = 'btn btn-primary';
+            addBtn.style.marginTop = '1rem';
+            addBtn.textContent = 'Add as Issue to ' + data.repo_name;
+            addBtn.id = 'add-to-project-btn';
+            addBtn.addEventListener('click', function() {
+                addToProject(id, select.value);
+            });
+            verdictDiv.appendChild(addBtn);
+        }
+
         resultsDiv.style.display = 'block';
     } catch (err) {
         while (verdictDiv.firstChild) verdictDiv.removeChild(verdictDiv.firstChild);
@@ -492,6 +519,38 @@ async function compareIdea(id) {
     } finally {
         btn.disabled = false;
         btn.textContent = 'Compare';
+    }
+}
+
+async function addToProject(ideaId, repoName) {
+    var addBtn = document.getElementById('add-to-project-btn');
+    if (addBtn) {
+        addBtn.disabled = true;
+        addBtn.textContent = 'Creating issue...';
+    }
+    try {
+        var url = '/api/ideas/' + ideaId + '/add-to-project?repo=' + encodeURIComponent(repoName);
+        var resp = await fetch(url, { method: 'POST', headers: getAuthHeaders() });
+        if (!resp.ok) {
+            var err = await resp.json();
+            throw new Error(err.detail || 'Failed to add issue');
+        }
+        var data = await resp.json();
+        if (addBtn) {
+            var link = document.createElement('a');
+            link.href = data.issue_url;
+            link.target = '_blank';
+            link.className = 'btn btn-primary';
+            link.style.marginTop = '1rem';
+            link.textContent = 'View Issue on GitHub';
+            addBtn.parentNode.replaceChild(link, addBtn);
+        }
+    } catch (err) {
+        if (addBtn) {
+            addBtn.disabled = false;
+            addBtn.textContent = 'Add as Issue (retry)';
+        }
+        alert('Failed: ' + err.message);
     }
 }
 

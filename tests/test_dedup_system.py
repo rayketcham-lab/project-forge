@@ -196,10 +196,17 @@ class TestSQLQueries:
     @pytest.mark.asyncio
     async def test_get_all_idea_names(self, db):
         """get_all_idea_names returns names without loading full objects."""
+        taglines = [
+            "automate container deployment pipelines",
+            "scan kubernetes manifests for drift",
+            "generate terraform modules from diagrams",
+            "batch process webhook retry queues",
+            "orchestrate multi-cloud DNS failover",
+        ]
         for i in range(5):
             idea = Idea(
                 name=f"Name Only {i}",
-                tagline="T",
+                tagline=taglines[i],
                 description="D",
                 category=IdeaCategory.AUTOMATION,
                 market_analysis="M",

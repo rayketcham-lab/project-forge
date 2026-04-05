@@ -348,6 +348,210 @@ class TestCompareAPI:
             assert data["repos"][0]["name"] == "pki-ca-engine"
 
 
+# === Add Idea to Existing Project ===
+
+
+class TestAddToProject:
+    """Tests for adding an idea as a GitHub issue on an existing project."""
+
+    @pytest.mark.asyncio
+    async def test_add_to_project_endpoint_exists(self, client_with_idea):
+        """POST /api/ideas/{id}/add-to-project should exist and accept repo param."""
+        client, idea = client_with_idea
+        with patch("project_forge.scaffold.github.create_issue") as mock_create:
+            mock_create.return_value = "https://github.com/rayketcham-lab/pki-ca-engine/issues/42"
+            resp = await client.post(
+                f"/api/ideas/{idea.id}/add-to-project",
+                params={"owner": "rayketcham-lab", "repo": "pki-ca-engine"},
+            )
+            assert resp.status_code == 200
+            data = resp.json()
+            assert "issue_url" in data
+            assert "github.com" in data["issue_url"]
+
+    @pytest.mark.asyncio
+    async def test_add_to_project_creates_issue_with_idea_details(self, client_with_idea):
+        """The created issue should contain the idea's name, description, and tech stack."""
+        client, idea = client_with_idea
+        with patch("project_forge.scaffold.github.create_issue") as mock_create:
+            mock_create.return_value = "https://github.com/rayketcham-lab/pki-ca-engine/issues/42"
+            await client.post(
+                f"/api/ideas/{idea.id}/add-to-project",
+                params={"owner": "rayketcham-lab", "repo": "pki-ca-engine"},
+            )
+            mock_create.assert_called_once()
+            kw = mock_create.call_args.kwargs
+            assert kw["repo"] == "rayketcham-lab/pki-ca-engine"
+            assert idea.name in kw["title"]
+            assert idea.description in kw["body"]
+            assert "Rust" in kw["body"]  # from tech_stack
+
+    @pytest.mark.asyncio
+    async def test_add_to_project_returns_issue_url(self, client_with_idea):
+        """Response should include the created issue URL."""
+        client, idea = client_with_idea
+        expected_url = "https://github.com/rayketcham-lab/pki-ca-engine/issues/99"
+        with patch("project_forge.scaffold.github.create_issue") as mock_create:
+            mock_create.return_value = expected_url
+            resp = await client.post(
+                f"/api/ideas/{idea.id}/add-to-project",
+                params={"owner": "rayketcham-lab", "repo": "pki-ca-engine"},
+            )
+            data = resp.json()
+            assert data["issue_url"] == expected_url
+
+    @pytest.mark.asyncio
+    async def test_add_to_project_idea_not_found(self, client_with_idea):
+        """Should return 404 for nonexistent idea."""
+        client, _ = client_with_idea
+        resp = await client.post(
+            "/api/ideas/nonexistent/add-to-project",
+            params={"owner": "rayketcham-lab", "repo": "pki-ca-engine"},
+        )
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_add_to_project_github_failure(self, client_with_idea):
+        """Should return 502 if GitHub issue creation fails."""
+        client, idea = client_with_idea
+        with patch("project_forge.scaffold.github.create_issue") as mock_create:
+            mock_create.side_effect = RuntimeError("gh: not found")
+            resp = await client.post(
+                f"/api/ideas/{idea.id}/add-to-project",
+                params={"owner": "rayketcham-lab", "repo": "pki-ca-engine"},
+            )
+            assert resp.status_code == 502
+
+    @pytest.mark.asyncio
+    async def test_add_to_project_ensures_labels_exist(self, client_with_idea):
+        """Labels must be created on the target repo before the issue is created."""
+        client, idea = client_with_idea
+        with (
+            patch("project_forge.scaffold.github.create_issue") as mock_create,
+            patch("project_forge.scaffold.github.create_label") as mock_label,
+        ):
+            mock_create.return_value = "https://github.com/rayketcham-lab/pki-client/issues/7"
+            await client.post(
+                f"/api/ideas/{idea.id}/add-to-project",
+                params={"owner": "rayketcham-lab", "repo": "pki-client"},
+            )
+            # create_label must be called for each label BEFORE create_issue
+            assert mock_label.call_count == 2
+            label_names = [c.kwargs["name"] for c in mock_label.call_args_list]
+            assert "project-forge" in label_names
+            assert idea.category.value in label_names
+            # create_issue must still be called
+            mock_create.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_add_to_project_label_failure_does_not_block_issue(self, client_with_idea):
+        """If label creation fails (already exists), issue creation should proceed."""
+        client, idea = client_with_idea
+        with (
+            patch("project_forge.scaffold.github.create_issue") as mock_create,
+            patch("project_forge.scaffold.github.create_label") as mock_label,
+        ):
+            mock_label.side_effect = RuntimeError("label already exists")
+            mock_create.return_value = "https://github.com/rayketcham-lab/pki-client/issues/7"
+            resp = await client.post(
+                f"/api/ideas/{idea.id}/add-to-project",
+                params={"owner": "rayketcham-lab", "repo": "pki-client"},
+            )
+            assert resp.status_code == 200
+            mock_create.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_add_to_project_body_has_external_origin_disclaimer(self, client_with_idea):
+        """Issue body must warn that this came from an external AI idea generator."""
+        client, idea = client_with_idea
+        with patch("project_forge.scaffold.github.create_issue") as mock_create:
+            mock_create.return_value = "https://github.com/rayketcham-lab/pki-ca-engine/issues/42"
+            await client.post(
+                f"/api/ideas/{idea.id}/add-to-project",
+                params={"owner": "rayketcham-lab", "repo": "pki-ca-engine"},
+            )
+            body = mock_create.call_args.kwargs["body"]
+            # Must have a prominent warning/disclaimer section
+            assert "External Idea" in body or "external" in body.lower()
+            # Must tell maintainer to critically evaluate fitment
+            assert "verify" in body.lower() or "evaluate" in body.lower()
+            # Must mention it was AI-generated
+            assert "auto" in body.lower() or "AI" in body or "generated" in body.lower()
+            # Must ask whether this enhances the project
+            assert "enhance" in body.lower() or "fit" in body.lower()
+
+    @pytest.mark.asyncio
+    async def test_add_to_project_sets_status_contributed(self, client_with_idea):
+        """After adding to a project, idea status should become 'contributed'."""
+        client, idea = client_with_idea
+        with patch("project_forge.scaffold.github.create_issue") as mock_create:
+            mock_create.return_value = "https://github.com/rayketcham-lab/pki-client/issues/7"
+            resp = await client.post(
+                f"/api/ideas/{idea.id}/add-to-project",
+                params={"owner": "rayketcham-lab", "repo": "pki-client"},
+            )
+            assert resp.status_code == 200
+        # Check status via DB
+        updated = await db.get_idea(idea.id)
+        assert updated.status == "contributed"
+
+    @pytest.mark.asyncio
+    async def test_add_to_project_stores_issue_url_on_idea(self, client_with_idea):
+        """After adding, the idea should store the created issue URL."""
+        client, idea = client_with_idea
+        issue_url = "https://github.com/rayketcham-lab/pki-client/issues/7"
+        with patch("project_forge.scaffold.github.create_issue") as mock_create:
+            mock_create.return_value = issue_url
+            await client.post(
+                f"/api/ideas/{idea.id}/add-to-project",
+                params={"owner": "rayketcham-lab", "repo": "pki-client"},
+            )
+        updated = await db.get_idea(idea.id)
+        assert updated.github_issue_url == issue_url
+
+    @pytest.mark.asyncio
+    async def test_add_to_project_stores_target_repo_on_idea(self, client_with_idea):
+        """After adding, the idea should store the target repo URL."""
+        client, idea = client_with_idea
+        with patch("project_forge.scaffold.github.create_issue") as mock_create:
+            mock_create.return_value = "https://github.com/rayketcham-lab/pki-client/issues/7"
+            await client.post(
+                f"/api/ideas/{idea.id}/add-to-project",
+                params={"owner": "rayketcham-lab", "repo": "pki-client"},
+            )
+        updated = await db.get_idea(idea.id)
+        assert updated.project_repo_url == "https://github.com/rayketcham-lab/pki-client"
+
+    @pytest.mark.asyncio
+    async def test_add_to_project_response_includes_status(self, client_with_idea):
+        """Response should confirm the new status."""
+        client, idea = client_with_idea
+        with patch("project_forge.scaffold.github.create_issue") as mock_create:
+            mock_create.return_value = "https://github.com/rayketcham-lab/pki-client/issues/7"
+            resp = await client.post(
+                f"/api/ideas/{idea.id}/add-to-project",
+                params={"owner": "rayketcham-lab", "repo": "pki-client"},
+            )
+            data = resp.json()
+            assert data["status"] == "contributed"
+
+    @pytest.mark.asyncio
+    async def test_add_to_project_labels_include_forge(self, client_with_idea):
+        """Issue should be labeled with 'project-forge' and the idea category."""
+        client, idea = client_with_idea
+        with patch("project_forge.scaffold.github.create_issue") as mock_create:
+            mock_create.return_value = "https://github.com/rayketcham-lab/pki-ca-engine/issues/42"
+            await client.post(
+                f"/api/ideas/{idea.id}/add-to-project",
+                params={"owner": "rayketcham-lab", "repo": "pki-ca-engine"},
+            )
+            call_args = mock_create.call_args
+            # Labels passed as keyword arg or positional arg
+            labels = call_args.kwargs.get("labels", [])
+            assert "project-forge" in labels
+            assert idea.category.value in labels
+
+
 # === UI rendering ===
 
 
@@ -370,3 +574,20 @@ class TestCompareUI:
         resp = await client.get(f"/ideas/{idea.id}")
         html = resp.text
         assert "compareIdea" in html or "compare-btn" in html
+
+    @pytest.mark.asyncio
+    async def test_compare_js_has_add_to_project_function(self, client_with_idea):
+        """app.js should have an addToProject function for the enhance/duplicate flow."""
+        client, _ = client_with_idea
+        resp = await client.get("/static/app.js")
+        assert resp.status_code == 200
+        assert "addToProject" in resp.text
+
+    @pytest.mark.asyncio
+    async def test_idea_detail_has_add_as_issue_button(self, client_with_idea):
+        """The idea detail page should have a static 'Add as Issue' button."""
+        client, idea = client_with_idea
+        resp = await client.get(f"/ideas/{idea.id}")
+        html = resp.text
+        assert "add-to-project-static-btn" in html
+        assert "Add as Issue" in html

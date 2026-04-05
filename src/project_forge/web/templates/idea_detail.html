@@ -46,6 +46,13 @@
                 {% if idea.project_repo_url %}
                 <a href="{{ idea.project_repo_url }}" target="_blank" class="btn btn-primary">View Repository</a>
                 {% endif %}
+                {% elif idea.status == 'contributed' %}
+                {% if idea.github_issue_url %}
+                <a href="{{ idea.github_issue_url }}" target="_blank" class="btn btn-primary">View Issue on GitHub</a>
+                {% endif %}
+                {% if idea.project_repo_url %}
+                <a href="{{ idea.project_repo_url }}" target="_blank" class="btn btn-outline">View Target Project</a>
+                {% endif %}
                 {% endif %}
                 {% if idea.status != 'new' %}
                 <button class="btn btn-outline" data-action="challenge-idea" data-idea-id="{{ idea.id }}">Challenge</button>
@@ -122,6 +129,9 @@
                 </select>
                 <button class="btn btn-primary" id="compare-btn" data-action="compare-idea" data-idea-id="{{ idea.id }}" disabled>
                     Compare
+                </button>
+                <button class="btn btn-outline" id="add-to-project-static-btn" data-idea-id="{{ idea.id }}" disabled>
+                    Add as Issue
                 </button>
             </div>
             <div id="compare-results" style="display: none; margin-top: 1.5rem;">

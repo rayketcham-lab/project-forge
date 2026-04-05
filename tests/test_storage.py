@@ -101,10 +101,15 @@ async def test_update_idea_urls(db):
 
 @pytest.mark.asyncio
 async def test_count_ideas(db):
+    taglines = [
+        "audit SOC2 control mapping gaps",
+        "validate GDPR data residency requirements",
+        "track FedRAMP authorization boundaries",
+    ]
     for i in range(3):
         idea = Idea(
             name=f"Count {i}",
-            tagline="Tag",
+            tagline=taglines[i],
             description="Desc",
             category=IdeaCategory.COMPLIANCE,
             market_analysis="Market",
@@ -212,10 +217,15 @@ async def test_list_ideas_offset_beyond_end(db):
 @pytest.mark.asyncio
 async def test_list_super_ideas_deduplicates_by_name(db):
     """list_super_ideas must return exactly one row per unique name, with the highest score."""
-    for score in (0.7, 0.8, 0.9):
+    super_taglines = [
+        "lattice-based certificate authority management",
+        "hybrid classical quantum key distribution bridge",
+        "post-quantum TLS handshake optimization engine",
+    ]
+    for i, score in enumerate((0.7, 0.8, 0.9)):
         idea = Idea(
             name="[SUPER] Quantum PKI Platform",
-            tagline="Unified platform",
+            tagline=super_taglines[i],
             description="Desc",
             category=IdeaCategory.PQC_CRYPTOGRAPHY,
             market_analysis="Market",

@@ -326,6 +326,7 @@ a.stat-card:hover { transform: translateY(-3px); border-color: var(--accent); }
 .status-scaffolded { background: #a78bfa20; color: var(--purple); }
 .status-rejected { background: #ef444420; color: var(--red); }
 .status-archived { background: #64748b20; color: var(--text-muted); }
+.status-contributed { background: #f59e0b20; color: #f59e0b; }
 
 /* === SCORE BAR === */
 .score-bar {

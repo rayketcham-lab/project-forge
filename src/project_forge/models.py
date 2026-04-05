@@ -25,7 +25,7 @@ class IdeaCategory(StrEnum):
     SELF_IMPROVEMENT = "self-improvement"
 
 
-IdeaStatus = Literal["new", "approved", "scaffolded", "rejected", "archived"]
+IdeaStatus = Literal["new", "approved", "scaffolded", "rejected", "archived", "contributed"]
 
 
 class Idea(BaseModel):
@@ -83,6 +83,19 @@ class Challenge(BaseModel):
     confidence: float = 0.5
     changes: list[dict] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class FilteredIdea(BaseModel):
+    """Audit trail for ideas blocked by dedup or quality review."""
+
+    id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    idea_name: str
+    idea_tagline: str
+    idea_category: IdeaCategory
+    filter_reason: str  # e.g. "duplicate:content_hash", "duplicate:tagline_similarity:0.85", "quality:buzzwords"
+    original_idea_json: str
+    filtered_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    similar_to_id: str | None = None
 
 
 class ScaffoldSpec(BaseModel):

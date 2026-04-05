@@ -156,26 +156,26 @@ class TestSelfImprovementDedup:
         assert len(all_si) == 2
 
     @pytest.mark.asyncio
-    async def test_non_si_ideas_not_affected(self, db):
-        """Regular (non-self-improvement) ideas with similar taglines are not deduped."""
+    async def test_non_si_ideas_also_deduped(self, db):
+        """Regular (non-SI) ideas with identical taglines are now deduped (universal dedup)."""
         idea1 = _regular_idea("PKI Scanner V1", "scan PKI infrastructure for cert issues")
         idea2 = _regular_idea("PKI Scanner V2", "scan PKI infrastructure for cert issues")
         await db.save_idea(idea1)
         await db.save_idea(idea2)
 
         all_ideas = await db.list_ideas(limit=100)
-        assert len(all_ideas) == 2
+        assert len(all_ideas) == 1, "Universal dedup should block near-duplicate non-SI ideas"
 
     @pytest.mark.asyncio
-    async def test_dedup_checks_only_si_category(self, db):
-        """A regular idea with a similar tagline to an SI idea should still save."""
+    async def test_cross_category_dedup_scoped(self, db):
+        """A regular idea with a similar tagline to an SI idea should still save (different category)."""
         si = _si_idea("Dashboard Fix", "dashboard UX improvements")
         regular = _regular_idea("Dashboard Scanner", "dashboard UX improvements")
         await db.save_idea(si)
         await db.save_idea(regular)
 
         all_ideas = await db.list_ideas(limit=100)
-        assert len(all_ideas) == 2
+        assert len(all_ideas) == 2, "Dedup is scoped to same category"
 
 
 # ---------------------------------------------------------------------------

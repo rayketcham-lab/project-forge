@@ -11,7 +11,7 @@ from pathlib import Path
 import aiosqlite
 
 from project_forge.engine.dedup import SIMILARITY_THRESHOLD, tagline_similarity
-from project_forge.models import Challenge, GenerationRun, Idea, IdeaCategory, IdeaStatus, Resource
+from project_forge.models import Challenge, FilteredIdea, GenerationRun, Idea, IdeaCategory, IdeaStatus, Resource
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS ideas (
@@ -92,6 +92,20 @@ CREATE TABLE IF NOT EXISTS challenges (
 
 CREATE INDEX IF NOT EXISTS idx_challenges_idea ON challenges(idea_id);
 
+CREATE TABLE IF NOT EXISTS filtered_ideas (
+    id TEXT PRIMARY KEY,
+    idea_name TEXT NOT NULL,
+    idea_tagline TEXT NOT NULL,
+    idea_category TEXT NOT NULL,
+    filter_reason TEXT NOT NULL,
+    original_idea_json TEXT NOT NULL,
+    filtered_at TEXT NOT NULL,
+    similar_to_id TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_filtered_category ON filtered_ideas(idea_category);
+CREATE INDEX IF NOT EXISTS idx_filtered_reason ON filtered_ideas(filter_reason);
+
 CREATE TABLE IF NOT EXISTS resources (
     id TEXT PRIMARY KEY,
     domain TEXT NOT NULL UNIQUE,
@@ -155,19 +169,26 @@ class Database:
             cursor = await self.db.execute("SELECT id FROM ideas WHERE content_hash = ?", (content_hash,))
             existing = await cursor.fetchone()
             if existing:
-                return idea  # Silently skip duplicate content
+                await self._log_filtered(idea, "duplicate:content_hash", similar_to_id=existing[0])
+                return idea
 
-        # Fuzzy dedup for self-improvement ideas: check tagline similarity
+        # Universal fuzzy dedup: check tagline similarity within same category
+        # Skip for super ideas — they're synthesized from existing ideas, not duplicates
         # Only block against non-rejected ideas (rejected ideas can be re-proposed)
-        if idea.category == IdeaCategory.SELF_IMPROVEMENT:
+        if not idea.name.startswith("[SUPER]"):
             cursor = await self.db.execute(
-                "SELECT tagline FROM ideas WHERE category = ? AND status != 'rejected'",
-                (IdeaCategory.SELF_IMPROVEMENT.value,),
+                "SELECT id, tagline FROM ideas WHERE category = ? AND status != 'rejected'",
+                (idea.category.value,),
             )
             rows = await cursor.fetchall()
-            for (existing_tagline,) in rows:
-                if tagline_similarity(idea.tagline, existing_tagline) >= SIMILARITY_THRESHOLD:
-                    return idea  # Silently skip near-duplicate
+            for row in rows:
+                existing_id, existing_tagline = row[0], row[1]
+                score = tagline_similarity(idea.tagline, existing_tagline)
+                if score >= SIMILARITY_THRESHOLD:
+                    await self._log_filtered(
+                        idea, f"duplicate:tagline_similarity:{score:.2f}", similar_to_id=existing_id
+                    )
+                    return idea
 
         await self.db.execute(
             """INSERT OR REPLACE INTO ideas
@@ -660,6 +681,105 @@ class Database:
 
         await self.db.commit()
         return {"kept": kept_count, "archived": archived_count, "groups": len(groups)}
+
+    # === FILTERED IDEAS (audit trail) ===
+
+    async def _log_filtered(self, idea: Idea, reason: str, similar_to_id: str | None = None) -> None:
+        """Internal: log a filtered idea to the audit trail."""
+        fi = FilteredIdea(
+            idea_name=idea.name,
+            idea_tagline=idea.tagline,
+            idea_category=idea.category,
+            filter_reason=reason,
+            original_idea_json=idea.model_dump_json(),
+            similar_to_id=similar_to_id,
+        )
+        await self.save_filtered_idea(fi)
+
+    async def save_filtered_idea(self, fi: FilteredIdea) -> FilteredIdea:
+        """Persist a filtered idea to the audit trail."""
+        await self.db.execute(
+            """INSERT INTO filtered_ideas
+            (id, idea_name, idea_tagline, idea_category, filter_reason,
+             original_idea_json, filtered_at, similar_to_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                fi.id,
+                fi.idea_name,
+                fi.idea_tagline,
+                fi.idea_category.value if isinstance(fi.idea_category, IdeaCategory) else fi.idea_category,
+                fi.filter_reason,
+                fi.original_idea_json,
+                fi.filtered_at.isoformat(),
+                fi.similar_to_id,
+            ),
+        )
+        await self.db.commit()
+        return fi
+
+    async def get_filtered_ideas(
+        self,
+        category: IdeaCategory | None = None,
+        reason_prefix: str | None = None,
+        limit: int = 100,
+    ) -> list[FilteredIdea]:
+        """Query filtered ideas with optional category/reason filters."""
+        query = "SELECT * FROM filtered_ideas WHERE 1=1"
+        params: list = []
+        if category:
+            query += " AND idea_category = ?"
+            params.append(category.value)
+        if reason_prefix:
+            query += " AND filter_reason LIKE ?"
+            params.append(f"{reason_prefix}%")
+        query += " ORDER BY filtered_at DESC LIMIT ?"
+        params.append(limit)
+        cursor = await self.db.execute(query, params)
+        rows = await cursor.fetchall()
+        return [self._row_to_filtered_idea(row) for row in rows]
+
+    async def get_dedup_stats(self) -> dict:
+        """Return dedup/filter stats: total, by_reason, by_category."""
+        cursor = await self.db.execute("SELECT COUNT(*) FROM filtered_ideas")
+        row = await cursor.fetchone()
+        total = row[0] if row else 0
+
+        # Group by reason — normalize "duplicate:tagline_similarity:0.85" to "duplicate:tagline_similarity"
+        cursor = await self.db.execute("SELECT filter_reason, COUNT(*) FROM filtered_ideas GROUP BY filter_reason")
+        raw_reasons = await cursor.fetchall()
+        by_reason: dict[str, int] = {}
+        for row in raw_reasons:
+            reason = row[0]
+            parts = reason.split(":")
+            # Keep first two parts as key (e.g. "duplicate:content_hash" or "duplicate:tagline_similarity")
+            if len(parts) >= 3 and parts[0] == "duplicate" and parts[1] == "tagline_similarity":
+                key = "duplicate:tagline_similarity"
+            else:
+                key = reason
+            by_reason[key] = by_reason.get(key, 0) + row[1]
+
+        cursor = await self.db.execute(
+            "SELECT idea_category, COUNT(*) FROM filtered_ideas GROUP BY idea_category"
+        )
+        cat_rows = await cursor.fetchall()
+        by_category = {row[0]: row[1] for row in cat_rows}
+
+        return {"total_filtered": total, "by_reason": by_reason, "by_category": by_category}
+
+    @staticmethod
+    def _row_to_filtered_idea(row) -> FilteredIdea:
+        return FilteredIdea(
+            id=row["id"],
+            idea_name=row["idea_name"],
+            idea_tagline=row["idea_tagline"],
+            idea_category=IdeaCategory(row["idea_category"]),
+            filter_reason=row["filter_reason"],
+            original_idea_json=row["original_idea_json"],
+            filtered_at=datetime.fromisoformat(row["filtered_at"]).replace(tzinfo=UTC)
+            if "+" not in row["filtered_at"]
+            else datetime.fromisoformat(row["filtered_at"]),
+            similar_to_id=row["similar_to_id"],
+        )
 
     # === HELPERS ===
 
