@@ -406,10 +406,12 @@ class TestMissingFromTesterReport:
         good_issue = {"number": 1, "title": "Good", "body": "x", "url": "u", "labels": [], "state": "OPEN"}
         bad_issue = {"number": 2, "title": "Bad", "body": "x", "url": "u", "labels": [], "state": "OPEN"}
 
-        good_response = json.dumps({
-            "summary": "Fixed it",
-            "changes": [{"path": "src/fix.py", "action": "create", "content": "x = 1\n"}],
-        })
+        good_response = json.dumps(
+            {
+                "summary": "Fixed it",
+                "changes": [{"path": "src/fix.py", "action": "create", "content": "x = 1\n"}],
+            }
+        )
 
         call_count = {"n": 0}
 

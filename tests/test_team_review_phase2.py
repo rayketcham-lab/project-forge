@@ -38,8 +38,7 @@ class TestNoTokenInHTML:
 
         base_html = Path("src/project_forge/web/templates/base.html").read_text()
         assert "api-token" not in base_html, (
-            "base.html must not contain api-token meta tag — "
-            "it exposes the bearer token to every page visitor"
+            "base.html must not contain api-token meta tag — it exposes the bearer token to every page visitor"
         )
 
     def test_no_get_api_token_in_template_globals(self):
@@ -47,8 +46,7 @@ class TestNoTokenInHTML:
         from project_forge.web.app import templates
 
         assert "get_api_token" not in templates.env.globals, (
-            "get_api_token must not be a template global — "
-            "it would allow templates to leak the API token"
+            "get_api_token must not be a template global — it would allow templates to leak the API token"
         )
 
     def test_app_js_uses_csrf_not_bearer(self):
@@ -56,9 +54,7 @@ class TestNoTokenInHTML:
         from pathlib import Path
 
         app_js = Path("src/project_forge/web/static/app.js").read_text()
-        assert 'meta[name="api-token"]' not in app_js, (
-            "app.js must not read bearer token from meta tags"
-        )
+        assert 'meta[name="api-token"]' not in app_js, "app.js must not read bearer token from meta tags"
 
     @pytest.mark.asyncio
     async def test_dashboard_html_has_no_token(self, tmp_path):
@@ -74,9 +70,7 @@ class TestNoTokenInHTML:
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 resp = await client.get("/")
-                assert "VISIBLE_SECRET_12345" not in resp.text, (
-                    "Dashboard HTML must not contain the API token value"
-                )
+                assert "VISIBLE_SECRET_12345" not in resp.text, "Dashboard HTML must not contain the API token value"
             await db.close()
         finally:
             settings.api_token = original
@@ -128,9 +122,7 @@ class TestScorerWiredIntoPipeline:
         from project_forge.cron import scheduler
 
         source = inspect.getsource(scheduler.generate_and_store)
-        assert "score_idea" in source, (
-            "generate_and_store() must call score_idea() to compute independent scores"
-        )
+        assert "score_idea" in source, "generate_and_store() must call score_idea() to compute independent scores"
 
 
 class TestCategorySaturation:
@@ -144,8 +136,7 @@ class TestCategorySaturation:
 
         source = inspect.getsource(scheduler.pick_category)
         assert "unused_tuple" in source.lower() or "saturation" in source.lower(), (
-            "pick_category() must check category saturation "
-            "(get_unused_tuple_count) to avoid exhausted categories"
+            "pick_category() must check category saturation (get_unused_tuple_count) to avoid exhausted categories"
         )
 
     @pytest.mark.asyncio
@@ -230,10 +221,8 @@ class TestDedupGate:
 
         source = inspect.getsource(Database.save_idea)
         assert "tagline_similarity" not in source, (
-            "save_idea() must not call tagline_similarity — "
-            "dedup should be in the standalone should_accept() gate"
+            "save_idea() must not call tagline_similarity — dedup should be in the standalone should_accept() gate"
         )
         assert "SIMILARITY_THRESHOLD" not in source, (
-            "save_idea() must not reference SIMILARITY_THRESHOLD — "
-            "dedup logic belongs in should_accept()"
+            "save_idea() must not reference SIMILARITY_THRESHOLD — dedup logic belongs in should_accept()"
         )

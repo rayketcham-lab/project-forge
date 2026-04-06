@@ -207,11 +207,18 @@ async def create_round(body: CreateRoundRequest):
 @router.get("/api/rounds")
 async def list_rounds():
     rounds = await db.list_rounds()
-    return {"rounds": [
-        {"id": r.id, "round_number": r.round_number, "idea_ids": r.idea_ids,
-         "status": r.status, "results": r.results}
-        for r in rounds
-    ]}
+    return {
+        "rounds": [
+            {
+                "id": r.id,
+                "round_number": r.round_number,
+                "idea_ids": r.idea_ids,
+                "status": r.status,
+                "results": r.results,
+            }
+            for r in rounds
+        ]
+    }
 
 
 @router.get("/api/rounds/{round_id}")
@@ -219,8 +226,13 @@ async def get_round(round_id: str):
     sr = await db.get_round(round_id)
     if not sr:
         raise HTTPException(status_code=404, detail="Round not found")
-    return {"id": sr.id, "round_number": sr.round_number, "idea_ids": sr.idea_ids,
-            "status": sr.status, "results": sr.results}
+    return {
+        "id": sr.id,
+        "round_number": sr.round_number,
+        "idea_ids": sr.idea_ids,
+        "status": sr.status,
+        "results": sr.results,
+    }
 
 
 @router.post("/api/rounds/{round_id}/compare")
@@ -244,15 +256,17 @@ async def run_round_comparisons(round_id: str):
     results = []
     for id_a, id_b in combinations(ideas.keys(), 2):
         comp = compare_ideas(ideas[id_a], ideas[id_b])
-        results.append({
-            "idea_a": id_a,
-            "idea_b": id_b,
-            "winner": comp["winner"],
-            "overlap_score": comp["overlap_score"],
-            "verdict": comp["verdict"],
-            "reason": comp["reason"],
-            "matching_keywords": comp["matching_keywords"],
-        })
+        results.append(
+            {
+                "idea_a": id_a,
+                "idea_b": id_b,
+                "winner": comp["winner"],
+                "overlap_score": comp["overlap_score"],
+                "verdict": comp["verdict"],
+                "reason": comp["reason"],
+                "matching_keywords": comp["matching_keywords"],
+            }
+        )
 
     # Auto-deny losers with high overlap
     for r in results:
@@ -263,7 +277,7 @@ async def run_round_comparisons(round_id: str):
                 denial = IdeaDenial(
                     idea_id=loser_id,
                     reason=f"Auto-denied in round {sr.round_number} comparison: {r['verdict']} "
-                           f"with '{ideas[r['winner']].name}' (overlap: {r['overlap_score']:.0%})",
+                    f"with '{ideas[r['winner']].name}' (overlap: {r['overlap_score']:.0%})",
                     denied_by="selection_round",
                 )
                 await db.save_denial(denial)
@@ -806,26 +820,21 @@ def _heuristic_challenge(idea, question: str) -> dict:
     # Description quality
     desc_words = len(idea.description.split())
     if desc_words < 30:
-        points.append(
-            "The description is thin — more technical detail would strengthen the proposal."
-        )
+        points.append("The description is thin — more technical detail would strengthen the proposal.")
 
     # MVP scope check
     mvp_words = len(idea.mvp_scope.split())
     if mvp_words < 15:
         points.append("The MVP scope is vague. Consider defining specific deliverables.")
     elif mvp_words > 100:
-        points.append(
-            "The MVP scope is broad — consider narrowing to a smaller first milestone."
-        )
+        points.append("The MVP scope is broad — consider narrowing to a smaller first milestone.")
 
     # Tech stack analysis
     if not idea.tech_stack:
         points.append("No tech stack specified. Defining this would clarify implementation path.")
     elif len(idea.tech_stack) > 6:
         points.append(
-            f"The tech stack lists {len(idea.tech_stack)} technologies — "
-            "consider whether all are needed for an MVP."
+            f"The tech stack lists {len(idea.tech_stack)} technologies — consider whether all are needed for an MVP."
         )
 
     if not points:
@@ -850,8 +859,9 @@ def _heuristic_challenge(idea, question: str) -> dict:
     }
 
 
-async def _challenge_idea(idea, question: str, challenge_type: str = "freeform",
-                          focus_area: str = "all", tone: str = "skeptical") -> dict:
+async def _challenge_idea(
+    idea, question: str, challenge_type: str = "freeform", focus_area: str = "all", tone: str = "skeptical"
+) -> dict:
     """Send the idea + question to Claude and return structured response with changes."""
     import anthropic
 
@@ -893,15 +903,15 @@ async def _challenge_idea(idea, question: str, challenge_type: str = "freeform",
         f"## Instructions\n"
         f"{tone_instruction}\n\n"
         f"Respond with JSON only (no markdown wrapping):\n"
-        f'{{\n'
+        f"{{\n"
         f'  "response": "Your detailed answer to the challenge",\n'
         f'  "verdict": "strengthen|pivot|narrow|expand|kill|no_change",\n'
         f'  "confidence": 0.0 to 1.0,\n'
         f'  "changes": [\n'
         f'    {{"field": "mvp_scope|description|tech_stack|market_analysis|feasibility_score", '
         f'"action": "added|removed|modified", "text": "what changed"}}\n'
-        f'  ]\n'
-        f'}}\n\n'
+        f"  ]\n"
+        f"}}\n\n"
         f"verdict meanings: strengthen=idea is solid, reinforce it; pivot=change direction; "
         f"narrow=reduce scope; expand=scope too small; kill=abandon; no_change=question answered, no changes needed.\n"
         f"changes array can be empty if no changes are warranted."
@@ -954,7 +964,8 @@ async def api_challenge_idea(idea_id: str, req: ChallengeRequest):
         raise HTTPException(status_code=404, detail="Idea not found")
 
     result = await _challenge_idea(
-        idea, req.question,
+        idea,
+        req.question,
         challenge_type=req.challenge_type,
         focus_area=req.focus_area,
         tone=req.tone,

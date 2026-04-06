@@ -57,14 +57,14 @@ class TestDashboardHeroContent:
         """The hero should not have a hardcoded PQC Security button."""
         resp = await client.get("/")
         assert resp.status_code == 200
-        assert 'category=pqc-cryptography' not in resp.text
+        assert "category=pqc-cryptography" not in resp.text
 
     @pytest.mark.asyncio
     async def test_hero_shows_think_tank_link(self, client):
         """Hero should have a quick link to the Think Tank."""
         resp = await client.get("/")
         assert resp.status_code == 200
-        assert '/thinktank' in resp.text
+        assert "/thinktank" in resp.text
 
     @pytest.mark.asyncio
     async def test_hero_shows_recent_activity_count(self, client):
@@ -75,7 +75,7 @@ class TestDashboardHeroContent:
         resp = await client.get("/")
         assert resp.status_code == 200
         # Should show some form of activity indicator
-        assert 'hero-activity' in resp.text or 'recent' in resp.text.lower()
+        assert "hero-activity" in resp.text or "recent" in resp.text.lower()
 
     @pytest.mark.asyncio
     async def test_hero_shows_pipeline_stats(self, client):
@@ -85,7 +85,7 @@ class TestDashboardHeroContent:
 
         resp = await client.get("/")
         assert resp.status_code == 200
-        assert 'hero-pipeline' in resp.text
+        assert "hero-pipeline" in resp.text
 
 
 class TestDashboardRouteData:
@@ -104,9 +104,7 @@ class TestDashboardRouteData:
     @pytest.mark.asyncio
     async def test_dashboard_provides_si_count(self, client):
         """Stats should include self-improvement pipeline count."""
-        await db.save_idea(
-            _idea("SI Idea", category=IdeaCategory.SELF_IMPROVEMENT)
-        )
+        await db.save_idea(_idea("SI Idea", category=IdeaCategory.SELF_IMPROVEMENT))
         resp = await client.get("/api/stats")
         data = resp.json()
         assert "ideas_by_category" in data

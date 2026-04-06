@@ -91,12 +91,18 @@ class TestSuperIdeaGenerationDedup:
         # Pre-seed with enough ideas for clustering
         for i in range(20):
             cat = IdeaCategory.SECURITY_TOOL if i % 2 == 0 else IdeaCategory.VULNERABILITY_RESEARCH
-            await db.save_idea(Idea(
-                name=f"Idea {i}", tagline=f"Tagline {i}",
-                description="Description.", category=cat,
-                market_analysis="Market.", feasibility_score=0.8,
-                mvp_scope="MVP.", tech_stack=["python"],
-            ))
+            await db.save_idea(
+                Idea(
+                    name=f"Idea {i}",
+                    tagline=f"Tagline {i}",
+                    description="Description.",
+                    category=cat,
+                    market_analysis="Market.",
+                    feasibility_score=0.8,
+                    mvp_scope="MVP.",
+                    tech_stack=["python"],
+                )
+            )
 
         # Pre-seed a super idea that would match
         await db.save_idea(_super("[SUPER] Autonomous Security Testing Platform"))
@@ -106,7 +112,7 @@ class TestSuperIdeaGenerationDedup:
 
         # Should skip because base name already exists
         supers = [i for i in await db.list_ideas(limit=200) if i.name.startswith("[SUPER]")]
-        base_names = [re.sub(r'\s*\([^)]+\)\s*$', '', n.name.replace("[SUPER] ", "")) for n in supers]
+        base_names = [re.sub(r"\s*\([^)]+\)\s*$", "", n.name.replace("[SUPER] ", "")) for n in supers]
         # No new variant of "Autonomous Security Testing Platform"
         count = sum(1 for b in base_names if b == "Autonomous Security Testing Platform")
         assert count == 1, f"Expected 1 'Autonomous Security Testing Platform', got {count}"

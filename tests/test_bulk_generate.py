@@ -96,16 +96,18 @@ class TestBulkGenerator:
         def _make_response(*args, **kwargs):
             nonlocal call_count
             call_count += 1
-            idea_json = json.dumps({
-                "name": f"PQC Tool {call_count}",
-                "tagline": taglines[call_count - 1],
-                "description": "PQC tooling for post-quantum migration.",
-                "category": "pqc-cryptography",
-                "market_analysis": "PQC transition is happening now.",
-                "feasibility_score": 0.8,
-                "mvp_scope": "Build the core tool.",
-                "tech_stack": ["python", "openssl", "cryptography"],
-            })
+            idea_json = json.dumps(
+                {
+                    "name": f"PQC Tool {call_count}",
+                    "tagline": taglines[call_count - 1],
+                    "description": "PQC tooling for post-quantum migration.",
+                    "category": "pqc-cryptography",
+                    "market_analysis": "PQC transition is happening now.",
+                    "feasibility_score": 0.8,
+                    "mvp_scope": "Build the core tool.",
+                    "tech_stack": ["python", "openssl", "cryptography"],
+                }
+            )
             mock_content = MagicMock()
             mock_content.text = idea_json
             mock_response = MagicMock()
@@ -132,16 +134,18 @@ class TestBulkGenerator:
         def _make_response(*args, **kwargs):
             nonlocal call_count
             call_count += 1
-            idea_json = json.dumps({
-                "name": f"CRL Quantum Guard {call_count}",
-                "tagline": f"PQC-safe CRL management variant {call_count}",
-                "description": "Manages CRLs with PQC signatures.",
-                "category": "pqc-cryptography",
-                "market_analysis": "PQC transition is happening now.",
-                "feasibility_score": 0.8,
-                "mvp_scope": "CRL signing tool with ML-DSA.",
-                "tech_stack": ["python", "openssl", "cryptography"],
-            })
+            idea_json = json.dumps(
+                {
+                    "name": f"CRL Quantum Guard {call_count}",
+                    "tagline": f"PQC-safe CRL management variant {call_count}",
+                    "description": "Manages CRLs with PQC signatures.",
+                    "category": "pqc-cryptography",
+                    "market_analysis": "PQC transition is happening now.",
+                    "feasibility_score": 0.8,
+                    "mvp_scope": "CRL signing tool with ML-DSA.",
+                    "tech_stack": ["python", "openssl", "cryptography"],
+                }
+            )
             mock_content = MagicMock()
             mock_content.text = idea_json
             mock_response = MagicMock()
@@ -175,16 +179,18 @@ class TestBulkGenerator:
 
         # Return distinct ideas so dedup doesn't filter the second success
         def _make_resp(tagline):
-            idea_json = json.dumps({
-                "name": f"Tool for {tagline[:20]}",
-                "tagline": tagline,
-                "description": "Manages CRLs with PQC signatures.",
-                "category": "pqc-cryptography",
-                "market_analysis": "PQC transition is happening now.",
-                "feasibility_score": 0.8,
-                "mvp_scope": "CRL signing tool with ML-DSA.",
-                "tech_stack": ["python", "openssl", "cryptography"],
-            })
+            idea_json = json.dumps(
+                {
+                    "name": f"Tool for {tagline[:20]}",
+                    "tagline": tagline,
+                    "description": "Manages CRLs with PQC signatures.",
+                    "category": "pqc-cryptography",
+                    "market_analysis": "PQC transition is happening now.",
+                    "feasibility_score": 0.8,
+                    "mvp_scope": "CRL signing tool with ML-DSA.",
+                    "tech_stack": ["python", "openssl", "cryptography"],
+                }
+            )
             content = MagicMock()
             content.text = idea_json
             resp = MagicMock()

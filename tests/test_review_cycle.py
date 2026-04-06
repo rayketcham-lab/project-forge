@@ -30,13 +30,17 @@ async def db(tmp_path):
     await d.close()
 
 
-def _idea(name: str, category=IdeaCategory.SECURITY_TOOL, score=0.75,
-          status="new", generated_at=None, **kw) -> Idea:
+def _idea(name: str, category=IdeaCategory.SECURITY_TOOL, score=0.75, status="new", generated_at=None, **kw) -> Idea:
     defaults = dict(
-        name=name, tagline=f"Tagline for {name}",
-        description="Test description.", category=category,
-        market_analysis="Market need.", feasibility_score=score,
-        mvp_scope="Build it.", tech_stack=["python"], status=status,
+        name=name,
+        tagline=f"Tagline for {name}",
+        description="Test description.",
+        category=category,
+        market_analysis="Market need.",
+        feasibility_score=score,
+        mvp_scope="Build it.",
+        tech_stack=["python"],
+        status=status,
     )
     if generated_at:
         defaults["generated_at"] = generated_at
@@ -82,8 +86,7 @@ class TestFetchIdeasForReview:
         idea = _idea("Stale Reviewed", generated_at=datetime(2026, 1, 1, tzinfo=UTC))
         await db.save_idea(idea)
         # Mark as reviewed 30 days ago
-        await db.record_review(idea.id, "keep", 0.8,
-                               reviewed_at=datetime(2026, 3, 1, tzinfo=UTC))
+        await db.record_review(idea.id, "keep", 0.8, reviewed_at=datetime(2026, 3, 1, tzinfo=UTC))
 
         batch = await db.fetch_ideas_for_review(limit=10, min_age_days=7)
         assert len(batch) == 1
@@ -156,12 +159,12 @@ class TestReviewRunner:
         await db.save_idea(_idea("Idea A"))
         await db.save_idea(_idea("Idea B"))
 
-        fake_review = {"verdict": "keep", "confidence": 0.8,
-                       "reasoning": "Still viable.", "suggestions": []}
+        fake_review = {"verdict": "keep", "confidence": 0.8, "reasoning": "Still viable.", "suggestions": []}
 
-        with patch("project_forge.cron.review_runner._review_idea_with_api",
-                   return_value=fake_review), \
-             patch("project_forge.cron.review_runner._get_api_key", return_value="fake-key"):
+        with (
+            patch("project_forge.cron.review_runner._review_idea_with_api", return_value=fake_review),
+            patch("project_forge.cron.review_runner._get_api_key", return_value="fake-key"),
+        ):
             result = await run_review_cycle(db, batch_size=5)
 
         assert result["reviewed"] == 2
@@ -175,12 +178,12 @@ class TestReviewRunner:
         idea = _idea("Doomed Idea")
         await db.save_idea(idea)
 
-        fake_review = {"verdict": "kill", "confidence": 0.9,
-                       "reasoning": "Completely superseded.", "suggestions": []}
+        fake_review = {"verdict": "kill", "confidence": 0.9, "reasoning": "Completely superseded.", "suggestions": []}
 
-        with patch("project_forge.cron.review_runner._review_idea_with_api",
-                   return_value=fake_review), \
-             patch("project_forge.cron.review_runner._get_api_key", return_value="fake-key"):
+        with (
+            patch("project_forge.cron.review_runner._review_idea_with_api", return_value=fake_review),
+            patch("project_forge.cron.review_runner._get_api_key", return_value="fake-key"),
+        ):
             await run_review_cycle(db, batch_size=5)
 
         updated = await db.get_idea(idea.id)
@@ -194,12 +197,12 @@ class TestReviewRunner:
         idea = _idea("Maybe Doomed")
         await db.save_idea(idea)
 
-        fake_review = {"verdict": "kill", "confidence": 0.4,
-                       "reasoning": "Uncertain.", "suggestions": []}
+        fake_review = {"verdict": "kill", "confidence": 0.4, "reasoning": "Uncertain.", "suggestions": []}
 
-        with patch("project_forge.cron.review_runner._review_idea_with_api",
-                   return_value=fake_review), \
-             patch("project_forge.cron.review_runner._get_api_key", return_value="fake-key"):
+        with (
+            patch("project_forge.cron.review_runner._review_idea_with_api", return_value=fake_review),
+            patch("project_forge.cron.review_runner._get_api_key", return_value="fake-key"),
+        ):
             await run_review_cycle(db, batch_size=5)
 
         updated = await db.get_idea(idea.id)
@@ -230,12 +233,12 @@ class TestReviewRunner:
             call_count += 1
             if call_count == 1:
                 raise ValueError("API error")
-            return {"verdict": "keep", "confidence": 0.7,
-                    "reasoning": "Fine.", "suggestions": []}
+            return {"verdict": "keep", "confidence": 0.7, "reasoning": "Fine.", "suggestions": []}
 
-        with patch("project_forge.cron.review_runner._review_idea_with_api",
-                   side_effect=flaky_review), \
-             patch("project_forge.cron.review_runner._get_api_key", return_value="fake-key"):
+        with (
+            patch("project_forge.cron.review_runner._review_idea_with_api", side_effect=flaky_review),
+            patch("project_forge.cron.review_runner._get_api_key", return_value="fake-key"),
+        ):
             result = await run_review_cycle(db, batch_size=5)
 
         assert result["reviewed"] == 2

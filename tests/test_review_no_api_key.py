@@ -26,13 +26,25 @@ async def db(tmp_path):
     await d.close()
 
 
-def _idea(name: str, score=0.75, status="new", category=IdeaCategory.SECURITY_TOOL,
-          generated_at=None, description="A solid project idea.", **kw) -> Idea:
+def _idea(
+    name: str,
+    score=0.75,
+    status="new",
+    category=IdeaCategory.SECURITY_TOOL,
+    generated_at=None,
+    description="A solid project idea.",
+    **kw,
+) -> Idea:
     defaults = dict(
-        name=name, tagline=f"Tagline for {name}",
-        description=description, category=category,
-        market_analysis="Market need.", feasibility_score=score,
-        mvp_scope="Build it.", tech_stack=["python"], status=status,
+        name=name,
+        tagline=f"Tagline for {name}",
+        description=description,
+        category=category,
+        market_analysis="Market need.",
+        feasibility_score=score,
+        mvp_scope="Build it.",
+        tech_stack=["python"],
+        status=status,
     )
     if generated_at:
         defaults["generated_at"] = generated_at
@@ -58,8 +70,7 @@ class TestHeuristicReview:
         assert "confidence" in result
         assert "reasoning" in result
         assert "suggestions" in result
-        assert result["verdict"] in ("keep", "strengthen", "pivot", "narrow",
-                                      "expand", "archive", "kill")
+        assert result["verdict"] in ("keep", "strengthen", "pivot", "narrow", "expand", "archive", "kill")
 
     def test_low_score_suggests_archive(self):
         """Ideas with very low feasibility scores should lean toward archive."""
@@ -74,8 +85,7 @@ class TestHeuristicReview:
         """Ideas older than 30 days should get some staleness signal."""
         from project_forge.cron.review_runner import heuristic_review
 
-        old = _idea("Ancient Idea", score=0.6,
-                     generated_at=datetime(2025, 6, 1, tzinfo=UTC))
+        old = _idea("Ancient Idea", score=0.6, generated_at=datetime(2025, 6, 1, tzinfo=UTC))
         result = heuristic_review(old, category_counts={}, total_ideas=100)
 
         # Old + mediocre score = should not be "keep"
@@ -85,8 +95,7 @@ class TestHeuristicReview:
         """High-scoring recent ideas should be kept."""
         from project_forge.cron.review_runner import heuristic_review
 
-        fresh = _idea("Great Idea", score=0.9,
-                       generated_at=datetime(2026, 3, 30, tzinfo=UTC))
+        fresh = _idea("Great Idea", score=0.9, generated_at=datetime(2026, 3, 30, tzinfo=UTC))
         result = heuristic_review(fresh, category_counts={}, total_ideas=100)
 
         assert result["verdict"] in ("keep", "strengthen", "expand")
@@ -95,9 +104,12 @@ class TestHeuristicReview:
         """Ideas in oversaturated categories should lean toward narrow/archive."""
         from project_forge.cron.review_runner import heuristic_review
 
-        idea = _idea("Another Security Tool", score=0.55,
-                      category=IdeaCategory.SECURITY_TOOL,
-                      generated_at=datetime(2026, 1, 15, tzinfo=UTC))
+        idea = _idea(
+            "Another Security Tool",
+            score=0.55,
+            category=IdeaCategory.SECURITY_TOOL,
+            generated_at=datetime(2026, 1, 15, tzinfo=UTC),
+        )
         counts = {"security-tool": 400, "automation": 50}
         result = heuristic_review(idea, category_counts=counts, total_ideas=500)
 
@@ -131,11 +143,12 @@ class TestReviewCycleNoKey:
         await db.save_idea(_idea("Idea B"))
 
         # Ensure no API key is available
-        env = {k: v for k, v in os.environ.items()
-               if "ANTHROPIC" not in k and "FORGE_ANTHROPIC" not in k}
+        env = {k: v for k, v in os.environ.items() if "ANTHROPIC" not in k and "FORGE_ANTHROPIC" not in k}
 
-        with patch.dict(os.environ, env, clear=True), \
-             patch("project_forge.cron.review_runner.settings") as mock_settings:
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch("project_forge.cron.review_runner.settings") as mock_settings,
+        ):
             mock_settings.anthropic_api_key = ""
             mock_settings.anthropic_model = "claude-sonnet-4-20250514"
             result = await run_review_cycle(db, batch_size=5)
@@ -152,19 +165,19 @@ class TestReviewCycleNoKey:
         idea = _idea("Recorded Idea")
         await db.save_idea(idea)
 
-        env = {k: v for k, v in os.environ.items()
-               if "ANTHROPIC" not in k and "FORGE_ANTHROPIC" not in k}
+        env = {k: v for k, v in os.environ.items() if "ANTHROPIC" not in k and "FORGE_ANTHROPIC" not in k}
 
-        with patch.dict(os.environ, env, clear=True), \
-             patch("project_forge.cron.review_runner.settings") as mock_settings:
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch("project_forge.cron.review_runner.settings") as mock_settings,
+        ):
             mock_settings.anthropic_api_key = ""
             mock_settings.anthropic_model = "claude-sonnet-4-20250514"
             await run_review_cycle(db, batch_size=5)
 
         reviews = await db.get_idea_reviews(idea.id)
         assert len(reviews) == 1
-        assert reviews[0]["verdict"] in ("keep", "strengthen", "pivot", "narrow",
-                                          "expand", "archive", "kill")
+        assert reviews[0]["verdict"] in ("keep", "strengthen", "pivot", "narrow", "expand", "archive", "kill")
 
     @pytest.mark.asyncio
     async def test_cycle_auto_archives_heuristic_kills(self, db):
@@ -172,16 +185,15 @@ class TestReviewCycleNoKey:
         from project_forge.cron.review_runner import run_review_cycle
 
         # Very old, very low score = likely kill
-        doomed = _idea("Terrible Old Idea", score=0.1,
-                        generated_at=datetime(2025, 1, 1, tzinfo=UTC),
-                        description="x")
+        doomed = _idea("Terrible Old Idea", score=0.1, generated_at=datetime(2025, 1, 1, tzinfo=UTC), description="x")
         await db.save_idea(doomed)
 
-        env = {k: v for k, v in os.environ.items()
-               if "ANTHROPIC" not in k and "FORGE_ANTHROPIC" not in k}
+        env = {k: v for k, v in os.environ.items() if "ANTHROPIC" not in k and "FORGE_ANTHROPIC" not in k}
 
-        with patch.dict(os.environ, env, clear=True), \
-             patch("project_forge.cron.review_runner.settings") as mock_settings:
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch("project_forge.cron.review_runner.settings") as mock_settings,
+        ):
             mock_settings.anthropic_api_key = ""
             mock_settings.anthropic_model = "claude-sonnet-4-20250514"
             await run_review_cycle(db, batch_size=5)
@@ -204,18 +216,25 @@ class TestSIRunnerNoKey:
         """run_self_improve_cycle should return cleanly, not crash."""
         from project_forge.cron.self_improve_runner import run_self_improve_cycle
 
-        fake_issues = [{"number": 99, "title": "Test", "body": "Fix stuff",
-                        "url": "http://example.com", "labels": [], "state": "OPEN"}]
+        fake_issues = [
+            {
+                "number": 99,
+                "title": "Test",
+                "body": "Fix stuff",
+                "url": "http://example.com",
+                "labels": [],
+                "state": "OPEN",
+            }
+        ]
 
-        env = {k: v for k, v in os.environ.items()
-               if "ANTHROPIC" not in k and "FORGE_ANTHROPIC" not in k}
+        env = {k: v for k, v in os.environ.items() if "ANTHROPIC" not in k and "FORGE_ANTHROPIC" not in k}
 
-        with patch.dict(os.environ, env, clear=True), \
-             patch("project_forge.cron.self_improve_runner.settings") as mock_settings, \
-             patch("project_forge.cron.self_improve_runner.fetch_ci_queue_issues",
-                   return_value=fake_issues), \
-             patch("project_forge.cron.self_improve_runner.gather_self_context",
-                   return_value={}):
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch("project_forge.cron.self_improve_runner.settings") as mock_settings,
+            patch("project_forge.cron.self_improve_runner.fetch_ci_queue_issues", return_value=fake_issues),
+            patch("project_forge.cron.self_improve_runner.gather_self_context", return_value={}),
+        ):
             mock_settings.anthropic_api_key = ""
             mock_settings.anthropic_model = "claude-sonnet-4-20250514"
             result = await run_self_improve_cycle()

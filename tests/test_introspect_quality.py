@@ -44,9 +44,7 @@ class TestIntrospectionPromptQuality:
         )
         prompt_lower = prompt.lower()
         assert (
-            "not a new project" in prompt_lower
-            or "do not propose" in prompt_lower
-            or "existing code" in prompt_lower
+            "not a new project" in prompt_lower or "do not propose" in prompt_lower or "existing code" in prompt_lower
         )
 
     def test_prompt_requires_file_paths_in_response(self):

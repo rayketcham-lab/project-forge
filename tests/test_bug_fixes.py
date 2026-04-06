@@ -47,9 +47,7 @@ class TestBug9SuperIdeaStatus:
             # The super idea's stored version should have status "new"
             stored = await db.get_idea(supers[0].id)
             if stored:
-                assert stored.status == "new", (
-                    f"Super idea status should be 'new', got '{stored.status}'"
-                )
+                assert stored.status == "new", f"Super idea status should be 'new', got '{stored.status}'"
 
     @pytest.mark.asyncio
     async def test_super_ideas_not_in_approved_count(self, db):

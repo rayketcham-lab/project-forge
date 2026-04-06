@@ -52,17 +52,33 @@ _TECH_PATTERNS = [
 
 # Overambition signals
 _OVERAMBITION_SIGNALS = [
-    "phase 1", "phase 2", "phase 3", "phase 4",
-    "multi-tenant", "enterprise sso", "saas platform",
-    "machine learning", "blockchain", "mobile app",
-    "browser extension", "desktop client",
-    "graphql and rest", "microservices architecture",
+    "phase 1",
+    "phase 2",
+    "phase 3",
+    "phase 4",
+    "multi-tenant",
+    "enterprise sso",
+    "saas platform",
+    "machine learning",
+    "blockchain",
+    "mobile app",
+    "browser extension",
+    "desktop client",
+    "graphql and rest",
+    "microservices architecture",
 ]
 
 # Buzzwords that deflate specificity
 _BUZZWORDS = [
-    "synerg", "paradigm shift", "disrupt", "leverage",
-    "next-generation", "ai-driven", "cutting-edge", "web3", "metaverse",
+    "synerg",
+    "paradigm shift",
+    "disrupt",
+    "leverage",
+    "next-generation",
+    "ai-driven",
+    "cutting-edge",
+    "web3",
+    "metaverse",
 ]
 
 
@@ -126,10 +142,7 @@ def _score_novelty(idea: Idea, corpus: list[Idea] | None = None) -> float:
 
     max_overlap = 0.0
     for existing in corpus:
-        existing_text = (
-            f"{existing.name} {existing.tagline} {existing.description} "
-            f"{' '.join(existing.tech_stack)}"
-        )
+        existing_text = f"{existing.name} {existing.tagline} {existing.description} {' '.join(existing.tech_stack)}"
         existing_keywords = _extract_keywords(existing_text)
         if not existing_keywords:
             continue

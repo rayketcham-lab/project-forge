@@ -536,9 +536,15 @@ class Database:
         rows = await cursor.fetchall()
         return [self._row_to_idea(row) for row in rows]
 
-    async def record_review(self, idea_id: str, verdict: str, confidence: float,
-                            reasoning: str = "", suggestions: list | None = None,
-                            reviewed_at: datetime | None = None) -> None:
+    async def record_review(
+        self,
+        idea_id: str,
+        verdict: str,
+        confidence: float,
+        reasoning: str = "",
+        suggestions: list | None = None,
+        reviewed_at: datetime | None = None,
+    ) -> None:
         """Store a review verdict for an idea."""
         from uuid import uuid4
 
@@ -547,8 +553,7 @@ class Database:
         await self.db.execute(
             """INSERT INTO idea_reviews (id, idea_id, verdict, confidence, reasoning, suggestions, reviewed_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (review_id, idea_id, verdict, confidence, reasoning,
-             json.dumps(suggestions or []), ts),
+            (review_id, idea_id, verdict, confidence, reasoning, json.dumps(suggestions or []), ts),
         )
         await self.db.commit()
 
@@ -610,8 +615,14 @@ class Database:
         await self.db.execute(
             """INSERT INTO selection_rounds (id, round_number, idea_ids, status, results, created_at)
             VALUES (?, ?, ?, ?, ?, ?)""",
-            (sr.id, sr.round_number, json.dumps(sr.idea_ids), sr.status,
-             json.dumps(sr.results), sr.created_at.isoformat()),
+            (
+                sr.id,
+                sr.round_number,
+                json.dumps(sr.idea_ids),
+                sr.status,
+                json.dumps(sr.results),
+                sr.created_at.isoformat(),
+            ),
         )
         await self.db.commit()
         return sr
@@ -676,8 +687,7 @@ class Database:
         from project_forge.engine.dedup import SIMILARITY_THRESHOLD, _normalize
 
         cursor = await self.db.execute(
-            "SELECT id, tagline, feasibility_score, status FROM ideas "
-            "WHERE category = ? AND status != 'rejected'",
+            "SELECT id, tagline, feasibility_score, status FROM ideas WHERE category = ? AND status != 'rejected'",
             (IdeaCategory.SELF_IMPROVEMENT.value,),
         )
         rows = await cursor.fetchall()
@@ -860,9 +870,7 @@ class Database:
                 key = reason
             by_reason[key] = by_reason.get(key, 0) + row[1]
 
-        cursor = await self.db.execute(
-            "SELECT idea_category, COUNT(*) FROM filtered_ideas GROUP BY idea_category"
-        )
+        cursor = await self.db.execute("SELECT idea_category, COUNT(*) FROM filtered_ideas GROUP BY idea_category")
         cat_rows = await cursor.fetchall()
         by_category = {row[0]: row[1] for row in cat_rows}
 

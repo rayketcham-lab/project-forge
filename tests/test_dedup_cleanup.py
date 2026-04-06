@@ -53,9 +53,19 @@ class TestDeduplicateExistingSIIdeas:
                 """INSERT INTO ideas (id, name, tagline, description, category, market_analysis,
                    feasibility_score, mvp_scope, tech_stack, generated_at, status)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (idea.id, idea.name, idea.tagline, idea.description,
-                 idea.category.value, idea.market_analysis, idea.feasibility_score,
-                 idea.mvp_scope, "[]", idea.generated_at.isoformat(), idea.status),
+                (
+                    idea.id,
+                    idea.name,
+                    idea.tagline,
+                    idea.description,
+                    idea.category.value,
+                    idea.market_analysis,
+                    idea.feasibility_score,
+                    idea.mvp_scope,
+                    "[]",
+                    idea.generated_at.isoformat(),
+                    idea.status,
+                ),
             )
         await db.db.commit()
 
@@ -80,9 +90,19 @@ class TestDeduplicateExistingSIIdeas:
                 """INSERT INTO ideas (id, name, tagline, description, category, market_analysis,
                    feasibility_score, mvp_scope, tech_stack, generated_at, status)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (idea.id, idea.name, idea.tagline, idea.description,
-                 idea.category.value, idea.market_analysis, idea.feasibility_score,
-                 idea.mvp_scope, "[]", idea.generated_at.isoformat(), idea.status),
+                (
+                    idea.id,
+                    idea.name,
+                    idea.tagline,
+                    idea.description,
+                    idea.category.value,
+                    idea.market_analysis,
+                    idea.feasibility_score,
+                    idea.mvp_scope,
+                    "[]",
+                    idea.generated_at.isoformat(),
+                    idea.status,
+                ),
             )
         await db.db.commit()
 
@@ -105,9 +125,19 @@ class TestDeduplicateExistingSIIdeas:
                 """INSERT INTO ideas (id, name, tagline, description, category, market_analysis,
                    feasibility_score, mvp_scope, tech_stack, generated_at, status)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (idea.id, idea.name, idea.tagline, idea.description,
-                 idea.category.value, idea.market_analysis, idea.feasibility_score,
-                 idea.mvp_scope, "[]", idea.generated_at.isoformat(), idea.status),
+                (
+                    idea.id,
+                    idea.name,
+                    idea.tagline,
+                    idea.description,
+                    idea.category.value,
+                    idea.market_analysis,
+                    idea.feasibility_score,
+                    idea.mvp_scope,
+                    "[]",
+                    idea.generated_at.isoformat(),
+                    idea.status,
+                ),
             )
         await db.db.commit()
 
@@ -132,9 +162,19 @@ class TestDeduplicateExistingSIIdeas:
                 """INSERT INTO ideas (id, name, tagline, description, category, market_analysis,
                    feasibility_score, mvp_scope, tech_stack, generated_at, status)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (idea.id, idea.name, idea.tagline, idea.description,
-                 idea.category.value, idea.market_analysis, idea.feasibility_score,
-                 idea.mvp_scope, "[]", idea.generated_at.isoformat(), idea.status),
+                (
+                    idea.id,
+                    idea.name,
+                    idea.tagline,
+                    idea.description,
+                    idea.category.value,
+                    idea.market_analysis,
+                    idea.feasibility_score,
+                    idea.mvp_scope,
+                    "[]",
+                    idea.generated_at.isoformat(),
+                    idea.status,
+                ),
             )
         await db.db.commit()
 
@@ -164,9 +204,19 @@ class TestDeduplicateExistingSIIdeas:
                 """INSERT INTO ideas (id, name, tagline, description, category, market_analysis,
                    feasibility_score, mvp_scope, tech_stack, generated_at, status)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (idea.id, idea.name, idea.tagline, idea.description,
-                 idea.category.value, idea.market_analysis, idea.feasibility_score,
-                 idea.mvp_scope, "[]", idea.generated_at.isoformat(), idea.status),
+                (
+                    idea.id,
+                    idea.name,
+                    idea.tagline,
+                    idea.description,
+                    idea.category.value,
+                    idea.market_analysis,
+                    idea.feasibility_score,
+                    idea.mvp_scope,
+                    "[]",
+                    idea.generated_at.isoformat(),
+                    idea.status,
+                ),
             )
         await db.db.commit()
 

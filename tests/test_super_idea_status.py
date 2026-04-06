@@ -95,9 +95,7 @@ class TestDashboardSuperVsRegular:
         total = stats["total_ideas"]
         super_count = stats["super_ideas"]
         regular_count = total - super_count
-        assert regular_count == baseline_regular, (
-            f"Expected {baseline_regular} regular ideas, got {regular_count}"
-        )
+        assert regular_count == baseline_regular, f"Expected {baseline_regular} regular ideas, got {regular_count}"
 
 
 class TestDashboardRendering:

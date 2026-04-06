@@ -467,9 +467,7 @@ class TestCIQueueWorkflow:
 
         ci_path = Path("/opt/vmdata/project-forge/.github/workflows/ci.yml")
         ci = yaml.safe_load(ci_path.read_text())
-        assert "self-improvement-queue" in ci["jobs"], (
-            "CI workflow missing 'self-improvement-queue' job"
-        )
+        assert "self-improvement-queue" in ci["jobs"], "CI workflow missing 'self-improvement-queue' job"
 
     def test_ci_queue_job_checks_ci_queue_label(self):
         """The queue check job must query for the ci-queue label."""
@@ -484,6 +482,4 @@ class TestCIQueueWorkflow:
 
         ci_text = Path("/opt/vmdata/project-forge/.github/workflows/ci.yml").read_text()
         # Should contain logic that fails when count > 0
-        assert "exit 1" in ci_text or "::error" in ci_text, (
-            "CI queue job must fail when open ci-queue issues exist"
-        )
+        assert "exit 1" in ci_text or "::error" in ci_text, "CI queue job must fail when open ci-queue issues exist"

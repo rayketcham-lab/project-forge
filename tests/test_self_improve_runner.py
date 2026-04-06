@@ -36,11 +36,7 @@ FAKE_CLAUDE_RESPONSE = {
             "path": "src/project_forge/web/app.py",
             "action": "edit",
             "search": "app = FastAPI()",
-            "replace": (
-                "from slowapi import Limiter\n"
-                "app = FastAPI()\n"
-                "limiter = Limiter(key_func=get_remote_address)"
-            ),
+            "replace": ("from slowapi import Limiter\napp = FastAPI()\nlimiter = Limiter(key_func=get_remote_address)"),
         },
         {
             "path": "tests/test_rate_limit.py",

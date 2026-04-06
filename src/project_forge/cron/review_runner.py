@@ -42,12 +42,7 @@ def heuristic_review(idea: Idea, category_counts: dict, total_ideas: int) -> dic
     quality_signal = min(1.0, desc_len / 500)  # longer desc = better quality signal
     saturation_signal = 1.0 - min(1.0, (cat_count / max(avg_cat_count * 2, 1)))
 
-    composite = (
-        score_signal * 0.4
-        + age_signal * 0.25
-        + quality_signal * 0.15
-        + saturation_signal * 0.2
-    )
+    composite = score_signal * 0.4 + age_signal * 0.25 + quality_signal * 0.15 + saturation_signal * 0.2
 
     # Map composite to verdict
     if composite >= 0.75:
@@ -131,20 +126,20 @@ def build_review_prompt(idea: Idea) -> str:
         f"- Is the scope realistic for an MVP?\n"
         f"- Does this overlap with other common ideas that have been done?\n\n"
         f"Respond with JSON only (no markdown wrapping):\n"
-        f'{{\n'
+        f"{{\n"
         f'  "verdict": "keep|strengthen|pivot|narrow|expand|archive|kill",\n'
         f'  "confidence": 0.0 to 1.0,\n'
         f'  "reasoning": "2-3 sentence explanation",\n'
         f'  "suggestions": ["actionable suggestion 1", "suggestion 2"]\n'
-        f'}}\n\n'
-        f'Verdict meanings:\n'
-        f'- keep: idea is fine as-is\n'
-        f'- strengthen: good idea, needs more detail or better framing\n'
-        f'- pivot: core insight is good but direction should change\n'
-        f'- narrow: scope too broad, needs focus\n'
-        f'- expand: idea is too small, could be bigger\n'
-        f'- archive: no longer relevant, overtaken by events\n'
-        f'- kill: fundamentally flawed or completely superseded\n'
+        f"}}\n\n"
+        f"Verdict meanings:\n"
+        f"- keep: idea is fine as-is\n"
+        f"- strengthen: good idea, needs more detail or better framing\n"
+        f"- pivot: core insight is good but direction should change\n"
+        f"- narrow: scope too broad, needs focus\n"
+        f"- expand: idea is too small, could be bigger\n"
+        f"- archive: no longer relevant, overtaken by events\n"
+        f"- kill: fundamentally flawed or completely superseded\n"
     )
 
 
@@ -218,7 +213,9 @@ async def run_review_cycle(db, batch_size: int = 10, min_age_days: int = 7) -> d
         try:
             if use_api:
                 review = await _review_idea_with_api(
-                    idea, api_key=key, model=settings.anthropic_model,
+                    idea,
+                    api_key=key,
+                    model=settings.anthropic_model,
                 )
             else:
                 review = heuristic_review(idea, cat_counts, total_ideas)
@@ -234,28 +231,31 @@ async def run_review_cycle(db, batch_size: int = 10, min_age_days: int = 7) -> d
             # Auto-archive high-confidence kills/archives
             if review["verdict"] in ("kill", "archive") and review["confidence"] >= _KILL_AUTO_ARCHIVE_THRESHOLD:
                 await db.update_idea_status(idea.id, "archived")
-                logger.info("Auto-archived idea %s (kill @ %.0f%% confidence)",
-                            idea.id, review["confidence"] * 100)
+                logger.info("Auto-archived idea %s (kill @ %.0f%% confidence)", idea.id, review["confidence"] * 100)
 
-            results.append({
-                "idea_id": idea.id,
-                "name": idea.name,
-                "status": "reviewed",
-                "verdict": review["verdict"],
-                "confidence": review["confidence"],
-            })
+            results.append(
+                {
+                    "idea_id": idea.id,
+                    "name": idea.name,
+                    "status": "reviewed",
+                    "verdict": review["verdict"],
+                    "confidence": review["confidence"],
+                }
+            )
 
         except Exception as exc:
             logger.error("Failed to review %s: %s", idea.id, exc)
-            results.append({
-                "idea_id": idea.id,
-                "name": idea.name,
-                "status": "error",
-                "detail": str(exc),
-            })
+            results.append(
+                {
+                    "idea_id": idea.id,
+                    "name": idea.name,
+                    "status": "error",
+                    "detail": str(exc),
+                }
+            )
 
-    logger.info("Review cycle complete: %d reviewed, %d errors",
-                len(ideas),
-                sum(1 for r in results if r["status"] == "error"))
+    logger.info(
+        "Review cycle complete: %d reviewed, %d errors", len(ideas), sum(1 for r in results if r["status"] == "error")
+    )
 
     return {"reviewed": len(ideas), "results": results}
