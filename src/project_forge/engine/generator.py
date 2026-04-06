@@ -29,13 +29,17 @@ class IdeaGenerator:
         recent_ideas: list[str] | None = None,
         use_contrarian: bool = False,
         use_combinatoric: bool = False,
+        prompt_override: str | None = None,
     ) -> Idea:
-        prompt = build_generation_prompt(
-            category=category,
-            recent_ideas=recent_ideas or [],
-            use_contrarian=use_contrarian,
-            use_combinatoric=use_combinatoric,
-        )
+        if prompt_override is not None:
+            prompt = prompt_override
+        else:
+            prompt = build_generation_prompt(
+                category=category,
+                recent_ideas=recent_ideas or [],
+                use_contrarian=use_contrarian,
+                use_combinatoric=use_combinatoric,
+            )
 
         logger.info("Generating idea for category: %s", category.value)
 

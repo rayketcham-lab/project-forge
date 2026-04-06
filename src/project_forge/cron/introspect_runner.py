@@ -19,19 +19,37 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def run_introspect_cycle(db: Database, generator) -> "Idea":  # noqa: F821
-    """Run one introspection cycle: gather context, generate self-improvement idea, store it."""
-    # Get recent self-improvement idea names to avoid duplicates
+async def run_introspect_cycle(db: Database, generator=None) -> "Idea":  # noqa: F821
+    """Run one introspection cycle.
+
+    When *generator* is ``None`` (no API key), falls back to static analysis
+    that requires no external services.
+    """
+    if generator is None:
+        # Static fallback — no API key needed
+        from project_forge.engine.static_introspect import generate_static_proposals
+
+        proposals = generate_static_proposals()
+        if not proposals:
+            logger.info("Static introspection found no proposals")
+            return None
+
+        # Pick the first proposal that passes dedup
+        for idea in proposals:
+            _, accepted, reason = await filter_and_save(idea, db)
+            if accepted:
+                logger.info("Static introspection stored: %s", idea.name)
+                return idea
+            logger.info("Static proposal '%s' filtered: %s", idea.name, reason)
+        return None
+
+    # LLM-powered introspection (requires API key)
     recent_si = await db.list_ideas(category=IdeaCategory.SELF_IMPROVEMENT, limit=10)
     recent_names = [i.name for i in recent_si]
 
-    # Gather codebase context
     context = gather_self_context()
-
-    # Build the introspection prompt
     prompt = build_introspection_prompt(context, recent_names)
 
-    # Generate idea using the prompt
     idea = await generator.generate(
         category=IdeaCategory.SELF_IMPROVEMENT,
         prompt_override=prompt,
@@ -56,13 +74,14 @@ async def _run() -> None:
     await db.connect()
     try:
         api_key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-        if not api_key:
-            logger.error("No API key available for introspection")
-            sys.exit(1)
+        if api_key:
+            from project_forge.engine.generator import IdeaGenerator
 
-        from project_forge.engine.generator import IdeaGenerator
+            generator = IdeaGenerator(api_key=api_key)
+        else:
+            logger.info("No API key — using static introspection")
+            generator = None
 
-        generator = IdeaGenerator(api_key=api_key)
         await run_introspect_cycle(db, generator)
     except Exception:
         logger.exception("Introspection cycle failed")
