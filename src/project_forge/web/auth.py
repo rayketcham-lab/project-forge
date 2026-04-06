@@ -36,9 +36,7 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
         # Accept the ephemeral dashboard token (generated per server start).
         from project_forge.web.app import _dashboard_token
 
-        if _dashboard_token and hmac.compare_digest(
-            auth_header, f"Bearer {_dashboard_token}"
-        ):
+        if _dashboard_token and hmac.compare_digest(auth_header, f"Bearer {_dashboard_token}"):
             return await call_next(request)
 
         return JSONResponse(

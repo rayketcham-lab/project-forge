@@ -25,15 +25,9 @@ def _extract_module_details(py_file: Path) -> dict:
     functions = [
         node.name
         for node in ast.walk(tree)
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and not node.name.startswith("_")
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and not node.name.startswith("_")
     ]
-    classes = [
-        node.name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ClassDef)
-        and not node.name.startswith("_")
-    ]
+    classes = [node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and not node.name.startswith("_")]
     return {"docstring": docstring, "functions": functions, "classes": classes}
 
 
@@ -63,13 +57,15 @@ def find_untested_modules(project_root: Path) -> list[dict]:
         if module_stem not in test_stems:
             rel = py_file.relative_to(project_root)
             details = _extract_module_details(py_file)
-            findings.append({
-                "module": module_stem,
-                "path": str(rel),
-                "functions": details["functions"],
-                "classes": details["classes"],
-                "docstring": details["docstring"],
-            })
+            findings.append(
+                {
+                    "module": module_stem,
+                    "path": str(rel),
+                    "functions": details["functions"],
+                    "classes": details["classes"],
+                    "docstring": details["docstring"],
+                }
+            )
 
     return findings
 
