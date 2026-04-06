@@ -6,37 +6,33 @@ on:
   pull_request:
     branches: [main]
 
-jobs:
-  find-python:
-    runs-on: [self-hosted, Linux]
-    outputs:
-      py: ${{ steps.detect.outputs.py }}
-    steps:
-      - name: Detect Python 3.12+
-        id: detect
-        run: |
-          for candidate in python3.12 python3.13 python3; do
-            if command -v "$candidate" >/dev/null 2>&1; then
-              version=$("$candidate" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-              major=$(echo "$version" | cut -d. -f1)
-              minor=$(echo "$version" | cut -d. -f2)
-              if [ "$major" -ge 3 ] && [ "$minor" -ge 12 ]; then
-                echo "py=$candidate" >> "$GITHUB_OUTPUT"
-                echo "Found $candidate ($version)"
-                exit 0
-              fi
-            fi
-          done
-          echo "::error::No Python 3.12+ found on this runner"
-          exit 1
+env:
+  # Each job detects Python locally to handle multi-runner setups
+  FIND_PY: |
+    for candidate in python3.12 python3.13 python3; do
+      if command -v "$candidate" >/dev/null 2>&1; then
+        version=$("$candidate" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+        major=$(echo "$version" | cut -d. -f1)
+        minor=$(echo "$version" | cut -d. -f2)
+        if [ "$major" -ge 3 ] && [ "$minor" -ge 12 ]; then
+          echo "PY=$candidate" >> "$GITHUB_ENV"
+          echo "Found $candidate ($version)"
+          break
+        fi
+      fi
+    done
+    if [ -z "${PY:-}" ]; then
+      echo "::error::No Python 3.12+ found on this runner"
+      exit 1
+    fi
 
+jobs:
   lint:
     runs-on: [self-hosted, Linux]
-    needs: find-python
-    env:
-      PY: ${{ needs.find-python.outputs.py }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Detect Python 3.12+
+        run: eval "$FIND_PY"
       - name: Lint with ruff
         run: $PY -m ruff check src/ tests/
       - name: Check formatting
@@ -44,11 +40,11 @@ jobs:
 
   test:
     runs-on: [self-hosted, Linux]
-    needs: [find-python, lint]
-    env:
-      PY: ${{ needs.find-python.outputs.py }}
+    needs: lint
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Detect Python 3.12+
+        run: eval "$FIND_PY"
       - name: Install and test
         run: |
           $PY -m venv .venv
@@ -58,11 +54,11 @@ jobs:
 
   build:
     runs-on: [self-hosted, Linux]
-    needs: [find-python, test]
-    env:
-      PY: ${{ needs.find-python.outputs.py }}
+    needs: test
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Detect Python 3.12+
+        run: eval "$FIND_PY"
       - name: Build and verify wheel
         run: |
           $PY -m venv .build-venv
@@ -95,21 +91,21 @@ jobs:
 
   security:
     runs-on: [self-hosted, Linux]
-    needs: [find-python, lint]
-    env:
-      PY: ${{ needs.find-python.outputs.py }}
+    needs: lint
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Detect Python 3.12+
+        run: eval "$FIND_PY"
       - name: Security lint
         run: $PY -m ruff check src/ --select S --ignore S101,S311,S314,S603,S607,S701
 
   issue-test-ratio:
     runs-on: [self-hosted, Linux]
-    needs: [find-python, test]
-    env:
-      PY: ${{ needs.find-python.outputs.py }}
+    needs: test
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Detect Python 3.12+
+        run: eval "$FIND_PY"
       - name: Check issue-to-test ratio
         env:
           GH_REPO: rayketcham-lab/project-forge
