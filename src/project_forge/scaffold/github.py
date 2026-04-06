@@ -13,7 +13,10 @@ def _run_gh(args: list[str], cwd: str | None = None) -> str:
     """Run a gh CLI command and return stdout."""
     cmd = ["gh"] + args
     logger.info("Running: %s", " ".join(cmd))
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, timeout=60)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, timeout=60)
+    except FileNotFoundError:
+        raise RuntimeError("gh CLI not found — install from https://cli.github.com/") from None
     if result.returncode != 0:
         logger.error("gh command failed: %s", result.stderr)
         raise RuntimeError(f"gh command failed: {result.stderr}")
