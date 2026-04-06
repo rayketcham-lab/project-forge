@@ -25,7 +25,7 @@ class IdeaCategory(StrEnum):
     SELF_IMPROVEMENT = "self-improvement"
 
 
-IdeaStatus = Literal["new", "approved", "scaffolded", "rejected", "archived", "contributed"]
+IdeaStatus = Literal["new", "approved", "scaffolded", "rejected", "archived", "contributed", "implemented"]
 
 
 class Idea(BaseModel):
@@ -96,6 +96,21 @@ class FilteredIdea(BaseModel):
     original_idea_json: str
     filtered_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     similar_to_id: str | None = None
+
+
+AuditStatus = Literal["implemented", "partial", "not_implemented", "unknown"]
+
+
+class PromotedIdeaAudit(BaseModel):
+    """Audit result for a promoted/approved idea — tracks implementation evidence."""
+
+    idea_id: str
+    idea_name: str
+    status: AuditStatus
+    evidence: list[str] = Field(default_factory=list)
+    github_issue_number: int | None = None
+    github_issue_state: str | None = None
+    recommendation: str | None = None
 
 
 class ScaffoldSpec(BaseModel):

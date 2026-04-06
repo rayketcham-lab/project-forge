@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Promoted Idea Audit - Project Forge{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div class="container">
+        <h1 class="hero-title">Promoted Idea Audit</h1>
+        <p class="hero-subtitle">Implementation status of promoted and approved ideas.</p>
+    </div>
+</section>
+
+<section class="container" style="padding: 2rem 1rem;">
+    <div style="display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap;">
+        <div style="background: var(--card-bg, #1a1a2e); padding: 1rem 1.5rem; border-radius: 8px; flex: 1; min-width: 120px;">
+            <div style="font-size: 2rem; font-weight: bold; color: var(--accent, #6366f1);">{{ summary.total }}</div>
+            <div style="color: var(--text-muted, #888);">Total Promoted</div>
+        </div>
+        <div style="background: var(--card-bg, #1a1a2e); padding: 1rem 1.5rem; border-radius: 8px; flex: 1; min-width: 120px;">
+            <div style="font-size: 2rem; font-weight: bold; color: #22c55e;">{{ summary.implemented }}</div>
+            <div style="color: var(--text-muted, #888);">Implemented</div>
+        </div>
+        <div style="background: var(--card-bg, #1a1a2e); padding: 1rem 1.5rem; border-radius: 8px; flex: 1; min-width: 120px;">
+            <div style="font-size: 2rem; font-weight: bold; color: #eab308;">{{ summary.partial }}</div>
+            <div style="color: var(--text-muted, #888);">Partial</div>
+        </div>
+        <div style="background: var(--card-bg, #1a1a2e); padding: 1rem 1.5rem; border-radius: 8px; flex: 1; min-width: 120px;">
+            <div style="font-size: 2rem; font-weight: bold; color: #ef4444;">{{ summary.not_implemented }}</div>
+            <div style="color: var(--text-muted, #888);">Not Implemented</div>
+        </div>
+    </div>
+
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr style="border-bottom: 2px solid var(--border, #333);">
+                <th style="text-align: left; padding: 0.75rem;">Idea</th>
+                <th style="text-align: left; padding: 0.75rem;">Status</th>
+                <th style="text-align: left; padding: 0.75rem;">Evidence</th>
+                <th style="text-align: left; padding: 0.75rem;">Issue</th>
+                <th style="text-align: left; padding: 0.75rem;">Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for audit in audits %}
+            <tr style="border-bottom: 1px solid var(--border, #222);">
+                <td style="padding: 0.75rem;">{{ audit.idea_name }}</td>
+                <td style="padding: 0.75rem;">
+                    {% if audit.status == 'implemented' %}
+                    <span style="color: #22c55e;">Implemented</span>
+                    {% elif audit.status == 'partial' %}
+                    <span style="color: #eab308;">Partial</span>
+                    {% elif audit.status == 'not_implemented' %}
+                    <span style="color: #ef4444;">Not Implemented</span>
+                    {% else %}
+                    <span style="color: #888;">Unknown</span>
+                    {% endif %}
+                </td>
+                <td style="padding: 0.75rem; font-size: 0.85rem; color: var(--text-muted, #888);">
+                    {% for e in audit.evidence[:3] %}
+                    <div>{{ e }}</div>
+                    {% endfor %}
+                    {% if audit.evidence | length > 3 %}
+                    <div>... and {{ audit.evidence | length - 3 }} more</div>
+                    {% endif %}
+                    {% if not audit.evidence %}
+                    <div>No evidence found</div>
+                    {% endif %}
+                </td>
+                <td style="padding: 0.75rem;">
+                    {% if audit.github_issue_number %}
+                    <a href="https://github.com/rayketcham-lab/project-forge/issues/{{ audit.github_issue_number }}"
+                       style="color: var(--accent, #6366f1);">#{{ audit.github_issue_number }}</a>
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+                <td style="padding: 0.75rem;">
+                    {% if audit.recommendation == 'close_issue' %}
+                    <span style="color: #22c55e;">Close issue</span>
+                    {% elif audit.recommendation %}
+                    {{ audit.recommendation }}
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

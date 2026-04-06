@@ -4,6 +4,7 @@ import asyncio
 import logging
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -493,6 +494,37 @@ async def reject_proposal(idea_id: str):
         raise HTTPException(status_code=404, detail="Idea not found")
     await db.update_idea_status(idea_id, "rejected")
     return {"status": "rejected", "id": idea_id}
+
+
+@router.get("/thinktank/audit", response_class=HTMLResponse)
+async def thinktank_audit_page(request: Request):
+    """Audit page — shows implementation status of promoted ideas."""
+    from project_forge.engine.audit import audit_summary, run_promoted_audit
+
+    project_root = Path(__file__).resolve().parent.parent.parent.parent
+    audits = await run_promoted_audit(db, project_root=project_root)
+    summary = audit_summary(audits)
+
+    return templates.TemplateResponse(
+        request,
+        "thinktank_audit.html",
+        {"audits": audits, "summary": summary},
+    )
+
+
+@router.get("/api/thinktank/audit")
+async def api_thinktank_audit():
+    """JSON audit of all promoted ideas."""
+    from project_forge.engine.audit import audit_summary, run_promoted_audit
+
+    project_root = Path(__file__).resolve().parent.parent.parent.parent
+    audits = await run_promoted_audit(db, project_root=project_root)
+    summary = audit_summary(audits)
+
+    return {
+        "audits": [a.model_dump() for a in audits],
+        "summary": summary,
+    }
 
 
 @router.get("/api/repos")
