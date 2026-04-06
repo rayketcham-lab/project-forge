@@ -1,6 +1,11 @@
 // === Auth Headers ===
-// Returns headers for API requests (same-origin, no bearer token needed)
+// Returns Bearer token headers read from the forge-token meta tag (ephemeral dashboard token)
 function getAuthHeaders() {
+    var meta = document.querySelector('meta[name="forge-token"]');
+    var token = meta ? meta.getAttribute('content') : '';
+    if (token) {
+        return { 'Authorization': 'Bearer ' + token };
+    }
     return {};
 }
 

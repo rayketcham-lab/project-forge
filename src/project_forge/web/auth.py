@@ -14,8 +14,9 @@ _SKIP_METHODS = {"GET", "HEAD", "OPTIONS"}
 class BearerTokenMiddleware(BaseHTTPMiddleware):
     """Require a valid Bearer token on all non-read HTTP methods.
 
-    Auth is skipped entirely when ``settings.api_token`` is empty, preserving
-    backward compatibility for local / dev environments.
+    Accepts either the configured ``api_token`` (for external API clients) or
+    the ephemeral ``dashboard_token`` (injected into HTML pages for browser JS).
+    Auth is skipped entirely when ``settings.api_token`` is empty.
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
@@ -30,6 +31,14 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
         # Validate Authorization header using constant-time comparison.
         auth_header = request.headers.get("Authorization", "")
         if hmac.compare_digest(auth_header, f"Bearer {settings.api_token}"):
+            return await call_next(request)
+
+        # Accept the ephemeral dashboard token (generated per server start).
+        from project_forge.web.app import _dashboard_token
+
+        if _dashboard_token and hmac.compare_digest(
+            auth_header, f"Bearer {_dashboard_token}"
+        ):
             return await call_next(request)
 
         return JSONResponse(
