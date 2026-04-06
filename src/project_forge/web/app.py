@@ -26,6 +26,13 @@ STATIC_DIR = WEB_DIR / "static"
 db = Database(settings.db_path)
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+# Ephemeral dashboard token — changes on every restart, never stored.
+# This allows dashboard JS to make POST requests without exposing the real API token.
+import secrets  # noqa: E402
+
+_dashboard_token = secrets.token_urlsafe(32)
+templates.env.globals["dashboard_token"] = _dashboard_token
+
 
 _CSP_SKIP_PATHS = ("/docs", "/redoc", "/openapi.json")
 
