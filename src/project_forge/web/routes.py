@@ -404,7 +404,9 @@ async def health():
 
 @router.get("/api/stats")
 async def api_stats():
-    return await db.get_stats()
+    stats = await db.get_stats()
+    stats["query_stats"] = db.get_query_stats()
+    return stats
 
 
 @router.get("/api/top-ideas")

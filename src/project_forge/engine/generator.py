@@ -46,26 +46,7 @@ class IdeaGenerator:
             messages=[{"role": "user", "content": prompt}],
         )
 
-        text = response.content[0].text
-        # Extract JSON from response (handle markdown code blocks)
-        if "```json" in text:
-            text = text.split("```json")[1].split("```")[0]
-        elif "```" in text:
-            text = text.split("```")[1].split("```")[0]
-
-        data = json.loads(text.strip())
-
-        idea = Idea(
-            name=data["name"],
-            tagline=data["tagline"],
-            description=data["description"],
-            category=IdeaCategory(data["category"]),
-            market_analysis=data["market_analysis"],
-            feasibility_score=max(0.0, min(1.0, float(data["feasibility_score"]))),
-            mvp_scope=data["mvp_scope"],
-            tech_stack=data.get("tech_stack", []),
-        )
-
+        idea = self._parse_response(response)
         logger.info("Generated idea: %s (score: %.2f)", idea.name, idea.feasibility_score)
         return idea
 
@@ -92,25 +73,39 @@ class IdeaGenerator:
             messages=[{"role": "user", "content": prompt}],
         )
 
+        idea = self._parse_response(response, source_url=content.url)
+        logger.info("Generated idea from URL: %s (score: %.2f)", idea.name, idea.feasibility_score)
+        return idea
+
+    @staticmethod
+    def _parse_response(response, source_url: str | None = None) -> Idea:
+        """Extract and parse JSON from an API response into an Idea."""
         text = response.content[0].text
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0]
         elif "```" in text:
             text = text.split("```")[1].split("```")[0]
 
-        data = json.loads(text.strip())
+        try:
+            data = json.loads(text.strip())
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Failed to parse JSON from API response: {exc}") from exc
 
-        idea = Idea(
-            name=data["name"],
-            tagline=data["tagline"],
-            description=data["description"],
-            category=IdeaCategory(data["category"]),
-            market_analysis=data["market_analysis"],
-            feasibility_score=max(0.0, min(1.0, float(data["feasibility_score"]))),
-            mvp_scope=data["mvp_scope"],
-            tech_stack=data.get("tech_stack", []),
-            source_url=content.url,
-        )
+        try:
+            kwargs: dict = {
+                "name": data["name"],
+                "tagline": data["tagline"],
+                "description": data["description"],
+                "category": IdeaCategory(data["category"]),
+                "market_analysis": data["market_analysis"],
+                "feasibility_score": max(0.0, min(1.0, float(data["feasibility_score"]))),
+                "mvp_scope": data["mvp_scope"],
+                "tech_stack": data.get("tech_stack", []),
+            }
+        except KeyError as exc:
+            raise ValueError(f"API response missing required field: {exc}") from exc
 
-        logger.info("Generated idea from URL: %s (score: %.2f)", idea.name, idea.feasibility_score)
-        return idea
+        if source_url:
+            kwargs["source_url"] = source_url
+
+        return Idea(**kwargs)

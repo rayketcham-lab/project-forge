@@ -5,6 +5,8 @@ and input-tuple tracking for deduplication at scale.
 """
 
 import json
+import logging
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -21,6 +23,11 @@ from project_forge.models import (
     Resource,
     SelectionRound,
 )
+
+logger = logging.getLogger(__name__)
+
+# Query profiling threshold in seconds
+_SLOW_QUERY_THRESHOLD = 0.1  # 100ms
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS ideas (
@@ -151,6 +158,7 @@ class Database:
     def __init__(self, db_path: Path):
         self.db_path = db_path
         self._db: aiosqlite.Connection | None = None
+        self.query_times: list[float] = []  # recent query durations in seconds
 
     async def connect(self):
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -187,6 +195,40 @@ class Database:
         if not self._db:
             raise RuntimeError("Database not connected")
         return self._db
+
+    async def _profile_query(self, sql: str, params: tuple | list = (), *, fetch: str = "all"):
+        """Execute a query with timing. Logs slow queries as warnings."""
+        start = time.monotonic()
+        cursor = await self.db.execute(sql, params)
+        if fetch == "one":
+            result = await cursor.fetchone()
+        else:
+            result = await cursor.fetchall()
+        elapsed = time.monotonic() - start
+
+        # Keep last 1000 timings
+        self.query_times.append(elapsed)
+        if len(self.query_times) > 1000:
+            self.query_times = self.query_times[-1000:]
+
+        elapsed_ms = elapsed * 1000
+        if elapsed >= _SLOW_QUERY_THRESHOLD:
+            logger.warning("Slow query (%.1fms): %s", elapsed_ms, sql[:120])
+        else:
+            logger.debug("Query completed (%.1fms): %s", elapsed_ms, sql[:80])
+
+        return result
+
+    def get_query_stats(self) -> dict:
+        """Return profiling statistics for recent queries."""
+        if not self.query_times:
+            return {"total_queries": 0, "avg_ms": 0.0, "max_ms": 0.0, "slow_count": 0}
+        return {
+            "total_queries": len(self.query_times),
+            "avg_ms": round(sum(self.query_times) / len(self.query_times) * 1000, 2),
+            "max_ms": round(max(self.query_times) * 1000, 2),
+            "slow_count": sum(1 for t in self.query_times if t >= _SLOW_QUERY_THRESHOLD),
+        }
 
     # === IDEA CRUD ===
 
@@ -243,8 +285,7 @@ class Database:
             params.append(category.value)
         query += " ORDER BY generated_at DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
-        cursor = await self.db.execute(query, params)
-        rows = await cursor.fetchall()
+        rows = await self._profile_query(query, params)
         return [self._row_to_idea(row) for row in rows]
 
     async def update_idea_status(self, idea_id: str, status: IdeaStatus) -> Idea | None:

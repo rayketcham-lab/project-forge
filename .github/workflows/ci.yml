@@ -51,7 +51,7 @@ jobs:
           $PY -m venv .venv
           .venv/bin/pip install --upgrade pip
           .venv/bin/pip install -e ".[test]"
-          .venv/bin/python -m pytest tests/ -v --tb=short
+          .venv/bin/python -m pytest tests/ -v --tb=short --cov=project_forge --cov-fail-under=40 --cov-report=term-missing
 
   build:
     runs-on: [self-hosted, Linux]
@@ -99,6 +99,13 @@ jobs:
         run: eval "$FIND_PY"
       - name: Security lint
         run: $PY -m ruff check src/ --select S --ignore S101,S311,S314,S603,S607,S701
+      - name: Dependency audit (pip-audit)
+        run: |
+          $PY -m venv .audit-venv
+          .audit-venv/bin/pip install --upgrade pip
+          .audit-venv/bin/pip install -e ".[dev]"
+          .audit-venv/bin/pip-audit --strict --progress-spinner=off || echo "::warning::pip-audit found vulnerabilities"
+          rm -rf .audit-venv
 
   issue-test-ratio:
     runs-on: [self-hosted, Linux]
@@ -116,6 +123,22 @@ jobs:
           echo "Feature issues: $ISSUE_COUNT, Tests: $TEST_COUNT"
           if [ "$TEST_COUNT" -lt "$ISSUE_COUNT" ]; then
             echo "::warning::Test count ($TEST_COUNT) is below feature issue count ($ISSUE_COUNT)"
+          fi
+      - name: Detect untested source modules
+        run: |
+          echo "=== Gap Detection: checking for untested source modules ==="
+          UNTESTED=""
+          for src in $(find src/project_forge -name '*.py' ! -name '__init__.py' ! -path '*/templates/*' ! -path '*/static/*'); do
+            MODULE=$(basename "$src" .py)
+            if ! find tests/ -name "*.py" -exec grep -l "$MODULE" {} + >/dev/null 2>&1; then
+              UNTESTED="$UNTESTED $MODULE"
+              echo "::warning::No test file references module: $MODULE ($src)"
+            fi
+          done
+          if [ -n "$UNTESTED" ]; then
+            echo "Untested modules:$UNTESTED"
+          else
+            echo "All source modules have corresponding test coverage."
           fi
 
   self-improvement-queue:
