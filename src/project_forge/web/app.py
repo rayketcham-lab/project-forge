@@ -1,6 +1,7 @@
 """FastAPI application for Project Forge dashboard."""
 
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -27,6 +28,16 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
 _CSP_SKIP_PATHS = ("/docs", "/redoc", "/openapi.json")
+
+
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    """Add a unique X-Request-ID to every response for correlation."""
+
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("x-request-id", uuid.uuid4().hex[:16])
+        response: Response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
 
 
 class CSPMiddleware(BaseHTTPMiddleware):
@@ -62,6 +73,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(RequestIDMiddleware)
 app.add_middleware(CSPMiddleware)
 app.add_middleware(BearerTokenMiddleware)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
