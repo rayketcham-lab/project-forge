@@ -36,7 +36,7 @@
         {% if ideas %}
         <div class="card-grid">
             {% for idea in ideas %}
-            <a href="/ideas/{{ idea.id }}" class="idea-card">
+            <div class="idea-card" data-href="/ideas/{{ idea.id }}" data-idea-id="{{ idea.id }}" data-idea-status="{{ idea.status }}">
                 <div class="card-badge">
                     <span class="badge badge-{{ idea.category.value }}">{{ idea.category.value }}</span>
                     <span class="score-pill">{{ "%.0f" | format(idea.feasibility_score * 100) }}%</span>
@@ -57,7 +57,16 @@
                     <span class="status status-{{ idea.status }}">{{ idea.status }}</span>
                     <span class="card-date">{{ idea.generated_at.strftime('%b %d') }}</span>
                 </div>
-            </a>
+                <div class="card-actions" role="group" aria-label="Quick actions">
+                    {% if idea.status == 'new' %}
+                    <button class="card-action-btn ca-approve" data-action="approve" title="Approve">&#10003;</button>
+                    <button class="card-action-btn ca-reject" data-action="reject" title="Reject">&#10007;</button>
+                    {% endif %}
+                    <button class="card-action-btn ca-check" data-action="check" title="Check GitHub repo">&#8645;</button>
+                    <button class="card-action-btn ca-delete" data-action="delete" title="Delete idea">&#10006;</button>
+                </div>
+                <div class="card-toast" style="display:none"></div>
+            </div>
             {% endfor %}
         </div>
 

@@ -262,6 +262,8 @@ a.stat-card:hover { transform: translateY(-3px); border-color: var(--accent); }
     transition: all 0.2s;
     color: var(--text) !important;
     text-decoration: none !important;
+    cursor: pointer;
+    position: relative;
 }
 .idea-card:hover {
     border-color: var(--accent);
@@ -269,7 +271,14 @@ a.stat-card:hover { transform: translateY(-3px); border-color: var(--accent); }
     box-shadow: var(--shadow), 0 0 20px rgba(99,102,241,0.1);
 }
 .card-link { text-decoration: none; color: inherit; display: block; }
-.card-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+.card-actions { display: flex; gap: 0.4rem; margin-top: 0.75rem; padding-top: 0.6rem; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.card-action-btn { padding: 0.25rem 0.55rem; font-size: 0.8rem; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-alt); color: var(--text-dim); cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s; line-height: 1.4; }
+.card-action-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.card-action-btn:disabled { opacity: 0.5; cursor: wait; }
+.ca-approve:hover { background: var(--green); border-color: var(--green); color: #fff; }
+.ca-reject:hover { background: var(--amber); border-color: var(--amber); color: #fff; }
+.ca-delete:hover { background: var(--red); border-color: var(--red); color: #fff; }
+.card-toast { position: absolute; bottom: 0.5rem; left: 50%; transform: translateX(-50%); background: var(--surface); border: 1px solid var(--accent); border-radius: 4px; padding: 0.3rem 0.75rem; font-size: 0.8rem; white-space: nowrap; z-index: 10; pointer-events: none; max-width: 90%; overflow: hidden; text-overflow: ellipsis; }
 .score-pill--promoted { background: var(--green); }
 .score-pill--rejected { background: var(--red);
 }

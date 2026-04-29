@@ -644,6 +644,75 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
     });
 })();
 
+// === Idea card quick-actions ===
+(function() {
+    function showCardToast(card, msg) {
+        var t = card.querySelector('.card-toast');
+        if (!t) return;
+        t.textContent = msg;
+        t.style.display = '';
+        clearTimeout(t._tid);
+        t._tid = setTimeout(function() { t.style.display = 'none'; }, 3500);
+    }
+
+    function updateCardStatus(card, status) {
+        var s = card.querySelector('.status');
+        if (s) { s.className = 'status status-' + status; s.textContent = status; }
+        card.setAttribute('data-idea-status', status);
+        card.querySelectorAll('[data-action="approve"],[data-action="reject"]').forEach(function(b) { b.remove(); });
+    }
+
+    async function handleAction(ideaId, action, card, btn) {
+        btn.disabled = true;
+        try {
+            if (action === 'approve') {
+                var r = await fetch('/ideas/' + ideaId + '/approve', { method: 'POST', headers: getAuthHeaders() });
+                if (r.ok) { updateCardStatus(card, 'approved'); showCardToast(card, 'Approved'); }
+                else { showCardToast(card, 'Error ' + r.status); }
+            } else if (action === 'reject') {
+                var r = await fetch('/ideas/' + ideaId + '/reject', { method: 'POST', headers: getAuthHeaders() });
+                if (r.ok) { updateCardStatus(card, 'rejected'); showCardToast(card, 'Rejected'); }
+                else { showCardToast(card, 'Error ' + r.status); }
+            } else if (action === 'check') {
+                showCardToast(card, 'Checking...');
+                var r = await fetch('/api/ideas/' + ideaId + '/check-repo', { headers: getAuthHeaders() });
+                var d = await r.json();
+                showCardToast(card, d.exists ? ('Repo: ' + d.repo) : (d.repo ? 'Repo gone: ' + d.repo : 'No repo attached'));
+                btn.disabled = false;
+                return;
+            } else if (action === 'delete') {
+                if (!confirm('Permanently delete this idea?')) { btn.disabled = false; return; }
+                var r = await fetch('/api/ideas/' + ideaId, { method: 'DELETE', headers: getAuthHeaders() });
+                if (r.ok) {
+                    card.style.transition = 'opacity 0.3s';
+                    card.style.opacity = '0.3';
+                    card.style.pointerEvents = 'none';
+                    showCardToast(card, 'Deleted');
+                } else {
+                    var d = await r.json();
+                    showCardToast(card, d.detail || 'Delete failed');
+                }
+            }
+        } catch (err) {
+            showCardToast(card, 'Error: ' + err.message);
+        }
+        btn.disabled = false;
+    }
+
+    document.querySelectorAll('.idea-card[data-href]').forEach(function(card) {
+        card.addEventListener('click', function(e) {
+            if (e.target.closest('[data-action]')) return;
+            window.location.href = card.getAttribute('data-href');
+        });
+        card.querySelectorAll('[data-action]').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                handleAction(card.getAttribute('data-idea-id'), btn.getAttribute('data-action'), card, btn);
+            });
+        });
+    });
+})();
+
 // === Issue Reporter ===
 
 (function() {
