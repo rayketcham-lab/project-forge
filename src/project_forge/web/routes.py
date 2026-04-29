@@ -6,7 +6,7 @@ import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -67,10 +67,14 @@ async def dashboard(request: Request):
 async def explore(
     request: Request,
     category: str | None = None,
-    status: IdeaStatus | None = None,
+    status: str | None = None,
     q: str | None = None,
     page: int = Query(default=1, ge=1),
 ):
+    status = status or None  # treat ?status= (empty string) as no filter
+    if status is not None and status not in get_args(IdeaStatus):
+        raise HTTPException(status_code=422, detail=f"Invalid status: {status!r}")
+    typed_status: IdeaStatus | None = status  # type: ignore[assignment]
     limit = 12
     offset = (page - 1) * limit
     if category:
@@ -84,8 +88,8 @@ async def explore(
         ideas = await db.search_ideas(q, limit=limit, offset=offset)
         total = len(await db.search_ideas(q, limit=10000))
     else:
-        ideas = await db.list_ideas(status=status, category=cat, limit=limit, offset=offset)
-        total = await db.count_ideas(status=status)
+        ideas = await db.list_ideas(status=typed_status, category=cat, limit=limit, offset=offset)
+        total = await db.count_ideas(status=typed_status)
     return templates.TemplateResponse(
         request,
         "explore.html",
@@ -106,7 +110,7 @@ async def explore(
 @router.get("/ideas", response_class=HTMLResponse)
 async def ideas_list(
     request: Request,
-    status: IdeaStatus | None = None,
+    status: str | None = None,
     category: str | None = None,
     page: int = Query(default=1, ge=1),
 ):

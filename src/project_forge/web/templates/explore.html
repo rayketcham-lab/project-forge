@@ -22,7 +22,7 @@
                 {% endfor %}
             </div>
             <div class="filter-status">
-                <select onchange="window.location='/explore?status='+this.value+'{% if category_filter %}&category={{ category_filter }}{% endif %}'">
+                <select onchange="(function(v){var u='/explore';var p=[];if(v)p.push('status='+encodeURIComponent(v));{% if category_filter %}p.push('category={{ category_filter }}');{% endif %}if(p.length)u+='?'+p.join('&');window.location=u;})(this.value)">
                     <option value="">All Statuses</option>
                     <option value="new" {% if status_filter == 'new' %}selected{% endif %}>New</option>
                     <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Approved</option>
