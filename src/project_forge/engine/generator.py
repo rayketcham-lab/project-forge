@@ -30,6 +30,7 @@ class IdeaGenerator:
         use_contrarian: bool = False,
         use_combinatoric: bool = False,
         prompt_override: str | None = None,
+        portfolio_context: str | None = None,
     ) -> Idea:
         if prompt_override is not None:
             prompt = prompt_override
@@ -39,6 +40,7 @@ class IdeaGenerator:
                 recent_ideas=recent_ideas or [],
                 use_contrarian=use_contrarian,
                 use_combinatoric=use_combinatoric,
+                portfolio_context=portfolio_context,
             )
 
         logger.info("Generating idea for category: %s", category.value)

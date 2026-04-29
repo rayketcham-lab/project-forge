@@ -6,6 +6,7 @@ from project_forge.engine.categories import (
     CATEGORY_SEEDS,
     COMBINATORIC_TEMPLATES,
     CONTRARIAN_PROMPTS,
+    PERSONA_SEEDS,
 )
 from project_forge.models import IdeaCategory
 
@@ -26,6 +27,7 @@ Category description: {category_description}
 
 {diversity_section}
 
+{portfolio_section}
 IMPORTANT CONSTRAINTS:
 - The idea must be DIFFERENT from these recently generated ideas: {recent_ideas}
 - Think about what's MISSING in the market, not what already exists
@@ -120,6 +122,7 @@ def build_generation_prompt(
     recent_ideas: list[str],
     use_contrarian: bool = False,
     use_combinatoric: bool = False,
+    portfolio_context: str | None = None,
 ) -> str:
     seeds = CATEGORY_SEEDS[category]
     diversity_section = ""
@@ -147,12 +150,27 @@ def build_generation_prompt(
         domain = random.choice(seeds["domains_to_cross"])
         diversity_section = f"SEED CONCEPT: Consider the space around '{seed}' applied to '{domain}'\n"
 
+    # Always inject a persona — grounds the idea in a specific human's problem
+    persona = random.choice(PERSONA_SEEDS)
+    diversity_section += (
+        f"\nPERSPECTIVE: Design this for a {persona['role']}. "
+        f"Their situation: {persona['pain']}\n"
+    )
+
     recent_str = ", ".join(recent_ideas[-5:]) if recent_ideas else "None yet"
+
+    if portfolio_context:
+        portfolio_section = (
+            f"EXISTING PORTFOLIO — do NOT generate ideas that belong to these repos:\n{portfolio_context}\n"
+        )
+    else:
+        portfolio_section = ""
 
     return GENERATION_PROMPT_TEMPLATE.format(
         category=category.value,
         category_description=seeds["description"],
         diversity_section=diversity_section,
+        portfolio_section=portfolio_section,
         recent_ideas=recent_str,
         category_value=category.value,
     )

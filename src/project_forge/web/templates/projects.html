@@ -14,6 +14,7 @@
                 <th>Repository</th>
                 <th>Tech Stack</th>
                 <th>Scaffolded</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -30,6 +31,15 @@
                 </td>
                 <td>{{ project.tech_stack | join(', ') }}</td>
                 <td>{{ project.generated_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>
+                    <button class="btn btn-danger btn-sm project-delete-btn"
+                            data-idea-id="{{ project.id }}"
+                            data-repo-url="{{ project.project_repo_url or '' }}"
+                            disabled
+                            title="Checking repo...">
+                        Delete
+                    </button>
+                </td>
             </tr>
             {% endfor %}
         </tbody>

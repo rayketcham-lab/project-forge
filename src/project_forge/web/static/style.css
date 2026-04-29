@@ -230,6 +230,7 @@ a:hover { color: var(--accent); }
 .stat-orange .stat-number { color: var(--orange); }
 .stat-red .stat-number { color: var(--red); }
 .stat-blue .stat-number { color: var(--blue, #3b82f6); }
+.stat-teal .stat-number { color: var(--cyan); }
 a.stat-card { text-decoration: none; color: inherit; cursor: pointer; }
 a.stat-card:hover { transform: translateY(-3px); border-color: var(--accent); }
 .stat-subtitle { color: var(--text-dim); font-size: 0.7rem; margin-top: 0.25rem; opacity: 0.7; }
@@ -709,6 +710,11 @@ a.stat-card:hover { transform: translateY(-3px); border-color: var(--accent); }
 
 .issue-result-success { color: var(--green); }
 .issue-result-error { color: var(--red); }
+.issue-pick-btn { margin-top: 0.25rem; font-size: 0.85rem; }
+.issue-pick-btn.picked { border-color: var(--accent); color: var(--accent); }
+.issue-picked-selector { display: block; margin-top: 0.4rem; padding: 0.3rem 0.5rem; background: var(--bg-alt); border: 1px solid var(--border); border-radius: 4px; font-size: 0.75rem; color: var(--text-dim); word-break: break-all; }
+body.picker-mode, body.picker-mode * { cursor: crosshair !important; }
+.picker-highlight { outline: 2px solid var(--accent) !important; outline-offset: 2px !important; background: rgba(99,102,241,0.07) !important; }
 
 /* === CHALLENGE THREAD === */
 .challenge-composer {
@@ -906,4 +912,15 @@ a.stat-card:hover { transform: translateY(-3px); border-color: var(--accent); }
     font-size: 0.7rem;
     color: var(--text-muted);
     margin-left: auto;
+}
+
+/* === Project Delete Button === */
+.project-delete-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.project-delete-btn.repo-gone {
+    background: var(--red);
+    border-color: var(--red);
+    color: #fff;
 }

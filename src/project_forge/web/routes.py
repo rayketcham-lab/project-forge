@@ -2,10 +2,12 @@
 
 import asyncio
 import logging
+import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
@@ -387,7 +389,79 @@ async def projects_list(request: Request):
     )
 
 
+@router.get("/api/ideas/{idea_id}/check-repo")
+async def check_idea_repo(idea_id: str) -> dict:
+    """Check whether the GitHub repo associated with an idea still exists.
+
+    Returns ``{"exists": bool, "repo": str | None}``.
+    """
+    idea = await db.get_idea(idea_id)
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+
+    if not idea.project_repo_url:
+        return {"exists": False, "repo": None}
+
+    repo = urlparse(idea.project_repo_url).path.lstrip("/")
+    try:
+        result = subprocess.run(
+            ["gh", "repo", "view", repo, "--json", "name"],
+            capture_output=True,
+            timeout=10,
+        )
+        return {"exists": result.returncode == 0, "repo": repo}
+    except Exception as exc:
+        logger.warning("gh repo view failed for %s: %s", repo, exc)
+        return {"exists": False, "repo": repo}
+
+
+@router.delete("/api/ideas/{idea_id}")
+async def delete_idea(idea_id: str) -> dict:
+    """Hard-delete an idea from the database.
+
+    Blocked (409) if the idea's GitHub repository still exists on GitHub.
+    """
+    idea = await db.get_idea(idea_id)
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+
+    if idea.project_repo_url:
+        repo = urlparse(idea.project_repo_url).path.lstrip("/")
+        try:
+            result = subprocess.run(
+                ["gh", "repo", "view", repo, "--json", "name"],
+                capture_output=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Cannot delete: repository {repo} still exists on GitHub",
+                )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.warning("gh repo view check failed for %s: %s", repo, exc)
+
+    await db.delete_idea(idea_id)
+    return {"status": "deleted", "id": idea_id}
+
+
 # === API ROUTES ===
+
+
+@router.post("/api/admin/reload")
+async def admin_reload():
+    """Trigger a watchfiles-based reload by appending a timestamp comment to __init__.py.
+
+    Localhost-only; no Bearer token required (bypassed in BearerTokenMiddleware).
+    """
+    import time
+
+    init_py = Path(__file__).parent / "__init__.py"
+    with init_py.open("a") as f:
+        f.write(f"# reload-{int(time.time())}\n")
+    return {"status": "reloading"}
 
 
 @router.get("/health")
@@ -686,6 +760,7 @@ class IssueReport(BaseModel):
     page_context: str = Field("", description="Page context (e.g. idea_detail, dashboard)")
     expected_behavior: str | None = Field(None, description="What the user expected")
     severity: Literal["low", "medium", "high", "critical"] = Field("medium")
+    element_info: str | None = Field(None, max_length=500, description="CSS selector of picked UI element")
 
 
 _RATE_LIMIT_WINDOW = 60
@@ -723,6 +798,8 @@ def _fallback_issue(report: IssueReport) -> dict:
     body_parts = [f"## Summary\n\n{report.description}"]
     if report.page_url or report.page_context:
         body_parts.append(f"\n## Context\n\n- **Page:** {report.page_context} (`{report.page_url}`)")
+    if report.element_info:
+        body_parts.append(f"\n## UI Element\n\n`{report.element_info}`")
     if report.expected_behavior:
         body_parts.append(f"\n## Expected Behavior\n\n{report.expected_behavior}")
     body_parts.append(f"\n**Severity:** {report.severity}")

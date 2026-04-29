@@ -154,3 +154,13 @@ class GenerationRun(BaseModel):
     completed_at: datetime | None = None
     success: bool = False
     error: str | None = None
+
+
+class RepoEntry(BaseModel):
+    """A GitHub repository in the portfolio registry."""
+
+    id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    repo_full_name: str  # "owner/repo-name"
+    description: str
+    topics: list[str] = Field(default_factory=list)
+    last_synced: str = ""

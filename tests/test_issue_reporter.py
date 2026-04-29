@@ -266,3 +266,40 @@ def test_fallback_issue_critical_severity_adds_label():
     )
     result = _fallback_issue(report)
     assert "critical" in result["labels"]
+
+
+def test_fallback_issue_includes_element_info():
+    """element_info should appear in the issue body under a UI Element section."""
+    from project_forge.web.routes import IssueReport, _fallback_issue
+
+    report = IssueReport(
+        issue_type="ui_bug",
+        description="Button does nothing",
+        element_info="div.card > button#approve-btn — \"Approve\"",
+    )
+    result = _fallback_issue(report)
+    assert "div.card > button#approve-btn" in result["body"]
+    assert "UI Element" in result["body"]
+
+
+def test_fallback_issue_no_element_info():
+    """element_info is optional — body should not include UI Element section when absent."""
+    from project_forge.web.routes import IssueReport, _fallback_issue
+
+    report = IssueReport(issue_type="other", description="Something seems off here")
+    result = _fallback_issue(report)
+    assert "UI Element" not in result["body"]
+
+
+def test_element_info_max_length_rejected():
+    """element_info longer than 500 chars should be rejected by Pydantic validation."""
+    from pydantic import ValidationError
+
+    from project_forge.web.routes import IssueReport
+
+    with pytest.raises(ValidationError):
+        IssueReport(
+            issue_type="ui_bug",
+            description="Too long element",
+            element_info="x" * 501,
+        )

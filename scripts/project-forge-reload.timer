@@ -1,0 +1,10 @@
+[Unit]
+Description=Poll every 10s for Project Forge restart trigger
+
+[Timer]
+OnBootSec=10
+OnUnitActiveSec=10
+AccuracySec=1
+
+[Install]
+WantedBy=timers.target

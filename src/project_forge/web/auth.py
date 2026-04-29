@@ -28,6 +28,10 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
         if request.method in _SKIP_METHODS:
             return await call_next(request)
 
+        # Admin reload is localhost-only; no Bearer token required.
+        if request.url.path == "/api/admin/reload" and request.client and request.client.host in ("127.0.0.1", "::1"):
+            return await call_next(request)
+
         # Validate Authorization header using constant-time comparison.
         auth_header = request.headers.get("Authorization", "")
         if hmac.compare_digest(auth_header, f"Bearer {settings.api_token}"):

@@ -81,6 +81,9 @@
                     </select>
                     <label class="issue-label" for="issue-expected">Expected Behavior (optional)</label>
                     <textarea id="issue-expected" class="issue-textarea" rows="2" maxlength="2000" placeholder="What did you expect to happen?"></textarea>
+                    <label class="issue-label">Affected Element (optional)</label>
+                    <button id="issue-pick-element" type="button" class="btn btn-outline btn-sm issue-pick-btn">&#9654; Click to pick an element on the page</button>
+                    <code id="issue-picked-info" class="issue-picked-selector" style="display:none"></code>
                 </div>
                 <div id="issue-step-result" class="issue-step" style="display:none">
                     <div id="issue-result-content"></div>
@@ -93,7 +96,7 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=6"></script>
+    <script src="/static/app.js?v=8"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

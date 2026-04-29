@@ -9,7 +9,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import TYPE_CHECKING
+
+# Strips "for Healthcare", "for Defense/DoD", "for Cloud Environments", etc.
+_FOR_VERTICAL_RE = re.compile(r"\s+for\s+[\w/&\-]+(\s+[\w/&\-]+){0,3}\s*$", re.IGNORECASE)
 
 if TYPE_CHECKING:
     from project_forge.models import Idea
@@ -22,11 +26,13 @@ SIMILARITY_THRESHOLD = 0.7
 
 
 def _normalize(text: str) -> str:
-    """Strip Claude's 'tailored for X' suffix pattern and normalize."""
-    # Remove everything after em dash, en dash, or double hyphen (Claude generation artifact)
+    """Strip Claude generation suffix artifacts and normalize."""
+    # Remove everything after em dash, en dash, or double hyphen
     for sep in ("\u2014", "\u2013", "--"):
         if sep in text:
             text = text[: text.index(sep)]
+    # Strip "for Healthcare / for Defense/DoD / for Cloud Environments" tail
+    text = _FOR_VERTICAL_RE.sub("", text)
     return text.strip().lower()
 
 
@@ -68,20 +74,42 @@ async def should_accept(idea: Idea, db: Database) -> tuple[bool, str | None]:
         if existing:
             return False, f"duplicate:content_hash (matches {existing[0]})"
 
-    # Check 2: fuzzy tagline dedup (skip for super ideas)
-    if not idea.name.startswith("[SUPER]"):
+    # Check 2: super idea base-name dedup (cross-category)
+    if idea.name.startswith("[SUPER]"):
+        candidate_base = _super_base_name(idea.name)
         cursor = await db.db.execute(
-            "SELECT id, tagline FROM ideas WHERE category = ? AND status != 'rejected'",
-            (idea.category.value,),
+            "SELECT id, name FROM ideas WHERE name LIKE '[SUPER]%' AND status NOT IN ('rejected', 'archived')",
         )
         rows = await cursor.fetchall()
         for row in rows:
-            existing_id, existing_tagline = row[0], row[1]
-            score = tagline_similarity(idea.tagline, existing_tagline)
-            if score >= SIMILARITY_THRESHOLD:
-                return False, f"duplicate:tagline_similarity:{score:.2f} (similar to {existing_id})"
+            existing_base = _super_base_name(row[1])
+            if candidate_base == existing_base:
+                return False, f"duplicate:super_base_name (matches {row[0]})"
+        return True, None
+
+    # Check 3: fuzzy tagline dedup (regular ideas only)
+    cursor = await db.db.execute(
+        "SELECT id, tagline FROM ideas WHERE category = ? AND status != 'rejected'",
+        (idea.category.value,),
+    )
+    rows = await cursor.fetchall()
+    for row in rows:
+        existing_id, existing_tagline = row[0], row[1]
+        score = tagline_similarity(idea.tagline, existing_tagline)
+        if score >= SIMILARITY_THRESHOLD:
+            return False, f"duplicate:tagline_similarity:{score:.2f} (similar to {existing_id})"
 
     return True, None
+
+
+def _super_base_name(full_name: str) -> str:
+    """Extract base name from a super idea name.
+
+    "[SUPER] Threat Engine (Attack & Defense)" → "threat engine"
+    """
+    raw = full_name.replace("[SUPER] ", "")
+    base = re.sub(r"\s*\([^)]+\)\s*$", "", raw).strip()
+    return base.lower()
 
 
 async def filter_and_save(idea: Idea, db: Database) -> tuple[Idea, bool, str | None]:

@@ -1,0 +1,6 @@
+[Unit]
+Description=Poll for Project Forge restart trigger
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'if [ -f /opt/vmdata/project-forge/.forge-restart-trigger ]; then rm -f /opt/vmdata/project-forge/.forge-restart-trigger && systemctl restart project-forge-web.service; fi'

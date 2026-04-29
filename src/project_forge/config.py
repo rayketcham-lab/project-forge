@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"  # noqa: S104
     port: int = 55443
     anthropic_api_key: str = ""
-    anthropic_model: str = "claude-sonnet-4-20250514"
+    anthropic_model: str = "claude-sonnet-4-6"
     auto_scaffold_threshold: float = 0.7
     github_owner: str = "rayketcham-lab"
     github_org: str = "rayketcham-lab"

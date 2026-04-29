@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var ideaId = addStaticBtn.getAttribute('data-idea-id');
             var select = document.getElementById('compare-repo');
             if (select && select.value) {
-                addToProject(ideaId, select.value);
+                addToProject(ideaId, select.value, addStaticBtn);
             }
         });
     }
@@ -523,8 +523,8 @@ async function compareIdea(id) {
     }
 }
 
-async function addToProject(ideaId, repoName) {
-    var addBtn = document.getElementById('add-to-project-btn');
+async function addToProject(ideaId, repoName, btnEl) {
+    var addBtn = btnEl || document.getElementById('add-to-project-btn');
     if (addBtn) {
         addBtn.disabled = true;
         addBtn.textContent = 'Creating issue...';
@@ -537,14 +537,54 @@ async function addToProject(ideaId, repoName) {
             throw new Error(err.detail || 'Failed to add issue');
         }
         var data = await resp.json();
+
+        // Green confirmation banner inserted above the compare section
+        var compareSection = document.getElementById('compare-section');
+        if (compareSection) {
+            var banner = document.createElement('div');
+            banner.style.cssText = 'background:#16a34a20;border:1px solid #16a34a;border-radius:8px;padding:1rem 1.25rem;margin-bottom:1rem;display:flex;align-items:center;gap:1rem;';
+
+            var checkmark = document.createElement('span');
+            checkmark.style.cssText = 'color:#22c55e;font-size:1.25rem;';
+            checkmark.textContent = '✓';
+
+            var label = document.createElement('span');
+            label.style.cssText = 'flex:1;color:#e2e8f0;';
+            label.textContent = 'Issue created on ';
+            var strong = document.createElement('strong');
+            strong.textContent = data.repo || repoName;
+            label.appendChild(strong);
+
+            var issueLink = document.createElement('a');
+            issueLink.href = data.issue_url;
+            issueLink.target = '_blank';
+            issueLink.rel = 'noopener noreferrer';
+            issueLink.className = 'btn btn-primary';
+            issueLink.style.whiteSpace = 'nowrap';
+            issueLink.textContent = 'View Issue →';
+
+            banner.appendChild(checkmark);
+            banner.appendChild(label);
+            banner.appendChild(issueLink);
+            compareSection.insertBefore(banner, compareSection.firstChild);
+        }
+
+        // Replace the clicked button with a direct link
         if (addBtn) {
             var link = document.createElement('a');
             link.href = data.issue_url;
             link.target = '_blank';
-            link.className = 'btn btn-primary';
-            link.style.marginTop = '1rem';
+            link.rel = 'noopener noreferrer';
+            link.className = addBtn.className;
             link.textContent = 'View Issue on GitHub';
             addBtn.parentNode.replaceChild(link, addBtn);
+        }
+
+        // Update status badge in the hero
+        var statusBadge = document.querySelector('.status');
+        if (statusBadge) {
+            statusBadge.textContent = 'contributed';
+            statusBadge.className = 'status status-contributed status-lg';
         }
     } catch (err) {
         if (addBtn) {
@@ -605,8 +645,68 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
 
     var currentStep = 1;
     var selectedType = null;
+    var pickedElementInfo = null;
     var issueTypes = [];
     var colorMap = { red: '#ef4444', amber: '#f59e0b', blue: '#6366f1', green: '#22c55e', gray: '#6b7280' };
+
+    function buildSelector(el) {
+        var parts = [];
+        var node = el;
+        while (node && node !== document.body && parts.length < 5) {
+            var part = node.tagName.toLowerCase();
+            if (node.id) { part += '#' + node.id; parts.unshift(part); break; }
+            var cls = Array.from(node.classList).filter(function(c) { return c !== 'picker-highlight'; }).slice(0, 2).join('.');
+            if (cls) part += '.' + cls;
+            parts.unshift(part);
+            node = node.parentElement;
+        }
+        return parts.join(' > ');
+    }
+
+    function activateElementPicker() {
+        modal.style.display = 'none';
+        document.body.classList.add('picker-mode');
+        var lastHighlighted = null;
+
+        function onOver(e) {
+            if (lastHighlighted && lastHighlighted !== e.target) lastHighlighted.classList.remove('picker-highlight');
+            e.target.classList.add('picker-highlight');
+            lastHighlighted = e.target;
+        }
+        function onOut(e) { e.target.classList.remove('picker-highlight'); }
+        function onKeyDown(e) {
+            if (e.key === 'Escape') {
+                cleanup();
+                modal.style.display = '';
+            }
+        }
+        function cleanup() {
+            document.removeEventListener('mouseover', onOver, true);
+            document.removeEventListener('mouseout', onOut, true);
+            document.removeEventListener('click', onPick, true);
+            document.removeEventListener('keydown', onKeyDown, true);
+            document.body.classList.remove('picker-mode');
+            if (lastHighlighted) lastHighlighted.classList.remove('picker-highlight');
+        }
+        function onPick(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            cleanup();
+            var tag = e.target.tagName.toLowerCase();
+            var text = e.target.textContent.trim().slice(0, 60).replace(/\s+/g, ' ');
+            var selector = buildSelector(e.target);
+            pickedElementInfo = selector + (text ? ' — "' + text + '"' : '');
+            var pickBtn = document.getElementById('issue-pick-element');
+            var pickedInfo = document.getElementById('issue-picked-info');
+            if (pickBtn) { pickBtn.textContent = '✓ ' + tag + (e.target.id ? '#' + e.target.id : '') + ' picked — click to re-pick'; pickBtn.classList.add('picked'); }
+            if (pickedInfo) { pickedInfo.textContent = pickedElementInfo; pickedInfo.style.display = ''; }
+            modal.style.display = '';
+        }
+        document.addEventListener('mouseover', onOver, true);
+        document.addEventListener('mouseout', onOut, true);
+        document.addEventListener('click', onPick, true);
+        document.addEventListener('keydown', onKeyDown, true);
+    }
 
     // Load issue types
     fetch('/api/issues/types').then(function(r) { return r.json(); }).then(function(types) {
@@ -666,16 +766,26 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
 
     function resetModal() {
         selectedType = null;
+        pickedElementInfo = null;
         currentStep = 1;
         var desc = document.getElementById('issue-description');
         var sev = document.getElementById('issue-severity');
         var exp = document.getElementById('issue-expected');
+        var pickBtnR = document.getElementById('issue-pick-element');
+        var pickedInfoR = document.getElementById('issue-picked-info');
         if (desc) desc.value = '';
         if (sev) sev.value = 'medium';
         if (exp) exp.value = '';
+        if (pickBtnR) { pickBtnR.textContent = '▶ Click to pick an element on the page'; pickBtnR.classList.remove('picked'); }
+        if (pickedInfoR) { pickedInfoR.textContent = ''; pickedInfoR.style.display = 'none'; }
         typeList.querySelectorAll('.issue-type-btn').forEach(function(b) { b.classList.remove('selected'); });
         nextBtn.style.display = '';
         showStep(1);
+    }
+
+    var pickBtn = document.getElementById('issue-pick-element');
+    if (pickBtn) {
+        pickBtn.addEventListener('click', function() { activateElementPicker(); });
     }
 
     fab.addEventListener('click', function() {
@@ -713,6 +823,7 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
             };
             var exp = document.getElementById('issue-expected').value.trim();
             if (exp) payload.expected_behavior = exp;
+            if (pickedElementInfo) payload.element_info = pickedElementInfo;
 
             try {
                 var resp = await fetch('/api/issues/report', {
@@ -750,5 +861,68 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
                 nextBtn.textContent = 'Submit';
             }
         }
+    });
+})();
+
+// === Project Delete ===
+
+(function() {
+    var deleteBtns = document.querySelectorAll('.project-delete-btn');
+    if (!deleteBtns.length) return;
+
+    deleteBtns.forEach(function(btn) {
+        var repoUrl = btn.getAttribute('data-repo-url');
+        var ideaId = btn.getAttribute('data-idea-id');
+
+        if (!repoUrl) {
+            // No repo associated — safe to delete immediately
+            btn.disabled = false;
+            btn.title = 'No repository — safe to delete';
+            btn.classList.add('repo-gone');
+            return;
+        }
+
+        // Check repo existence via API
+        fetch('/api/ideas/' + ideaId + '/check-repo', { headers: getAuthHeaders() })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.exists) {
+                    btn.disabled = true;
+                    btn.title = 'Cannot delete — repo exists on GitHub';
+                } else {
+                    btn.disabled = false;
+                    btn.title = 'Repo not found on GitHub — safe to delete';
+                    btn.classList.add('repo-gone');
+                }
+            })
+            .catch(function() {
+                btn.disabled = true;
+                btn.title = 'Could not check repo status';
+            });
+    });
+
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.project-delete-btn');
+        if (!btn || btn.disabled) return;
+
+        var ideaId = btn.getAttribute('data-idea-id');
+        if (!confirm('Permanently delete this project idea from Forge? This cannot be undone.')) return;
+
+        fetch('/api/ideas/' + ideaId, { method: 'DELETE', headers: getAuthHeaders() })
+            .then(function(r) {
+                if (r.ok) {
+                    var row = btn.closest('tr');
+                    if (row) row.remove();
+                } else if (r.status === 409) {
+                    alert('Cannot delete: repository still exists on GitHub');
+                } else {
+                    return r.json().then(function(data) {
+                        alert('Delete failed: ' + (data.detail || 'Unknown error'));
+                    });
+                }
+            })
+            .catch(function(err) {
+                alert('Delete failed: ' + err.message);
+            });
     });
 })();

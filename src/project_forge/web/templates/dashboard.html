@@ -65,9 +65,17 @@
                 <div class="stat-number">{{ stats.ideas_by_status.get('scaffolded', 0) }}</div>
                 <div class="stat-label">Scaffolded</div>
             </a>
+            {%- set ns = namespace(active_super=0) -%}
+            {%- for idea in super_ideas if idea.status not in ('contributed', 'implemented', 'archived', 'rejected') -%}
+              {%- set ns.active_super = ns.active_super + 1 -%}
+            {%- endfor -%}
             <a href="#tab-super-ideas" class="stat-card stat-blue" data-tab="super-ideas">
-                <div class="stat-number">{{ stats.super_ideas }}</div>
+                <div class="stat-number">{{ ns.active_super }}</div>
                 <div class="stat-label">Super Ideas</div>
+            </a>
+            <a href="/explore?status=contributed" class="stat-card stat-teal">
+                <div class="stat-number">{{ stats.ideas_by_status.get('contributed', 0) }}</div>
+                <div class="stat-label">Contributed</div>
             </a>
             <div class="stat-card stat-orange" title="Average feasibility score across all ideas. Each idea is scored 0.0-1.0 by the AI engine based on how achievable the MVP is, market need, and technical clarity.">
                 <div class="stat-number">{{ stats.avg_feasibility_score }}</div>
@@ -121,7 +129,7 @@
                 <a href="/explore" class="btn btn-sm">View All &rarr;</a>
             </div>
             <div class="card-grid">
-                {% for idea in super_ideas %}
+                {% for idea in super_ideas if idea.status not in ('contributed', 'implemented', 'archived', 'rejected') %}
                 <a href="/ideas/{{ idea.id }}" class="idea-card">
                     <div class="card-badge">
                         <span class="badge badge-{{ idea.category.value }}">{{ idea.category.value }}</span>
@@ -140,10 +148,9 @@
                         </div>
                     </div>
                 </a>
+                {% else %}
+                <p class="empty-state">No open super ideas — all have been contributed or are in progress.</p>
                 {% endfor %}
-                {% if not super_ideas %}
-                <p class="empty-state">No super ideas yet. They are synthesized hourly from clusters of related ideas.</p>
-                {% endif %}
             </div>
         </div>
 

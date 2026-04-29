@@ -20,6 +20,7 @@ from project_forge.models import (
     IdeaCategory,
     IdeaDenial,
     IdeaStatus,
+    RepoEntry,
     Resource,
     SelectionRound,
 )
@@ -150,6 +151,24 @@ CREATE TABLE IF NOT EXISTS selection_rounds (
     status TEXT NOT NULL DEFAULT 'pending',
     results TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS repo_registry (
+    id TEXT PRIMARY KEY,
+    repo_full_name TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL,
+    topics TEXT NOT NULL DEFAULT '[]',
+    last_synced TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS route_decisions (
+    id TEXT PRIMARY KEY,
+    idea_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    target_repo TEXT,
+    reason TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    decided_at TEXT NOT NULL
 );
 """
 
@@ -293,6 +312,11 @@ class Database:
         await self.db.commit()
         return await self.get_idea(idea_id)
 
+    async def delete_idea(self, idea_id: str) -> None:
+        """Hard-delete an idea by ID. No-op if the idea does not exist."""
+        await self.db.execute("DELETE FROM ideas WHERE id = ?", (idea_id,))
+        await self.db.commit()
+
     async def update_idea_urls(
         self, idea_id: str, github_issue_url: str | None = None, project_repo_url: str | None = None
     ) -> Idea | None:
@@ -414,29 +438,31 @@ class Database:
     # === SUPER IDEAS ===
 
     async def list_super_ideas(self, limit: int = 6) -> list[Idea]:
-        """List super ideas (name starts with [SUPER]) by score descending, deduped by name.
+        """List super ideas deduped by base name (stripping parenthetical suffixes).
 
-        Uses a subquery to deterministically select the highest-scoring row per
-        unique name, avoiding SQLite's undefined behaviour when GROUP BY is used
-        without an aggregate on non-grouped columns.
+        Groups variants like "[SUPER] X" and "[SUPER] X (Attack & Defense)" together,
+        keeping the highest-scored non-archived variant per base name.
         """
+        import re
+
         cursor = await self.db.execute(
-            """
-            SELECT i.*
-            FROM ideas i
-            INNER JOIN (
-                SELECT name, MAX(feasibility_score) AS max_score
-                FROM ideas
-                WHERE name LIKE '[SUPER]%'
-                GROUP BY name
-            ) best ON i.name = best.name AND i.feasibility_score = best.max_score
-            ORDER BY i.feasibility_score DESC
-            LIMIT ?
-            """,
-            (limit,),
+            "SELECT * FROM ideas WHERE name LIKE '[SUPER]%' "
+            "AND status NOT IN ('rejected', 'archived', 'contributed', 'implemented') "
+            "ORDER BY feasibility_score DESC",
         )
         rows = await cursor.fetchall()
-        return [self._row_to_idea(row) for row in rows]
+
+        seen_bases: dict[str, None] = {}
+        result: list[Idea] = []
+        for row in rows:
+            raw = row["name"].replace("[SUPER] ", "")
+            base = re.sub(r"\s*\([^)]+\)\s*$", "", raw).strip().lower()
+            if base not in seen_bases:
+                seen_bases[base] = None
+                result.append(self._row_to_idea(row))
+                if len(result) >= limit:
+                    break
+        return result
 
     # === GENERATION RUNS ===
 
@@ -476,7 +502,10 @@ class Database:
         row = await cursor.fetchone()
         avg_score = round(row[0], 2) if row and row[0] else 0.0
 
-        cursor = await self.db.execute("SELECT COUNT(*) FROM ideas WHERE name LIKE '[SUPER]%'")
+        cursor = await self.db.execute(
+            "SELECT COUNT(*) FROM ideas WHERE name LIKE '[SUPER]%'"
+            " AND status NOT IN ('rejected', 'archived', 'contributed', 'implemented')"
+        )
         row = await cursor.fetchone()
         super_count = row[0] if row else 0
 
@@ -797,7 +826,7 @@ class Database:
 
         cursor = await self.db.execute(
             "SELECT id, name, feasibility_score, status FROM ideas "
-            "WHERE name LIKE '[SUPER]%' AND status NOT IN ('rejected', 'archived')",
+            "WHERE name LIKE '[SUPER]%' AND status NOT IN ('rejected', 'archived', 'contributed', 'implemented')",
         )
         rows = await cursor.fetchall()
 
@@ -931,6 +960,79 @@ class Database:
             else datetime.fromisoformat(row["filtered_at"]),
             similar_to_id=row["similar_to_id"],
         )
+
+    # === REPO REGISTRY ===
+
+    async def upsert_repo_entry(self, entry: RepoEntry) -> None:
+        """Insert or replace a repo entry in the registry."""
+        await self.db.execute(
+            """INSERT OR REPLACE INTO repo_registry
+            (id, repo_full_name, description, topics, last_synced)
+            VALUES (?, ?, ?, ?, ?)""",
+            (
+                entry.id,
+                entry.repo_full_name,
+                entry.description,
+                json.dumps(entry.topics),
+                entry.last_synced,
+            ),
+        )
+        await self.db.commit()
+
+    async def list_repo_registry(self) -> list[RepoEntry]:
+        """Return all repos in the registry, ordered by repo_full_name."""
+        cursor = await self.db.execute("SELECT * FROM repo_registry ORDER BY repo_full_name")
+        rows = await cursor.fetchall()
+        return [
+            RepoEntry(
+                id=row["id"],
+                repo_full_name=row["repo_full_name"],
+                description=row["description"],
+                topics=json.loads(row["topics"]),
+                last_synced=row["last_synced"],
+            )
+            for row in rows
+        ]
+
+    async def save_route_decision(
+        self,
+        idea_id: str,
+        action: str,
+        target_repo: str | None,
+        reason: str,
+        confidence: float,
+    ) -> None:
+        """Persist a routing decision for an idea."""
+        from uuid import uuid4
+
+        decision_id = uuid4().hex[:12]
+        decided_at = datetime.now(UTC).isoformat()
+        await self.db.execute(
+            """INSERT INTO route_decisions
+            (id, idea_id, action, target_repo, reason, confidence, decided_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (decision_id, idea_id, action, target_repo, reason, confidence, decided_at),
+        )
+        await self.db.commit()
+
+    async def get_route_decision(self, idea_id: str) -> dict | None:
+        """Return the most recent routing decision for an idea, or None."""
+        cursor = await self.db.execute(
+            "SELECT * FROM route_decisions WHERE idea_id = ? ORDER BY decided_at DESC LIMIT 1",
+            (idea_id,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row["id"],
+            "idea_id": row["idea_id"],
+            "action": row["action"],
+            "target_repo": row["target_repo"],
+            "reason": row["reason"],
+            "confidence": row["confidence"],
+            "decided_at": row["decided_at"],
+        }
 
     # === HELPERS ===
 

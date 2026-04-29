@@ -14,8 +14,13 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "secrets sprawl detection across repos",
             "lateral movement detection in containerized environments",
             "post-quantum cryptography migration tools",
+            "container image provenance verification",
+            "SBOM drift detection between builds",
+            "cloud IAM permission creep analyzer",
+            "TLS certificate misconfiguration scanner",
+            "runtime dependency injection attack detector",
         ],
-        "domains_to_cross": ["healthcare", "IoT", "automotive", "fintech", "gaming"],
+        "domains_to_cross": ["healthcare", "IoT", "automotive", "fintech", "gaming", "aerospace", "retail", "defense"],
     },
     IdeaCategory.MARKET_GAP: {
         "description": "Products or services missing from the market",
@@ -28,8 +33,21 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "compliance-as-code marketplace",
             "developer onboarding time-to-first-commit optimizer",
             "SaaS feature usage dead code detector",
+            "API deprecation impact predictor",
+            "incident postmortem pattern miner",
+            "vendor lock-in escape cost estimator",
+            "configuration sprawl visualizer",
         ],
-        "domains_to_cross": ["education", "government", "nonprofit", "logistics", "agriculture"],
+        "domains_to_cross": [
+            "education",
+            "government",
+            "nonprofit",
+            "logistics",
+            "agriculture",
+            "media",
+            "construction",
+            "pharma",
+        ],
     },
     IdeaCategory.VULNERABILITY_RESEARCH: {
         "description": "Novel vulnerability discovery and analysis approaches",
@@ -42,8 +60,21 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "GraphQL introspection exploit kit",
             "WebAssembly sandbox escape detector",
             "DNS rebinding attack surface mapper",
+            "OAuth token confusion attack detector",
+            "kernel eBPF verifier bypass finder",
+            "HTTP request smuggling variant scanner",
+            "deserialization gadget chain discoverer",
         ],
-        "domains_to_cross": ["embedded systems", "satellites", "medical devices", "voting systems", "robotics"],
+        "domains_to_cross": [
+            "embedded systems",
+            "satellites",
+            "medical devices",
+            "voting systems",
+            "robotics",
+            "SCADA",
+            "autonomous vehicles",
+            "smart homes",
+        ],
     },
     IdeaCategory.AUTOMATION: {
         "description": "Workflow and process automation that saves real time",
@@ -56,8 +87,21 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "changelog-to-migration-guide generator",
             "stale documentation detector and updater",
             "test environment provisioning orchestrator",
+            "release readiness gate evaluator",
+            "on-call handoff context summarizer",
+            "flaky test quarantine and triage bot",
+            "infrastructure cost allocation tagger",
         ],
-        "domains_to_cross": ["legal", "real estate", "insurance", "manufacturing", "energy"],
+        "domains_to_cross": [
+            "legal",
+            "real estate",
+            "insurance",
+            "manufacturing",
+            "energy",
+            "telecom",
+            "hospitality",
+            "aviation",
+        ],
     },
     IdeaCategory.DEVOPS_TOOLING: {
         "description": "Developer experience and infrastructure tools",
@@ -70,8 +114,21 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "feature flag lifecycle manager",
             "database migration risk assessor",
             "service dependency graph auto-documenter",
+            "Dockerfile layer optimization advisor",
+            "GitOps drift reconciliation dashboard",
+            "secret rotation impact blast radius mapper",
+            "canary deployment decision engine",
         ],
-        "domains_to_cross": ["edge computing", "serverless", "bare metal", "hybrid cloud", "on-prem"],
+        "domains_to_cross": [
+            "edge computing",
+            "serverless",
+            "bare metal",
+            "hybrid cloud",
+            "on-prem",
+            "multi-tenant SaaS",
+            "air-gapped networks",
+            "GPU clusters",
+        ],
     },
     IdeaCategory.PRIVACY: {
         "description": "Privacy-preserving technologies and tools",
@@ -84,8 +141,21 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "browser fingerprinting resistance tester",
             "cross-border data flow compliance mapper",
             "privacy impact assessment automation",
+            "data subject access request fulfillment engine",
+            "cookie consent dark pattern detector",
+            "federated learning privacy audit tool",
+            "anonymization quality verifier",
         ],
-        "domains_to_cross": ["children's data", "biometrics", "location tracking", "health records", "financial data"],
+        "domains_to_cross": [
+            "children's data",
+            "biometrics",
+            "location tracking",
+            "health records",
+            "financial data",
+            "employee monitoring",
+            "social media",
+            "genetic data",
+        ],
     },
     IdeaCategory.COMPLIANCE: {
         "description": "Regulatory compliance automation and monitoring",
@@ -98,8 +168,12 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "third-party vendor risk continuous monitoring",
             "license compliance for transitive dependencies",
             "data retention policy enforcer",
+            "control gap analysis between frameworks",
+            "evidence chain-of-custody tracker",
+            "regulatory horizon scanner for upcoming mandates",
+            "segregation of duties conflict detector",
         ],
-        "domains_to_cross": ["HIPAA", "FedRAMP", "GDPR", "PCI-DSS", "CMMC"],
+        "domains_to_cross": ["HIPAA", "FedRAMP", "GDPR", "PCI-DSS", "CMMC", "SOX", "ISO 27001", "NIST CSF"],
     },
     IdeaCategory.OBSERVABILITY: {
         "description": "Monitoring, logging, and tracing innovations",
@@ -112,8 +186,21 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "log-to-metric automatic converter",
             "observability data deduplication engine",
             "cross-service error correlation mapper",
+            "alert fatigue scoring and prioritization",
+            "distributed system topology auto-mapper",
+            "latency budget allocation advisor",
+            "cardinality explosion detector for metrics",
         ],
-        "domains_to_cross": ["mobile apps", "CLI tools", "batch jobs", "real-time systems", "ML pipelines"],
+        "domains_to_cross": [
+            "mobile apps",
+            "CLI tools",
+            "batch jobs",
+            "real-time systems",
+            "ML pipelines",
+            "microservices",
+            "event-driven systems",
+            "data warehouses",
+        ],
     },
     IdeaCategory.PQC_CRYPTOGRAPHY: {
         "description": "Post-quantum cryptography tools, migration, and security gap analysis",
@@ -134,6 +221,8 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "CRL over QUIC transport for PQC-era bandwidth constraints",
             "PQC certificate lifecycle management platform",
             "quantum-safe timestamping service",
+            "composite signature scheme compatibility tester",
+            "PQC key backup and escrow migration tool",
         ],
         "domains_to_cross": [
             "PKI",
@@ -142,6 +231,8 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "email security (S/MIME)",
             "IoT device certificates",
             "government/DoD",
+            "document signing",
+            "container image signing",
         ],
     },
     IdeaCategory.NIST_STANDARDS: {
@@ -159,6 +250,8 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "NIST SP 800-53 control inheritance automation for cloud",
             "FedRAMP continuous monitoring automation toolkit",
             "NIST 800-63 digital identity assurance level calculator",
+            "FIPS 140-3 module boundary documentation generator",
+            "NIST SP 800-171 self-assessment automation toolkit",
         ],
         "domains_to_cross": [
             "cloud",
@@ -167,6 +260,8 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "financial services",
             "defense/DoD",
             "critical infrastructure",
+            "automotive",
+            "telecommunications",
         ],
     },
     IdeaCategory.RFC_SECURITY: {
@@ -184,6 +279,8 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "RFC 9162 Certificate Transparency v2 PQC compatibility checker",
             "IETF CFRG algorithm recommendation tracker",
             "RFC interoperability test suite generator",
+            "DANE (RFC 6698) TLSA record validator and deployer",
+            "CAA (RFC 8659) policy enforcement auditor",
         ],
         "domains_to_cross": [
             "web browsers",
@@ -192,6 +289,8 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "CDN providers",
             "certificate authorities",
             "HSM vendors",
+            "API gateways",
+            "service meshes",
         ],
     },
     IdeaCategory.CRYPTO_INFRASTRUCTURE: {
@@ -209,8 +308,19 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "PKCS#11 provider compatibility matrix generator",
             "root store program compliance checker (Mozilla, Apple, Google)",
             "certificate misuse and abuse detection system",
+            "ACME client interoperability test harness",
+            "key ceremony workflow automation and evidence capture",
         ],
-        "domains_to_cross": ["cloud-native", "embedded/IoT", "automotive V2X", "telecom 5G", "smart grid", "banking"],
+        "domains_to_cross": [
+            "cloud-native",
+            "embedded/IoT",
+            "automotive V2X",
+            "telecom 5G",
+            "smart grid",
+            "banking",
+            "satellite comms",
+            "industrial control",
+        ],
     },
     IdeaCategory.SELF_IMPROVEMENT: {
         "description": (
@@ -258,4 +368,84 @@ CONTRARIAN_PROMPTS = [
     "What would a startup build if they had zero legacy constraints but deep domain expertise?",
     "What tool do teams build internally over and over because no good open-source version exists?",
     "What's the 'spreadsheet that should be a product' in your domain?",
+]
+
+# User persona seeds — each gives Claude a concrete human POV to generate from.
+# The goal is to ground ideas in real pain, not abstract concept recombination.
+PERSONA_SEEDS: list[dict] = [
+    {
+        "role": "CISO at a regional bank",
+        "pain": "8-person security team, two audits per year, regulators who don't understand cloud. "
+                "Any new tool must justify itself in a board slide.",
+    },
+    {
+        "role": "PKI architect at a Fortune 500 migrating off a 15-year-old CA",
+        "pain": "Thousands of certificates issued by an EOL CA, no inventory, half the cert owners "
+                "have left the company. The board just approved PQC transition budget.",
+    },
+    {
+        "role": "DevSecOps lead at a Series B startup with 18 engineers",
+        "pain": "Moving fast, FedRAMP moderate in 6 months, no dedicated security team. "
+                "Needs automation that works without a security hire.",
+    },
+    {
+        "role": "Federal contractor under CMMC Level 2",
+        "pain": "Contractually required to show continuous compliance evidence. "
+                "Manual evidence collection is eating two weeks per quarter.",
+    },
+    {
+        "role": "Red team lead at an MSSP",
+        "pain": "Runs 40+ engagements a year across wildly different environments. "
+                "Needs tooling that scales across clients without custom setup per engagement.",
+    },
+    {
+        "role": "Embedded systems engineer at an automotive OEM",
+        "pain": "ECU firmware must satisfy ISO 21434, V2X requires PQC-ready certs by 2027. "
+                "Crypto libraries that work on 64KB RAM devices are almost nonexistent.",
+    },
+    {
+        "role": "Open-source maintainer of a widely-used crypto library",
+        "pain": "Constantly asked 'are you PQC ready?' with no good answer. "
+                "Test coverage for algorithm edge cases is near zero. Users are production-deploying untested paths.",
+    },
+    {
+        "role": "Network security engineer at a Tier-1 telecom",
+        "pain": "5G core relies on TLS everywhere, certificate expiry causes P1 outages twice a year. "
+                "HSM fleet spans 3 data centers and nobody has a full inventory.",
+    },
+    {
+        "role": "Platform engineer at a cloud-native SaaS scaling from 10 to 500 services",
+        "pain": "Service mesh cert rotation is manual, secrets are duplicated across 12 Kubernetes namespaces, "
+                "and the on-call runbook hasn't been updated in 18 months.",
+    },
+    {
+        "role": "Security researcher at an academic lab studying protocol attacks",
+        "pain": "Needs reproducible environments to test TLS downgrade and side-channel attacks. "
+                "Setting up a controlled PKI for experiments takes a week each time.",
+    },
+    {
+        "role": "CTO at a healthcare SaaS startup",
+        "pain": "HIPAA BAA with every customer, PHI in motion needs encryption audit trail, "
+                "and the board just got spooked by a competitor's breach announcement.",
+    },
+    {
+        "role": "IAM engineer at a global financial institution",
+        "pain": "Certificate-based authentication for 80,000 employees, half still on smart cards. "
+                "Every PQC upgrade requires touching every identity provider in the estate.",
+    },
+    {
+        "role": "Vulnerability researcher doing independent CVE work",
+        "pain": "Needs to quickly stand up test harnesses for protocol implementations to confirm "
+                "whether a suspected bug is exploitable. Existing tooling assumes you know the target stack.",
+    },
+    {
+        "role": "GRC analyst at a mid-market insurance company",
+        "pain": "Maps controls manually across NIST CSF, SOC 2, and state insurance regs. "
+                "A single framework change means weeks of spreadsheet rework.",
+    },
+    {
+        "role": "Cloud security architect at a hyperscaler-adjacent ISV",
+        "pain": "Customers demand FIPS-validated crypto in multi-tenant environments. "
+                "Key isolation between tenants is a compliance requirement, not a nice-to-have.",
+    },
 ]

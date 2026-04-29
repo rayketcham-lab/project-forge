@@ -480,6 +480,24 @@ async def _run() -> None:
     )
 
 
+def _release_stuck_port() -> None:
+    """Kill orphaned uvicorn worker if .forge-restart-trigger exists.
+
+    The trigger file survives when systemd's restart fails with EADDRINUSE
+    because the uvicorn --reload worker outlived its master process.
+    From outside the bwrap container we can see and kill the orphan.
+    """
+    trigger = _PROJECT_ROOT / ".forge-restart-trigger"
+    if not trigger.exists():
+        return
+    result = subprocess.run(
+        ["pkill", "-u", "claude", "-f", "uvicorn.*project_forge"],
+        capture_output=True,
+    )
+    logger.info("Released stuck port 55443 (pkill rc=%d); trigger removed", result.returncode)
+    trigger.unlink(missing_ok=True)
+
+
 def main() -> None:
     """Entry point for forge-self-improve console script."""
     import asyncio
@@ -488,6 +506,7 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
+    _release_stuck_port()
     asyncio.run(_run())
 
 
