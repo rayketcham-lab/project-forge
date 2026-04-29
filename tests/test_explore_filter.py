@@ -81,9 +81,9 @@ async def test_explore_status_select_has_all_statuses_option(client):
 
 
 @pytest.mark.asyncio
-async def test_explore_onchange_navigates_correctly(client):
-    """The onchange handler must handle empty value by omitting status param."""
+async def test_explore_status_select_wired_via_js(client):
+    """Status select must use id= so app.js can attach the handler (no inline onchange — CSP blocks it)."""
     resp = await client.get("/explore")
     assert resp.status_code == 200
-    # The JS onchange should NOT produce ?status= for empty value
-    assert "this.value ? " in resp.text or "navigateFilter" in resp.text or "encodeURIComponent" in resp.text
+    assert 'id="explore-status-select"' in resp.text
+    assert "onchange" not in resp.text.split("filter-status")[1].split("</select>")[0]

@@ -628,6 +628,22 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
     });
 });
 
+// === Explore status filter ===
+(function() {
+    var sel = document.getElementById('explore-status-select');
+    if (!sel) return;
+    sel.addEventListener('change', function() {
+        var v = this.value;
+        var cat = this.getAttribute('data-category');
+        var u = '/explore';
+        var p = [];
+        if (v) p.push('status=' + encodeURIComponent(v));
+        if (cat) p.push('category=' + encodeURIComponent(cat));
+        if (p.length) u += '?' + p.join('&');
+        window.location.href = u;
+    });
+})();
+
 // === Issue Reporter ===
 
 (function() {
