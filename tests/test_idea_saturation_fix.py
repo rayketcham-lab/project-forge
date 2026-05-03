@@ -101,29 +101,29 @@ class TestExpandedSeedSpace:
     """Seed data must provide enough combinatoric space for ongoing generation."""
 
     def test_minimum_concepts_per_category(self):
-        """Each category should have at least 12 seed concepts."""
+        """Each category should have at least 20 seed concepts."""
         from project_forge.engine.categories import CATEGORY_SEEDS
 
         for cat, seeds in CATEGORY_SEEDS.items():
             if cat == IdeaCategory.SELF_IMPROVEMENT:
                 continue
-            assert len(seeds["seed_concepts"]) >= 12, (
-                f"{cat.value} has only {len(seeds['seed_concepts'])} concepts, need >= 12"
+            assert len(seeds["seed_concepts"]) >= 20, (
+                f"{cat.value} has only {len(seeds['seed_concepts'])} concepts, need >= 20"
             )
 
     def test_minimum_domains_per_category(self):
-        """Each category should have at least 6 domains."""
+        """Each category should have at least 12 domains."""
         from project_forge.engine.categories import CATEGORY_SEEDS
 
         for cat, seeds in CATEGORY_SEEDS.items():
             if cat == IdeaCategory.SELF_IMPROVEMENT:
                 continue
-            assert len(seeds["domains_to_cross"]) >= 6, (
-                f"{cat.value} has only {len(seeds['domains_to_cross'])} domains, need >= 6"
+            assert len(seeds["domains_to_cross"]) >= 12, (
+                f"{cat.value} has only {len(seeds['domains_to_cross'])} domains, need >= 12"
             )
 
     def test_total_combinatoric_space(self):
-        """Total tuple space must be at least 5,000 for months of generation."""
+        """Total tuple space must be at least 15,000 for years of generation."""
         from project_forge.engine.categories import CATEGORY_SEEDS
 
         total = 0
@@ -132,4 +132,28 @@ class TestExpandedSeedSpace:
             if cat == IdeaCategory.SELF_IMPROVEMENT:
                 continue
             total += len(seeds["seed_concepts"]) * len(seeds["domains_to_cross"]) * directions
-        assert total >= 5000, f"Total combinatoric space is only {total}, need >= 5000"
+        assert total >= 15_000, f"Total combinatoric space is only {total}, need >= 15,000"
+
+    def test_same_concept_different_domain_passes_dedup(self):
+        """New tagline format must allow same concept+different domain through dedup.
+
+        The old format '— tailored for {domain}' stripped the domain during normalization,
+        causing same-concept/different-domain ideas to get 1.00 similarity and be rejected.
+        The new format must preserve domain info so similarity stays below 0.7.
+        """
+        tagline_hc = "supply chain attack detection: healthcare"
+        tagline_iot = "supply chain attack detection: IoT"
+        sim = tagline_similarity(tagline_hc, tagline_iot)
+        assert sim < 0.7, (
+            f"Same concept, different domain should have sim < 0.7 but got {sim:.2f}. "
+            f"Domain info is being stripped during normalization."
+        )
+
+    def test_auto_scan_tagline_format_preserves_domain(self):
+        """Auto-scan taglines must use a format where the domain is not stripped."""
+        idea, *_ = generate_local_idea(category=IdeaCategory.SECURITY_TOOL)
+        # Domain info must survive — if it's stripped, normalized == concept-only.
+        # The colon format 'concept: domain' makes domain part of the normalized form.
+        assert ":" in idea.tagline, (
+            f"Tagline should use ': domain' format, got: {idea.tagline!r}"
+        )

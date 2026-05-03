@@ -329,7 +329,7 @@ def generate_local_idea(
             break
         name = _make_name(concept, domain, direction, variant)
 
-    tagline = f"{concept[:80]} — tailored for {domain}"
+    tagline = f"{concept[:80]}: {domain}"
     tech_stack = random.choice(TECH_STACKS.get(category, [["python", "fastapi"]]))
     score = round(random.uniform(0.55, 0.92), 2)
 
