@@ -111,6 +111,8 @@ _NAME_STOP_WORDS = frozenset({
     "automated", "automatic", "automation", "unified", "combined",
     "integrated", "advanced", "smart", "intelligent", "secure",
     "open", "source", "based",
+    # Super-idea marker word — must not contaminate keyword extraction
+    "super",
 })
 
 _SYNTHESIS_SUFFIXES = [
@@ -217,6 +219,9 @@ class SuperIdea(BaseModel):
 
 def find_idea_clusters(ideas: list[Idea], min_cluster_size: int = 2) -> list[dict]:
     """Find natural clusters of related ideas by category overlap and keyword affinity."""
+    # Exclude [SUPER] ideas — they must not contaminate keyword extraction or taglines
+    ideas = [i for i in ideas if not i.name.startswith("[SUPER]")]
+
     # Group by category pairs
     category_groups: dict[frozenset, list[Idea]] = defaultdict(list)
     for idea in ideas:
@@ -469,19 +474,34 @@ class SuperIdeaGenerator:
         # Tag with the perspective
         si.description += f"\n\n**Perspective:** {label} — synthesized through the lens of {perspective}."
 
-        # Check for duplicate base names in DB — skip if already exists
-        import re
-
+        # Dedup: reject if an existing super idea already covers the same primary concept.
+        # Primary concept = the text before " + " (or before ":") in the tagline.
+        # This prevents near-duplicate super ideas that differ only in name suffix.
         existing = await self.db.list_ideas(limit=2000)
-        existing_base_names = set()
+        existing_super_primaries: set[str] = set()
+        existing_base_names: set[str] = set()
         for ex in existing:
-            if ex.name.startswith("[SUPER]"):
-                raw = ex.name.replace("[SUPER] ", "")
-                base = re.sub(r"\s*\([^)]+\)\s*$", "", raw).strip()
-                existing_base_names.add(base.lower())
+            if not ex.name.startswith("[SUPER]"):
+                continue
+            raw = ex.name.replace("[SUPER] ", "")
+            base = re.sub(r"\s*\([^)]+\)\s*$", "", raw).strip()
+            existing_base_names.add(base.lower())
+            # Extract primary concept from tagline for concept-level dedup
+            primary = ex.tagline.split(" + ")[0].split(":")[0].strip().lower()
+            if primary and len(primary) > 5:
+                existing_super_primaries.add(primary)
 
         if si.name.lower() in existing_base_names:
             logger.info("Skipping duplicate super idea: %s (base name exists)", si.name)
+            return None
+
+        new_primary = si.tagline.split(" + ")[0].split(":")[0].strip().lower()
+        if new_primary and new_primary in existing_super_primaries:
+            logger.info(
+                "Skipping super idea %s: primary concept '%s' already covered",
+                si.name,
+                new_primary,
+            )
             return None
 
         await self._store_super(si)

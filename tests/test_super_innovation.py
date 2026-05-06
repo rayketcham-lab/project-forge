@@ -246,3 +246,103 @@ class TestSynthesizeEnd2End:
         }
         si = synthesize_super_idea(cluster)
         assert si.name == dynamic_theme
+
+
+class TestNoSuperIdeasInPool:
+    """[SUPER] ideas must not be included in the clustering pool.
+
+    When [SUPER] ideas are clustered, the word 'super' dominates keyword
+    extraction and old super idea names appear in new taglines.
+    """
+
+    def test_keywords_never_contain_super_word(self):
+        """Keyword extractor must not produce 'super' even from [SUPER]-named ideas."""
+        ideas = [
+            _make_idea("[SUPER] Old Platform Name", "old platform: some domain"),
+            _make_idea("Supply Chain Detector", "supply chain attack detection: healthcare"),
+        ]
+        kws = _extract_cluster_keywords(ideas)
+        assert "super" not in kws, f"'super' found in keywords: {kws}"
+
+    def test_find_idea_clusters_filters_super_ideas(self):
+        """find_idea_clusters must exclude [SUPER] ideas from the pool."""
+        regular_ideas = [
+            _make_idea("Supply Chain Scanner", "supply chain attack detection: retail", IdeaCategory.SECURITY_TOOL),
+            _make_idea("Shadow IT Detector", "shadow it risk assessment: enterprise", IdeaCategory.SECURITY_TOOL),
+            _make_idea("OAuth Scope Advisor", "oauth consent scope minimization: saas", IdeaCategory.SECURITY_TOOL),
+            _make_idea("SSH Key Manager", "ssh key lifecycle governance: cloud", IdeaCategory.SECURITY_TOOL),
+        ]
+        super_ideas_in_pool = [
+            _make_idea("[SUPER] Old Generic Platform", "old platform: combined things", IdeaCategory.SECURITY_TOOL),
+            _make_idea("[SUPER] Super Infrastructure Center", "super infrastructure: old", IdeaCategory.SECURITY_TOOL),
+        ]
+        all_ideas = regular_ideas + super_ideas_in_pool
+        clusters = find_idea_clusters(all_ideas)
+
+        for cluster in clusters:
+            for idea in cluster["ideas"]:
+                assert not idea.name.startswith("[SUPER]"), (
+                    f"[SUPER] idea {idea.name!r} ended up in cluster {cluster['theme']!r}"
+                )
+
+    def test_cluster_names_dont_contain_super_when_pool_has_supers(self):
+        """Cluster names must not reference 'super' even when [SUPER] ideas are in input."""
+        ci = IdeaCategory.CRYPTO_INFRASTRUCTURE
+        regular = [
+            _make_idea("Certificate Lifecycle Manager", "certificate lifecycle: pki", ci),
+            _make_idea("HSM Key Import Tool", "hsm key import: banking", ci),
+            _make_idea("OCSP Validator", "ocsp validation: finance", ci),
+            _make_idea("Key Escrow Auditor", "key escrow audit: government", ci),
+        ]
+        supers = [
+            _make_idea("[SUPER] Super Platform Legacy", "super platform: old combined", ci),
+        ]
+        clusters = find_idea_clusters(regular + supers)
+        for cluster in clusters:
+            assert "Super" not in cluster["theme"] and "super" not in cluster["theme"].lower(), (
+                f"'super' leaked into cluster name: {cluster['theme']!r}"
+            )
+
+
+class TestStatCardIntegrity:
+    """Dashboard stat cards must use authoritative counts, not display limits."""
+
+    def test_super_ideas_stat_uses_db_count_not_display_limit(self):
+        """The Super Ideas stat must come from stats.super_ideas (COUNT),
+        not from counting the list_super_ideas display (capped at 6).
+
+        This tests the template logic — stats.super_ideas (from DB COUNT query)
+        must be what feeds the stat-number element, not ns.active_super.
+        """
+        template_path = (
+            "/opt/vmdata/project-forge/src/project_forge/web/templates/dashboard.html"
+        )
+        with open(template_path) as f:
+            content = f.read()
+        # The stat-number for Super Ideas must use stats.super_ideas
+        # NOT ns.active_super (which counts the limited list)
+        assert "ns.active_super" not in content, (
+            "Dashboard uses ns.active_super which counts the limited display list, "
+            "not the true DB count. Use stats.super_ideas instead."
+        )
+
+    def test_js_updates_contributed_not_avg_score_at_index_4(self):
+        """JS numbers[4] must update the Contributed card, not Avg Score."""
+        js_path = "/opt/vmdata/project-forge/src/project_forge/web/static/app.js"
+        with open(js_path) as f:
+            content = f.read()
+        # numbers[4] must reference contributed, not avg_feasibility_score
+        # Find the block containing numbers[4]
+        assert "numbers[4].textContent = stats.ideas_by_status.contributed" in content or \
+               "numbers[4].textContent = (stats.ideas_by_status.contributed" in content, (
+            "JS numbers[4] must set Contributed count, not avg_feasibility_score"
+        )
+
+    def test_js_updates_avg_score_at_index_5(self):
+        """JS must update the Avg Score card at numbers[5]."""
+        js_path = "/opt/vmdata/project-forge/src/project_forge/web/static/app.js"
+        with open(js_path) as f:
+            content = f.read()
+        assert "numbers[5].textContent = stats.avg_feasibility_score" in content, (
+            "JS must update numbers[5] with avg_feasibility_score"
+        )

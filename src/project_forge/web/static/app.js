@@ -608,12 +608,13 @@ if (window.location.pathname === '/') {
             if (resp.ok) {
                 const stats = await resp.json();
                 const numbers = document.querySelectorAll('.stat-number');
-                if (numbers.length >= 5) {
+                if (numbers.length >= 6) {
                     numbers[0].textContent = stats.total_ideas;
                     numbers[1].textContent = stats.ideas_by_status.approved || 0;
                     numbers[2].textContent = stats.ideas_by_status.scaffolded || 0;
                     numbers[3].textContent = stats.super_ideas;
-                    numbers[4].textContent = stats.avg_feasibility_score;
+                    numbers[4].textContent = stats.ideas_by_status.contributed || 0;
+                    numbers[5].textContent = stats.avg_feasibility_score;
                 }
             }
         } catch (e) { /* ignore */ }
