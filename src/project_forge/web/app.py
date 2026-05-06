@@ -5,12 +5,12 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
 from starlette.responses import Response
 
 from project_forge.config import settings
@@ -90,6 +90,15 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 from project_forge.web.routes import router  # noqa: E402
 
 app.include_router(router)
+
+
+@app.exception_handler(Exception)
+async def _generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc) or "Internal server error"},
+    )
 
 
 def create_app(db_path=None):
