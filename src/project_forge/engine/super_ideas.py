@@ -8,7 +8,8 @@ real-world platforms.
 import hashlib
 import logging
 import random
-from collections import defaultdict
+import re
+from collections import Counter, defaultdict
 from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
@@ -96,6 +97,108 @@ VISION_TEMPLATES = [
 ]
 
 
+_NAME_STOP_WORDS = frozenset({
+    # Prepositions / articles
+    "a", "an", "the", "and", "or", "for", "with", "in", "of", "on", "to", "by",
+    "via", "from", "its", "this", "that", "into", "onto", "over",
+    # Generic tech nouns (too common to be distinctive)
+    "tool", "system", "platform", "suite", "engine", "hub",
+    "service", "solution", "manager", "tracker", "analyzer",
+    "monitor", "checker", "scanner", "detector", "reporter",
+    "generator", "builder", "advisor", "assistant", "helper",
+    "framework", "library", "module", "plugin", "agent",
+    # Generic adjectives / catch-alls
+    "automated", "automatic", "automation", "unified", "combined",
+    "integrated", "advanced", "smart", "intelligent", "secure",
+    "open", "source", "based",
+})
+
+_SYNTHESIS_SUFFIXES = [
+    "Intelligence Center",
+    "Operations Center",
+    "Defense Suite",
+    "Governance Engine",
+    "Observatory",
+    "Command Center",
+    "Analysis Hub",
+    "Enforcement Suite",
+    "Discovery Engine",
+    "Lifecycle Platform",
+    "Security Intelligence",
+    "Automation Hub",
+]
+
+
+def _extract_cluster_keywords(ideas: list["Idea"]) -> list[str]:  # noqa: F821 (forward ref)
+    """Extract the most distinctive keywords from a set of component ideas."""
+    freq: Counter[str] = Counter()
+
+    for idea in ideas:
+        # Tagline concept (before colon) gives the best signal
+        tagline_part = idea.tagline.split(":")[0] if ":" in idea.tagline else idea.tagline
+        for w in re.findall(r"[a-z]+", tagline_part.lower()):
+            if w not in _NAME_STOP_WORDS and len(w) > 3:
+                freq[w] += 1
+
+        # Name words get double weight — they're the distilled concept
+        for w in re.findall(r"[a-z]+", idea.name.lower()):
+            if w not in _NAME_STOP_WORDS and len(w) > 3:
+                freq[w] += 2
+
+    return [w for w, _ in freq.most_common(8)]
+
+
+def _dynamic_cluster_name(ideas: list["Idea"], categories: frozenset) -> str:  # noqa: F821
+    """Generate a content-driven cluster name from component ideas."""
+    keywords = _extract_cluster_keywords(ideas)
+    suffix = random.choice(_SYNTHESIS_SUFFIXES)
+
+    if len(keywords) >= 2:
+        k1, k2 = keywords[0].title(), keywords[1].title()
+        return random.choice([
+            f"{k1} & {k2} {suffix}",
+            f"{k1}-{k2} {suffix}",
+            f"{k1} {k2} {suffix}",
+        ])
+    elif keywords:
+        return f"{keywords[0].title()} {suffix}"
+
+    # Last resort: use category names (not "Unified Platform")
+    cat_names = sorted(c.value.replace("-", " ").title() for c in categories)
+    return f"{' & '.join(cat_names[:2])} {suffix}"
+
+
+def _build_super_tagline(ideas: list["Idea"]) -> str:  # noqa: F821
+    """Build a capability-specific tagline from component concept terms."""
+    concepts: list[str] = []
+    for idea in ideas[:3]:
+        if ":" in idea.tagline:
+            core = idea.tagline.split(":")[0].strip()
+        else:
+            # Use first 4 words of name (skip any [SUPER] prefix)
+            words = [w for w in idea.name.split() if not w.startswith("[")][:4]
+            core = " ".join(words)
+        if 4 < len(core) < 45:
+            concepts.append(core)
+
+    synthesis_phrases = [
+        "synthesized into one platform",
+        "unified end-to-end",
+        "integrated for full lifecycle coverage",
+        "combined into a single platform",
+        "in one unified system",
+    ]
+
+    if len(concepts) >= 2:
+        phrase = random.choice(synthesis_phrases)
+        return f"{concepts[0]} + {concepts[1]}: {phrase}"[:120]
+    elif concepts:
+        phrase = random.choice(synthesis_phrases)
+        return f"{concepts[0]}: {phrase}"[:120]
+
+    return f"{len(ideas)}-capability synthesis: end-to-end platform"[:120]
+
+
 class SuperIdea(BaseModel):
     id: str = Field(default_factory=lambda: hashlib.sha256(str(datetime.now(UTC)).encode()).hexdigest()[:12])
     name: str
@@ -123,7 +226,7 @@ def find_idea_clusters(ideas: list[Idea], min_cluster_size: int = 2) -> list[dic
     clusters = []
     used_ideas: set[str] = set()
 
-    for cat_pair, templates in THEME_TEMPLATES.items():
+    for cat_pair, _templates in THEME_TEMPLATES.items():
         matching_ideas = []
         for idea in ideas:
             if idea.category in cat_pair and idea.id not in used_ideas:
@@ -133,7 +236,7 @@ def find_idea_clusters(ideas: list[Idea], min_cluster_size: int = 2) -> list[dic
             # Take the best scoring ideas for this cluster
             matching_ideas.sort(key=lambda i: i.feasibility_score, reverse=True)
             cluster_ideas = matching_ideas[: min(6, len(matching_ideas))]
-            theme = random.choice(templates)
+            theme = _dynamic_cluster_name(cluster_ideas, cat_pair)
             clusters.append({"theme": theme, "ideas": cluster_ideas, "categories": cat_pair})
             for i in cluster_ideas:
                 used_ideas.add(i.id)
@@ -144,7 +247,7 @@ def find_idea_clusters(ideas: list[Idea], min_cluster_size: int = 2) -> list[dic
         if len(cat_ideas) >= 3:
             cat_ideas.sort(key=lambda i: i.feasibility_score, reverse=True)
             cluster_ideas = cat_ideas[:5]
-            theme = f"{cat.value.replace('-', ' ').title()} Unified Platform"
+            theme = _dynamic_cluster_name(cluster_ideas, frozenset({cat}))
             clusters.append({"theme": theme, "ideas": cluster_ideas, "categories": frozenset({cat})})
             for i in cluster_ideas:
                 used_ideas.add(i.id)
@@ -175,9 +278,7 @@ def synthesize_super_idea(cluster: dict) -> SuperIdea:
         f"{', '.join(c.value for c in categories)} challenges."
     )
 
-    tagline = f"Unified platform combining {len(ideas)} ideas across {', '.join(c.value for c in categories)}"
-    if len(tagline) > 120:
-        tagline = f"Unified {theme.lower()} combining {len(ideas)} key capabilities"
+    tagline = _build_super_tagline(ideas)
 
     # Vision
     vision_template = random.choice(VISION_TEMPLATES)
