@@ -110,7 +110,16 @@ _NAME_STOP_WORDS = frozenset({
     # Generic adjectives / catch-alls
     "automated", "automatic", "automation", "unified", "combined",
     "integrated", "advanced", "smart", "intelligent", "secure",
-    "open", "source", "based",
+    "open", "source", "based", "simple", "single", "multi", "cross",
+    # Qualifiers that make nonsense names ("Well Known Defense Suite")
+    "well", "known", "common", "general", "basic", "native",
+    # OWASP / security jargon — appear in idea names but make bad super-names
+    "insecure", "direct", "object", "broken", "sensitive", "exposure",
+    "injection", "failure", "access", "control", "bypass",
+    "escalation", "privilege", "attack", "threat", "weakness",
+    # Generic action verbs in idea names
+    "using", "detect", "enable", "enforce", "prevent", "handle",
+    "improve", "extend", "support", "create", "update", "manage",
     # Super-idea marker word — must not contaminate keyword extraction
     "super",
 })
@@ -139,12 +148,12 @@ def _extract_cluster_keywords(ideas: list["Idea"]) -> list[str]:  # noqa: F821 (
         # Tagline concept (before colon) gives the best signal
         tagline_part = idea.tagline.split(":")[0] if ":" in idea.tagline else idea.tagline
         for w in re.findall(r"[a-z]+", tagline_part.lower()):
-            if w not in _NAME_STOP_WORDS and len(w) > 3:
+            if w not in _NAME_STOP_WORDS and len(w) >= 5:
                 freq[w] += 1
 
         # Name words get double weight — they're the distilled concept
         for w in re.findall(r"[a-z]+", idea.name.lower()):
-            if w not in _NAME_STOP_WORDS and len(w) > 3:
+            if w not in _NAME_STOP_WORDS and len(w) >= 5:
                 freq[w] += 2
 
     return [w for w, _ in freq.most_common(8)]
@@ -159,7 +168,6 @@ def _dynamic_cluster_name(ideas: list["Idea"], categories: frozenset) -> str:  #
         k1, k2 = keywords[0].title(), keywords[1].title()
         return random.choice([
             f"{k1} & {k2} {suffix}",
-            f"{k1}-{k2} {suffix}",
             f"{k1} {k2} {suffix}",
         ])
     elif keywords:
@@ -483,6 +491,9 @@ class SuperIdeaGenerator:
         for ex in existing:
             if not ex.name.startswith("[SUPER]"):
                 continue
+            # Archived/rejected ideas must not permanently veto future generation
+            if ex.status in ("archived", "rejected"):
+                continue
             raw = ex.name.replace("[SUPER] ", "")
             base = re.sub(r"\s*\([^)]+\)\s*$", "", raw).strip()
             existing_base_names.add(base.lower())
@@ -490,6 +501,16 @@ class SuperIdeaGenerator:
             primary = ex.tagline.split(" + ")[0].split(":")[0].strip().lower()
             if primary and len(primary) > 5:
                 existing_super_primaries.add(primary)
+
+        # Quality gate: reject if tagline is the N-capability-synthesis fallback.
+        # This fallback fires when _build_super_tagline finds no usable concepts in
+        # the cluster ideas, meaning the cluster lacks content to describe meaningfully.
+        if re.match(r"^\d+-capability synthesis:", si.tagline):
+            logger.info(
+                "Skipping super idea %s: tagline fell back to generic synthesis (poor cluster quality)",
+                si.name,
+            )
+            return None
 
         if si.name.lower() in existing_base_names:
             logger.info("Skipping duplicate super idea: %s (base name exists)", si.name)

@@ -437,13 +437,15 @@ class Database:
 
     # === SUPER IDEAS ===
 
-    async def list_super_ideas(self, limit: int = 6) -> list[Idea]:
-        """List super ideas deduped by base name (stripping parenthetical suffixes).
+    async def list_super_ideas(self, limit: int | None = None) -> list[Idea]:
+        """List super ideas deduped by keyword base name.
 
-        Groups variants like "[SUPER] X" and "[SUPER] X (Attack & Defense)" together,
-        keeping the highest-scored non-archived variant per base name.
+        Groups variants like "[SUPER] Well Known Defense Suite" and
+        "[SUPER] Well Known Operations Center" together (same keywords, different
+        synthesis suffix), keeping the highest-scored non-archived variant per base.
+        Pass limit=N to cap the result; omit for all active super ideas.
         """
-        import re
+        from project_forge.engine.dedup import _super_base_name
 
         cursor = await self.db.execute(
             "SELECT * FROM ideas WHERE name LIKE '[SUPER]%' "
@@ -455,12 +457,11 @@ class Database:
         seen_bases: dict[str, None] = {}
         result: list[Idea] = []
         for row in rows:
-            raw = row["name"].replace("[SUPER] ", "")
-            base = re.sub(r"\s*\([^)]+\)\s*$", "", raw).strip().lower()
+            base = _super_base_name(row["name"])
             if base not in seen_bases:
                 seen_bases[base] = None
                 result.append(self._row_to_idea(row))
-                if len(result) >= limit:
+                if limit is not None and len(result) >= limit:
                     break
         return result
 
@@ -502,12 +503,7 @@ class Database:
         row = await cursor.fetchone()
         avg_score = round(row[0], 2) if row and row[0] else 0.0
 
-        cursor = await self.db.execute(
-            "SELECT COUNT(*) FROM ideas WHERE name LIKE '[SUPER]%'"
-            " AND status NOT IN ('rejected', 'archived', 'contributed', 'implemented')"
-        )
-        row = await cursor.fetchone()
-        super_count = row[0] if row else 0
+        super_count = len(await self.list_super_ideas())
 
         cursor = await self.db.execute("SELECT COUNT(*) FROM challenges")
         row = await cursor.fetchone()

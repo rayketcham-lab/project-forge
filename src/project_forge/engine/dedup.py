@@ -102,13 +102,35 @@ async def should_accept(idea: Idea, db: Database) -> tuple[bool, str | None]:
     return True, None
 
 
+# Keep in sync with _SYNTHESIS_SUFFIXES in engine/super_ideas.py
+_SUPER_SYNTHESIS_SUFFIXES = frozenset({
+    "intelligence center", "operations center", "defense suite",
+    "governance engine", "observatory", "command center",
+    "analysis hub", "enforcement suite", "discovery engine",
+    "lifecycle platform", "security intelligence", "automation hub",
+})
+
+
 def _super_base_name(full_name: str) -> str:
-    """Extract base name from a super idea name.
+    """Extract base name from a super idea name for dedup comparison.
 
     "[SUPER] Threat Engine (Attack & Defense)" → "threat engine"
+    "[SUPER] Well Known Defense Suite"         → "well known"
+    "[SUPER] Data-Cardinality Operations Center" → "data cardinality"
     """
     raw = full_name.replace("[SUPER] ", "")
+    # Strip parenthetical suffixes first
     base = re.sub(r"\s*\([^)]+\)\s*$", "", raw).strip()
+    # Strip synthesis suffixes (longest match wins — check all)
+    base_lower = base.lower()
+    for suffix in _SUPER_SYNTHESIS_SUFFIXES:
+        if base_lower.endswith(suffix):
+            base = base[: -len(suffix)].strip()
+            break
+    # Normalize separators: hyphens and ampersands → spaces
+    base = base.replace("-", " ").replace("&", " ")
+    # Collapse multiple spaces
+    base = re.sub(r"\s+", " ", base).strip()
     return base.lower()
 
 

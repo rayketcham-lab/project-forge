@@ -159,11 +159,96 @@ async def fetch_url_content(url: str) -> UrlContent:
     return UrlContent(url=url, domain=domain, title=title, text=text[:5000])
 
 
+_SECURITY_KEYWORDS = {
+    "crypto", "tls", "ssl", "pki", "certificate", "merkle", "hash", "encrypt",
+    "vulnerability", "cve", "exploit", "attack", "malware", "ransomware",
+    "threat", "authentication", "auth", "oauth", "jwt", "token", "key",
+    "firewall", "intrusion", "pentest", "ctf", "reverse engineering",
+    "binary", "fuzzing", "sanitize", "injection", "xss", "csrf",
+    "zero trust", "siem", "soc", "audit", "compliance", "gdpr", "nist",
+}
+
+_CATEGORY_KEYWORDS: dict[str, list[str]] = {
+    "security-tool": ["security", "scanner", "monitor", "detect", "protect", "guard"],
+    "vulnerability-research": ["vuln", "cve", "exploit", "bug", "flaw", "weakness"],
+    "crypto-infrastructure": ["crypto", "tls", "pki", "certificate", "merkle", "hash", "rsa", "ecdsa"],
+    "compliance": ["compliance", "gdpr", "nist", "audit", "regulation", "policy", "standard"],
+    "devops-tool": ["deploy", "cicd", "docker", "kubernetes", "k8s", "pipeline", "infra"],
+    "privacy-tool": ["privacy", "anonymize", "tracking", "consent", "pii", "data protection"],
+}
+
+
+def _heuristic_idea_from_content(content: UrlContent, category_hint: str | None = None):
+    """Build a basic Idea from URL content without an API call.
+
+    Used as a fallback when no Anthropic API key is configured.
+    """
+    from project_forge.models import Idea, IdeaCategory
+
+    title = content.title or content.domain
+    text_lower = (content.text + " " + title).lower()
+
+    # Pick category
+    if category_hint:
+        try:
+            category = IdeaCategory(category_hint)
+        except ValueError:
+            category = IdeaCategory.SECURITY_TOOL
+    else:
+        category = IdeaCategory.SECURITY_TOOL
+        best_score = 0
+        for cat_value, keywords in _CATEGORY_KEYWORDS.items():
+            score = sum(1 for kw in keywords if kw in text_lower)
+            if score > best_score:
+                best_score = score
+                try:
+                    category = IdeaCategory(cat_value)
+                except ValueError:
+                    pass
+
+    # Extract first meaningful sentence from body as tagline
+    sentences = [s.strip() for s in re.split(r"[.!?]", content.text) if len(s.strip()) > 30]
+    tagline = sentences[0][:120] if sentences else f"Tool inspired by insights from {content.domain}"
+
+    # Name: derive from title or domain
+    name = re.sub(r"\s*[-|:]\s*.*$", "", title).strip() or content.domain
+    name = name[:60]
+
+    description = (
+        f"Idea derived from: {content.url}\n\n"
+        + (content.text[:800] if content.text else f"Source: {content.domain}")
+    )
+
+    return Idea(
+        name=name,
+        tagline=tagline,
+        description=description,
+        category=category,
+        market_analysis="Derived from external source — manual market analysis required.",
+        feasibility_score=0.6,
+        mvp_scope="Review source content and define scope before implementation.",
+        tech_stack=[],
+        source_url=clean_url(content.url),
+    )
+
+
 async def generate_idea_from_url(content: UrlContent, category_hint: str | None = None):
-    """Generate an idea from URL content via IdeaGenerator."""
-    from project_forge.engine.generator import IdeaGenerator
+    """Generate an idea from URL content via IdeaGenerator.
+
+    Falls back to a heuristic extraction when no Anthropic API key is configured.
+    """
+    import os
+
+    from project_forge.config import settings
 
     content.url = clean_url(content.url)
+
+    key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+    if not key:
+        return _heuristic_idea_from_content(content, category_hint=category_hint)
+
+    from project_forge.engine.generator import IdeaGenerator
+
     generator = IdeaGenerator()
     idea = await generator.generate_from_content(content, category_hint=category_hint)
     return idea

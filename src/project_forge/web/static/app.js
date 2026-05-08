@@ -1,3 +1,12 @@
+// === Safe JSON helper ===
+// Parses response body as JSON; on parse failure returns {detail: <raw text>}.
+// Use on all error-path responses so a plain-text "Internal Server Error"
+// body never throws a SyntaxError in the caller.
+async function safeJson(resp) {
+    var text = await resp.text();
+    try { return JSON.parse(text); } catch (_) { return { detail: text.trim() || 'Server error' }; }
+}
+
 // === Auth Headers ===
 // Returns Bearer token headers read from the forge-token meta tag (ephemeral dashboard token)
 function getAuthHeaders() {
@@ -91,7 +100,7 @@ async function apiAction(url, method = 'POST') {
     try {
         const response = await fetch(url, { method, headers: getAuthHeaders() });
         if (!response.ok) {
-            const data = await response.json();
+            const data = await safeJson(response);
             alert(data.detail || 'Action failed');
             return null;
         }
@@ -118,7 +127,11 @@ async function promoteProposal(ideaId) {
     if (!confirm('Promote this proposal to a GitHub issue?')) return;
     try {
         var r = await fetch('/api/thinktank/' + ideaId + '/promote', { method: 'POST', headers: getAuthHeaders() });
-        var data = await r.json();
+        var data = await safeJson(r);
+        if (!r.ok) {
+            alert('Failed to promote: ' + (data.detail || 'Unknown error'));
+            return;
+        }
         if (data.issue_url) {
             location.reload();
         } else {
@@ -133,7 +146,11 @@ async function rejectProposal(ideaId) {
     if (!confirm('Reject this proposal?')) return;
     try {
         var r = await fetch('/api/thinktank/' + ideaId + '/reject', { method: 'POST', headers: getAuthHeaders() });
-        await r.json();
+        if (!r.ok) {
+            var data = await safeJson(r);
+            alert('Failed to reject: ' + (data.detail || 'Unknown error'));
+            return;
+        }
         location.reload();
     } catch (err) {
         alert('Error: ' + err);
@@ -233,7 +250,7 @@ function toggleChallengeInput() {
                 body: JSON.stringify(payload),
             });
             if (!resp.ok) {
-                var err = await resp.json();
+                var err = await safeJson(resp);
                 throw new Error(err.detail || 'Challenge failed');
             }
             var data = await resp.json();
@@ -344,7 +361,7 @@ async function submitUrl() {
         });
 
         if (!resp.ok) {
-            var err = await resp.json();
+            var err = await safeJson(resp);
             throw new Error(err.detail || 'Failed to generate idea');
         }
 
@@ -452,7 +469,7 @@ async function compareIdea(id) {
         var url = '/api/ideas/' + id + '/compare?repo=' + encodeURIComponent(select.value);
         var resp = await fetch(url, { method: 'POST', headers: getAuthHeaders() });
         if (!resp.ok) {
-            var err = await resp.json();
+            var err = await safeJson(resp);
             throw new Error(err.detail || 'Compare failed');
         }
         var data = await resp.json();
@@ -533,7 +550,7 @@ async function addToProject(ideaId, repoName, btnEl) {
         var url = '/api/ideas/' + ideaId + '/add-to-project?repo=' + encodeURIComponent(repoName);
         var resp = await fetch(url, { method: 'POST', headers: getAuthHeaders() });
         if (!resp.ok) {
-            var err = await resp.json();
+            var err = await safeJson(resp);
             throw new Error(err.detail || 'Failed to add issue');
         }
         var data = await resp.json();
@@ -690,7 +707,7 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
                     card.style.pointerEvents = 'none';
                     showCardToast(card, 'Deleted');
                 } else {
-                    var d = await r.json();
+                    var d = await safeJson(r);
                     showCardToast(card, d.detail || 'Delete failed');
                 }
             }
@@ -917,7 +934,7 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
                     headers: Object.assign({ 'Content-Type': 'application/json' }, getAuthHeaders()),
                     body: JSON.stringify(payload),
                 });
-                var data = await resp.json();
+                var data = await safeJson(resp);
                 var resultDiv = document.getElementById('issue-result-content');
                 while (resultDiv.firstChild) resultDiv.removeChild(resultDiv.firstChild);
 
@@ -1002,7 +1019,7 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
                 } else if (r.status === 409) {
                     alert('Cannot delete: repository still exists on GitHub');
                 } else {
-                    return r.json().then(function(data) {
+                    return safeJson(r).then(function(data) {
                         alert('Delete failed: ' + (data.detail || 'Unknown error'));
                     });
                 }

@@ -84,6 +84,78 @@ class TestSuperIdeaGenerationDedup:
     """generate_seeded should skip when a similar super idea already exists."""
 
     @pytest.mark.asyncio
+    async def test_archived_concept_does_not_block_future_generation(self, db):
+        """Archived super ideas must not permanently veto re-synthesis on the same concept.
+
+        Bug: generate_seeded built existing_super_primaries from ALL ideas including
+        archived ones. An archived super idea with a generic fallback tagline like
+        '6-capability synthesis: end-to-end platform' permanently blocked any future
+        super idea whose cluster also fell back to that phrase.
+        """
+        # Active super → concept MUST block
+        active = Idea(
+            name="[SUPER] Active Security Platform",
+            tagline="certificate pinning enforcement: synthesized into one platform",
+            description="Active super.",
+            category=IdeaCategory.SECURITY_TOOL,
+            market_analysis="Market.",
+            feasibility_score=0.95,
+            mvp_scope="MVP.",
+            tech_stack=["python"],
+        )
+        await db.save_idea(active)
+
+        # Archived super → concept must NOT block
+        archived = Idea(
+            name="[SUPER] Old Supply Chain Platform",
+            tagline="supply chain scanning method: synthesized into one platform",
+            description="Old archived super.",
+            category=IdeaCategory.SECURITY_TOOL,
+            market_analysis="Market.",
+            feasibility_score=0.95,
+            mvp_scope="MVP.",
+            tech_stack=["python"],
+        )
+        await db.save_idea(archived)
+        await db.update_idea_status(archived.id, "archived")
+
+        # Rejected super → concept must NOT block either
+        rejected = Idea(
+            name="[SUPER] Rejected Compliance Engine",
+            tagline="compliance audit automation: synthesized into one platform",
+            description="Rejected super.",
+            category=IdeaCategory.COMPLIANCE,
+            market_analysis="Market.",
+            feasibility_score=0.92,
+            mvp_scope="MVP.",
+            tech_stack=["python"],
+        )
+        await db.save_idea(rejected)
+        await db.update_idea_status(rejected.id, "rejected")
+
+        # Replicate the dedup filtering as generate_seeded does
+        all_ideas = await db.list_ideas(limit=2000)
+        existing_super_primaries: set[str] = set()
+        for ex in all_ideas:
+            if not ex.name.startswith("[SUPER]"):
+                continue
+            if ex.status in ("archived", "rejected"):
+                continue  # this is the fix
+            primary = ex.tagline.split(" + ")[0].split(":")[0].strip().lower()
+            if primary and len(primary) > 5:
+                existing_super_primaries.add(primary)
+
+        assert "certificate pinning enforcement" in existing_super_primaries, (
+            "Active super's concept must block future generation"
+        )
+        assert "supply chain scanning method" not in existing_super_primaries, (
+            "Archived super's concept must NOT block future generation"
+        )
+        assert "compliance audit automation" not in existing_super_primaries, (
+            "Rejected super's concept must NOT block future generation"
+        )
+
+    @pytest.mark.asyncio
     async def test_seeded_skips_existing_base_name(self, db):
         """If a super idea with the same base name exists, skip generation."""
         from project_forge.engine.super_ideas import SuperIdeaGenerator
@@ -116,3 +188,44 @@ class TestSuperIdeaGenerationDedup:
         # No new variant of "Autonomous Security Testing Platform"
         count = sum(1 for b in base_names if b == "Autonomous Security Testing Platform")
         assert count == 1, f"Expected 1 'Autonomous Security Testing Platform', got {count}"
+
+    @pytest.mark.asyncio
+    async def test_generic_fallback_tagline_is_rejected(self, db):
+        """Super ideas with 'N-capability synthesis' fallback taglines must not be stored.
+
+        The fallback fires when _build_super_tagline finds no usable concepts in the
+        cluster ideas. Storing such ideas pollutes the DB and permanently blocks future
+        generation via concept dedup.
+        """
+        from project_forge.engine.super_ideas import SuperIdeaGenerator
+
+        # Seed with ideas that have very short taglines (no colons, short names)
+        # so _build_super_tagline is likely to fall back to the generic phrase.
+        for i in range(20):
+            cat = IdeaCategory.SECURITY_TOOL if i % 2 == 0 else IdeaCategory.VULNERABILITY_RESEARCH
+            await db.save_idea(
+                Idea(
+                    name=f"Tool {i}",  # short name, likely to fall back
+                    tagline="fix it",  # no colon, ≤4 chars core → triggers fallback
+                    description="Description.",
+                    category=cat,
+                    market_analysis="Market.",
+                    feasibility_score=0.8,
+                    mvp_scope="MVP.",
+                    tech_stack=["python"],
+                )
+            )
+
+        gen = SuperIdeaGenerator(db)
+        await gen.generate_seeded(slot=2)
+
+        # If the quality gate works, no "N-capability synthesis" super should be stored
+        all_ideas = await db.list_ideas(limit=200)
+        bad_supers = [
+            i for i in all_ideas
+            if i.name.startswith("[SUPER]") and "capability synthesis" in i.tagline
+        ]
+        assert bad_supers == [], (
+            "Generic fallback taglines must not be stored: "
+            + ", ".join(f"{i.name!r}: {i.tagline!r}" for i in bad_supers)
+        )

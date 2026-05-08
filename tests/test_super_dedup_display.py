@@ -6,14 +6,17 @@ with different perspective suffixes:
   - "[SUPER] Autonomous Security Testing Platform (Attack & Defense)"
   - "[SUPER] Autonomous Security Testing Platform (Attack & Defense)"  (different category)
 
-Three gaps:
-1. list_super_ideas() groups by full name, not base name
-2. should_accept() skips fuzzy dedup entirely for super ideas
-3. No base-name dedup at the generation/acceptance layer
+Extended problem (synthesis suffixes + hyphens):
+  - "[SUPER] Well Known Defense Suite"
+  - "[SUPER] Well Known Operations Center"   ← same base concept, different suffix
+  - "[SUPER] Data-Cardinality Operations Center"  ← hyphen in name
+  Stats card counts raw rows; list_super_ideas() deduplicates → mismatch.
 
 Fix targets:
-- list_super_ideas: SQL groups by base name (strip parenthetical suffixes)
-- should_accept: add base-name check for [SUPER] ideas
+- _super_base_name: also strip synthesis suffixes + normalize hyphens
+- list_super_ideas: use _super_base_name for consistent dedup
+- get_stats: count deduped super ideas (len(list_super_ideas())) not raw rows
+- _dynamic_cluster_name: remove hyphen template — names must use spaces
 """
 
 import pytest
@@ -201,3 +204,183 @@ class TestShouldAcceptSuperDedup:
         accepted, reason = await should_accept(candidate, db)
 
         assert not accepted
+
+    @pytest.mark.asyncio
+    async def test_rejects_same_keywords_different_synthesis_suffix(self, db):
+        """'Well Known Defense Suite' and 'Well Known Operations Center' are the same concept."""
+        await db.save_idea(_super("[SUPER] Well Known Defense Suite"))
+
+        candidate = _super("[SUPER] Well Known Operations Center")
+        accepted, reason = await should_accept(candidate, db)
+
+        assert not accepted, "Same base keywords with different synthesis suffix must be rejected"
+        assert reason is not None
+        assert "duplicate" in reason.lower()
+
+    @pytest.mark.asyncio
+    async def test_rejects_hyphenated_and_space_variant_as_same(self, db):
+        """'Data-Cardinality Operations Center' and 'Data Cardinality Defense Suite' are the same."""
+        await db.save_idea(_super("[SUPER] Data-Cardinality Operations Center"))
+
+        candidate = _super("[SUPER] Data Cardinality Defense Suite")
+        accepted, reason = await should_accept(candidate, db)
+
+        assert not accepted, "Hyphen vs space variant of same keywords must be rejected"
+
+
+class TestListSuperIdeasSynthesisSuffixDedup:
+    """list_super_ideas must deduplicate by keyword base, not just parenthetical suffix."""
+
+    @pytest.mark.asyncio
+    async def test_same_keywords_different_synthesis_suffix_returns_one(self, db):
+        """'Well Known Defense Suite' vs 'Well Known Operations Center' → only one shown."""
+        await db.save_idea(_super("[SUPER] Well Known Defense Suite", score=0.91))
+        await db.save_idea(_super("[SUPER] Well Known Operations Center", score=0.92))
+
+        result = await db.list_super_ideas()
+        assert len(result) == 1, f"Expected 1, got {len(result)}: {[r.name for r in result]}"
+        assert result[0].feasibility_score == 0.92
+
+    @pytest.mark.asyncio
+    async def test_hyphenated_name_deduped_with_space_variant(self, db):
+        """'Data-Cardinality Defense Suite' and 'Data Cardinality Operations Center' → one."""
+        await db.save_idea(_super("[SUPER] Data-Cardinality Defense Suite", score=0.90))
+        await db.save_idea(_super("[SUPER] Data Cardinality Operations Center", score=0.91))
+
+        result = await db.list_super_ideas()
+        assert len(result) == 1
+        assert result[0].feasibility_score == 0.91
+
+    @pytest.mark.asyncio
+    async def test_genuinely_different_keywords_both_shown(self, db):
+        """'Well Known Defense Suite' and 'Certificate Pinning Observatory' are different."""
+        await db.save_idea(_super("[SUPER] Well Known Defense Suite"))
+        await db.save_idea(_super("[SUPER] Certificate Pinning Observatory"))
+
+        result = await db.list_super_ideas()
+        assert len(result) == 2
+
+    @pytest.mark.asyncio
+    async def test_ampersand_variant_deduplicated(self, db):
+        """'Multi & Control Defense Suite' and 'Multi Control Command Center' → one."""
+        await db.save_idea(_super("[SUPER] Multi & Control Defense Suite", score=0.92))
+        await db.save_idea(_super("[SUPER] Multi Control Command Center", score=0.91))
+
+        result = await db.list_super_ideas()
+        assert len(result) == 1
+        assert result[0].feasibility_score == 0.92
+
+
+class TestSuperBaseNameExtraction:
+    """_super_base_name must strip synthesis suffixes and normalize hyphens."""
+
+    def test_strips_parenthetical_suffix(self):
+        from project_forge.engine.dedup import _super_base_name
+        assert _super_base_name("[SUPER] Threat Engine (Attack & Defense)") == "threat engine"
+
+    def test_strips_synthesis_suffix_operations_center(self):
+        from project_forge.engine.dedup import _super_base_name
+        assert _super_base_name("[SUPER] Well Known Operations Center") == "well known"
+
+    def test_strips_synthesis_suffix_defense_suite(self):
+        from project_forge.engine.dedup import _super_base_name
+        assert _super_base_name("[SUPER] Well Known Defense Suite") == "well known"
+
+    def test_normalizes_hyphen_to_space(self):
+        from project_forge.engine.dedup import _super_base_name
+        result = _super_base_name("[SUPER] Data-Cardinality Operations Center")
+        assert result == "data cardinality"
+        assert "-" not in result
+
+    def test_strips_observatory_suffix(self):
+        from project_forge.engine.dedup import _super_base_name
+        assert _super_base_name("[SUPER] Certificate-Pinning Observatory") == "certificate pinning"
+
+    def test_simple_name_unchanged(self):
+        from project_forge.engine.dedup import _super_base_name
+        result = _super_base_name("[SUPER] Threat Engine")
+        assert result == "threat engine"
+
+    def test_normalizes_ampersand_to_space(self):
+        from project_forge.engine.dedup import _super_base_name
+        result = _super_base_name("[SUPER] Multi & Control Defense Suite")
+        assert result == "multi control"
+        assert "&" not in result
+
+    def test_ampersand_variant_equals_space_variant(self):
+        from project_forge.engine.dedup import _super_base_name
+        with_amp = _super_base_name("[SUPER] Certificate & Pinning Observatory")
+        without_amp = _super_base_name("[SUPER] Certificate Pinning Observatory")
+        assert with_amp == without_amp
+
+
+class TestStatsCountMatchesDisplay:
+    """stats.super_ideas must equal len(list_super_ideas()) — no raw vs deduped mismatch."""
+
+    @pytest.mark.asyncio
+    async def test_stats_count_matches_deduped_display(self, db):
+        """When variants exist, stats count must match the deduped display count."""
+        await db.save_idea(_super("[SUPER] Well Known Defense Suite", score=0.91))
+        await db.save_idea(_super("[SUPER] Well Known Operations Center", score=0.92))
+        await db.save_idea(_super("[SUPER] Certificate Pinning Observatory", score=0.89))
+
+        stats = await db.get_stats()
+        displayed = await db.list_super_ideas()
+
+        assert stats["super_ideas"] == len(displayed), (
+            f"Stats shows {stats['super_ideas']} but display shows {len(displayed)} — mismatch"
+        )
+
+    @pytest.mark.asyncio
+    async def test_stats_count_no_variants(self, db):
+        """Without variants, stats and display count must agree."""
+        await db.save_idea(_super("[SUPER] Threat Engine"))
+        await db.save_idea(_super("[SUPER] Privacy Platform"))
+
+        stats = await db.get_stats()
+        displayed = await db.list_super_ideas()
+
+        assert stats["super_ideas"] == len(displayed) == 2
+
+
+class TestSuperIdeaNameNoHyphens:
+    """_dynamic_cluster_name must never return hyphenated names."""
+
+    def test_no_hyphens_in_generated_names(self):
+        """Run many name generations — none should contain a hyphen from the template."""
+        from project_forge.engine.super_ideas import _dynamic_cluster_name
+        from project_forge.models import Idea, IdeaCategory
+
+        def _dummy_idea(name: str) -> Idea:
+            return Idea(
+                name=name,
+                tagline="certificate pinning: healthcare",
+                description="Desc.",
+                category=IdeaCategory.SECURITY_TOOL,
+                market_analysis="Market.",
+                feasibility_score=0.8,
+                mvp_scope="MVP.",
+                tech_stack=["python"],
+            )
+
+        ideas = [
+            _dummy_idea("Certificate Pinning Tool"),
+            _dummy_idea("Data Cardinality Scanner"),
+            _dummy_idea("Well Known Security Scanner"),
+        ]
+        categories = frozenset({IdeaCategory.SECURITY_TOOL, IdeaCategory.CRYPTO_INFRASTRUCTURE})
+
+        # Run 50 times to cover random.choice
+        hyphenated = []
+        for _ in range(50):
+            name = _dynamic_cluster_name(ideas, categories)
+            # Strip the [SUPER] prefix if present and check for hyphens in keyword part
+            core = name.replace("[SUPER] ", "")
+            # A hyphen between two title-cased words is the bad pattern
+            import re
+            if re.search(r"[A-Z][a-z]+-[A-Z][a-z]+", core):
+                hyphenated.append(name)
+
+        assert hyphenated == [], (
+            f"_dynamic_cluster_name produced hyphenated names: {hyphenated}"
+        )

@@ -288,6 +288,69 @@ class TestIdeaFromUrl:
             idea = await generate_idea_from_url(content)
             assert idea.source_url == "https://feistyduck.com/article"
 
+    @pytest.mark.asyncio
+    async def test_generate_idea_heuristic_fallback_when_no_api_key(self):
+        """When ANTHROPIC_API_KEY is not set, use heuristic extraction without API call."""
+        from project_forge.config import settings
+        from project_forge.engine.url_ingest import UrlContent, generate_idea_from_url
+
+        content = UrlContent(
+            url="https://ghost.oxen.ai/merkle-tree-101/",
+            domain="ghost.oxen.ai",
+            title="Merkle Tree 101",
+            text=(
+                "A Merkle tree is a hash tree where every leaf node is labelled with the hash "
+                "of a data block. Used in Git, Bitcoin, and certificate transparency logs."
+            ),
+        )
+
+        original_key = settings.anthropic_api_key
+        settings.anthropic_api_key = ""
+        try:
+            env_without_key = {k: v for k, v in __import__("os").environ.items() if k != "ANTHROPIC_API_KEY"}
+            with patch.dict("os.environ", env_without_key, clear=True):
+                # IdeaGenerator must NOT be instantiated (would fail with empty key)
+                with patch("project_forge.engine.generator.IdeaGenerator") as mock_gen:
+                    idea = await generate_idea_from_url(content)
+                    mock_gen.assert_not_called()
+        finally:
+            settings.anthropic_api_key = original_key
+
+        assert idea is not None
+        assert idea.name
+        assert idea.tagline
+        assert idea.category is not None
+        assert idea.source_url is not None
+
+    @pytest.mark.asyncio
+    async def test_heuristic_fallback_picks_crypto_category(self):
+        """Heuristic should detect crypto-related content and pick crypto-infrastructure."""
+        from project_forge.engine.url_ingest import UrlContent, _heuristic_idea_from_content
+
+        content = UrlContent(
+            url="https://example.com/tls-merkle",
+            domain="example.com",
+            title="TLS and Merkle Trees",
+            text="Certificate transparency uses merkle trees. TLS crypto improvements with hash chains.",
+        )
+        idea = _heuristic_idea_from_content(content)
+        assert idea.category.value == "crypto-infrastructure"
+
+    @pytest.mark.asyncio
+    async def test_heuristic_fallback_sets_source_url(self):
+        """Heuristic idea must record the source URL."""
+        from project_forge.engine.url_ingest import UrlContent, _heuristic_idea_from_content
+
+        content = UrlContent(
+            url="https://example.com/article?utm_source=test",
+            domain="example.com",
+            title="Security Article",
+            text="Information about security vulnerabilities.",
+        )
+        idea = _heuristic_idea_from_content(content)
+        # Tracking params stripped
+        assert "utm_source" not in idea.source_url
+
 
 # === DATABASE: RESOURCE CRUD ===
 

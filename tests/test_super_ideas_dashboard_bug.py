@@ -101,6 +101,65 @@ class TestSuperIdeasDashboardBug:
         assert all(s.name.startswith("[SUPER]") for s in supers)
 
 
+class TestSuperIdeasDisplayLimit:
+    """Dashboard must show ALL active super ideas — not just the first 6."""
+
+    @pytest_asyncio.fixture
+    async def client_seven_supers(self, tmp_path):
+        db.db_path = tmp_path / "test_super_limit.db"
+        await db.connect()
+        sql = (
+            "INSERT INTO ideas (id, name, tagline, description, category, market_analysis, "
+            "feasibility_score, mvp_scope, tech_stack, generated_at, status) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+        )
+        for i in range(7):
+            await db.db.execute(
+                sql,
+                (
+                    f"super-limit-{i}",
+                    f"[SUPER] Cluster Project {i}",
+                    f"Super tagline {i}: domain",
+                    f"Super description {i}",
+                    "security-tool",
+                    "N/A",
+                    0.9,
+                    "N/A",
+                    "[]",
+                    f"2025-01-0{i + 1}T00:00:00",
+                    "new",
+                ),
+            )
+        await db.db.commit()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client
+        await db.close()
+
+    @pytest.mark.asyncio
+    async def test_all_seven_super_ideas_rendered(self, client_seven_supers):
+        """When 7 active super ideas exist, all 7 must appear in the dashboard.
+
+        Regression: list_super_ideas(limit=6) in the route handler silently
+        truncated the display list while stats.super_ideas correctly reported 7.
+        """
+        resp = await client_seven_supers.get("/")
+        assert resp.status_code == 200
+        rendered = sum(f"Cluster Project {i}" in resp.text for i in range(7))
+        assert rendered == 7, (
+            f"Expected 7 super idea cards, got {rendered}. "
+            "Route handler likely has list_super_ideas(limit=6) — remove the cap."
+        )
+
+    @pytest.mark.asyncio
+    async def test_stat_count_matches_display_count(self, client_seven_supers):
+        """stats.super_ideas (stat card) must equal the number of rendered cards."""
+        resp = await client_seven_supers.get("/")
+        assert ">7<" in resp.text, "Stat card must show 7 super ideas"
+        rendered = sum(f"Cluster Project {i}" in resp.text for i in range(7))
+        assert rendered == 7, f"Dashboard tab must render all 7, got {rendered}"
+
+
 class TestStatsAutoRefreshIndices:
     """app.js auto-refresh must update all 5 stat cards with correct values."""
 
