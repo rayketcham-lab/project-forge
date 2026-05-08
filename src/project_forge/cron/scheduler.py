@@ -3,13 +3,16 @@
 import logging
 import random
 import tempfile
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from project_forge.config import settings
 from project_forge.engine.dedup import filter_and_save
 from project_forge.engine.generator import IdeaGenerator
 from project_forge.engine.quality_review import review_idea
 from project_forge.engine.scorer import is_high_value, score_idea
+from project_forge.feeds import get_external_seeds
+from project_forge.feeds.cache import FeedCache
 from project_forge.models import GenerationRun, Idea, IdeaCategory
 from project_forge.scaffold.builder import build_scaffold_spec, render_scaffold
 from project_forge.scaffold.github import create_issue, create_label, create_repo, push_initial_commit
@@ -18,6 +21,27 @@ from project_forge.storage.db import Database
 logger = logging.getLogger(__name__)
 
 ALL_CATEGORIES = list(IdeaCategory)
+
+
+def _feeds_dir() -> Path:
+    """Where feed caches live. Co-located with the SQLite DB."""
+    return settings.db_path.parent / "feeds"
+
+
+def _load_external_seeds() -> list[dict]:
+    """Aggregate cached items across all feeds; empty list when none fresh."""
+    base = _feeds_dir()
+    if not base.exists():
+        return []
+    nvd_cache = FeedCache(base / "nvd.json", ttl=timedelta(hours=12))
+    arxiv_cache = FeedCache(base / "arxiv.json", ttl=timedelta(hours=48))
+    ietf_cache = FeedCache(base / "ietf.json", ttl=timedelta(hours=24))
+    return get_external_seeds(
+        nvd_cache=nvd_cache,
+        arxiv_cache=arxiv_cache,
+        ietf_cache=ietf_cache,
+        max_per_feed=3,
+    )
 
 
 async def pick_category(db: Database) -> IdeaCategory:
@@ -96,6 +120,11 @@ async def generate_and_store(db: Database, generator: IdeaGenerator) -> Idea:
 
     filter_summary = await build_filter_summary(db)
 
+    # Pull fresh external seed material (NVD CVEs, arXiv papers, IETF drafts)
+    # from on-disk feed caches. Empty when caches are stale/missing — feed
+    # refresh is a separate cron concern.
+    external_seeds = _load_external_seeds()
+
     run = GenerationRun(category=category)
 
     try:
@@ -106,6 +135,7 @@ async def generate_and_store(db: Database, generator: IdeaGenerator) -> Idea:
             use_combinatoric=use_combinatoric,
             portfolio_context=portfolio_context,
             filter_summary=filter_summary,
+            external_seeds=external_seeds,
         )
         result = review_idea(idea)
         if not result.passed:

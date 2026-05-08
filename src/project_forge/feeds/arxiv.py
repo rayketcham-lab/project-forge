@@ -1,16 +1,24 @@
-"""arXiv Atom feed parser for the cs.CR security category.
+"""arXiv Atom feed parser + fetcher for the cs.CR security category.
 
 The arXiv API returns Atom XML; we parse it with the stdlib (no extra deps).
+The fetcher writes to FeedCache and degrades to empty list on network failure.
 """
 
 from __future__ import annotations
 
 import logging
 import xml.etree.ElementTree as ET
+from typing import TYPE_CHECKING
+
+from project_forge.feeds._http import http_get_bytes as _http_get_bytes
+
+if TYPE_CHECKING:
+    from project_forge.feeds.cache import FeedCache
 
 logger = logging.getLogger(__name__)
 
 _NS = "{http://www.w3.org/2005/Atom}"
+ARXIV_API_URL = "http://export.arxiv.org/api/query"
 
 
 def parse_arxiv_atom(xml_text: str) -> list[dict]:
@@ -43,3 +51,24 @@ def parse_arxiv_atom(xml_text: str) -> list[dict]:
             "ts": (published_elem.text if published_elem is not None and published_elem.text else "").strip(),
         })
     return items
+
+
+def fetch(*, cache: FeedCache, category: str = "cs.CR", max_results: int = 25) -> list[dict]:
+    """Fetch recent arXiv papers in `category` and write to cache."""
+    url = (
+        f"{ARXIV_API_URL}?search_query=cat:{category}"
+        f"&sortBy=submittedDate&sortOrder=descending&max_results={max_results}"
+    )
+    try:
+        raw = _http_get_bytes(url, timeout=15.0)
+    except OSError as exc:
+        logger.warning("arXiv fetch failed: %s", exc)
+        return []
+
+    items = parse_arxiv_atom(raw.decode("utf-8", errors="replace"))
+    cache.write(items)
+    return items
+
+
+def load(cache: FeedCache) -> list[dict] | None:
+    return cache.read()

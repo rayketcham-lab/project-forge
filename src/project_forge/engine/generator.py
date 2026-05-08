@@ -33,6 +33,7 @@ class IdeaGenerator:
         portfolio_context: str | None = None,
         *,
         filter_summary: dict | None = None,
+        external_seeds: list[dict] | None = None,
     ) -> Idea:
         if prompt_override is not None:
             prompt = prompt_override
@@ -44,6 +45,7 @@ class IdeaGenerator:
                 use_combinatoric=use_combinatoric,
                 portfolio_context=portfolio_context,
                 filter_summary=filter_summary,
+                external_seeds=external_seeds,
             )
 
         logger.info("Generating idea for category: %s", category.value)

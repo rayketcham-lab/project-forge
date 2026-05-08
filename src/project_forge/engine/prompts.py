@@ -27,7 +27,7 @@ Category description: {category_description}
 
 {diversity_section}
 
-{portfolio_section}{saturation_section}IMPORTANT CONSTRAINTS:
+{portfolio_section}{saturation_section}{external_signals_section}IMPORTANT CONSTRAINTS:
 - The idea must be DIFFERENT from these recently generated ideas: {recent_ideas}
 - Think about what's MISSING in the market, not what already exists
 - Consider the intersection of this category with unexpected domains
@@ -116,6 +116,23 @@ def build_url_ingest_prompt(
     )
 
 
+def _format_external_signals_section(external_seeds: list[dict] | None) -> str:
+    """Format the external-signals block. Empty string when no seeds."""
+    if not external_seeds:
+        return ""
+
+    from project_forge.feeds import format_for_prompt
+
+    rendered = format_for_prompt(external_seeds, max_items=5)
+    if not rendered:
+        return ""
+    return (
+        "EXTERNAL SIGNALS — recent items from CVE feeds, arXiv, IETF drafts. "
+        "These are FRESH starting points; the gap they point to is real and current.\n"
+        f"{rendered}\n\n"
+    )
+
+
 def _format_saturation_section(filter_summary: dict | None) -> str:
     """Format the saturation block. Empty string when no useful data."""
     if not filter_summary:
@@ -145,6 +162,7 @@ def build_generation_prompt(
     portfolio_context: str | None = None,
     *,
     filter_summary: dict | None = None,
+    external_seeds: list[dict] | None = None,
 ) -> str:
     seeds = CATEGORY_SEEDS[category]
     diversity_section = ""
@@ -194,6 +212,7 @@ def build_generation_prompt(
         diversity_section=diversity_section,
         portfolio_section=portfolio_section,
         saturation_section=_format_saturation_section(filter_summary),
+        external_signals_section=_format_external_signals_section(external_seeds),
         recent_ideas=recent_str,
         category_value=category.value,
     )
