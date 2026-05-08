@@ -27,8 +27,7 @@ Category description: {category_description}
 
 {diversity_section}
 
-{portfolio_section}
-IMPORTANT CONSTRAINTS:
+{portfolio_section}{saturation_section}IMPORTANT CONSTRAINTS:
 - The idea must be DIFFERENT from these recently generated ideas: {recent_ideas}
 - Think about what's MISSING in the market, not what already exists
 - Consider the intersection of this category with unexpected domains
@@ -117,12 +116,35 @@ def build_url_ingest_prompt(
     )
 
 
+def _format_saturation_section(filter_summary: dict | None) -> str:
+    """Format the saturation block. Empty string when no useful data."""
+    if not filter_summary:
+        return ""
+
+    saturated = filter_summary.get("saturated_concepts") or []
+    high_rate = filter_summary.get("high_filter_rate_categories") or []
+    if not saturated and not high_rate:
+        return ""
+
+    lines = ["SATURATION SIGNAL — derived from rejected ideas (avoid these)."]
+    if saturated:
+        lines.append(
+            f"Saturated concepts (do NOT center your idea on these): {', '.join(saturated)}",
+        )
+    if high_rate:
+        rate_strs = [f"{cat} ({rate:.0%})" for cat, rate in high_rate]
+        lines.append(f"High filter-rate categories: {', '.join(rate_strs)}")
+    return "\n".join(lines) + "\n\n"
+
+
 def build_generation_prompt(
     category: IdeaCategory,
     recent_ideas: list[str],
     use_contrarian: bool = False,
     use_combinatoric: bool = False,
     portfolio_context: str | None = None,
+    *,
+    filter_summary: dict | None = None,
 ) -> str:
     seeds = CATEGORY_SEEDS[category]
     diversity_section = ""
@@ -171,6 +193,7 @@ def build_generation_prompt(
         category_description=seeds["description"],
         diversity_section=diversity_section,
         portfolio_section=portfolio_section,
+        saturation_section=_format_saturation_section(filter_summary),
         recent_ideas=recent_str,
         category_value=category.value,
     )
