@@ -18,6 +18,7 @@ from project_forge.engine.dedup import filter_and_save
 from project_forge.engine.scorer import score_summary
 from project_forge.models import (
     Challenge,
+    Idea,
     IdeaCategory,
     IdeaDenial,
     IdeaStatus,
@@ -55,19 +56,19 @@ async def dashboard(request: Request):
 
     # Per-vertical counts + top idea per vertical. Sample a wide pool because
     # vertical inference is content-based (not indexed); 500 captures the
-    # high-feasibility tail well enough for the panel.
+    # high-feasibility tail well enough for the panel. Single-pass grouping
+    # — call infer_verticals ONCE per idea (was N×V → 6s, now N → ~600ms).
     pool = await db.list_ideas(limit=500)
+    by_vertical: dict[str, list[Idea]] = {slug: [] for slug in KNOWN_VERTICALS}
+    for idea in pool:
+        for slug in infer_verticals(idea):
+            by_vertical[slug].append(idea)
     vertical_data = []
-    for slug in sorted(KNOWN_VERTICALS):
-        matches = [i for i in pool if slug in infer_verticals(i)]
+    for slug, matches in by_vertical.items():
         if not matches:
             continue
         matches.sort(key=lambda i: i.feasibility_score, reverse=True)
-        vertical_data.append({
-            "slug": slug,
-            "count": len(matches),
-            "top": matches[0],
-        })
+        vertical_data.append({"slug": slug, "count": len(matches), "top": matches[0]})
     vertical_data.sort(key=lambda v: v["count"], reverse=True)
 
     return templates.TemplateResponse(

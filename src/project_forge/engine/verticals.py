@@ -86,8 +86,16 @@ def _haystack(idea: Idea) -> str:
     return f"{idea.name}\n{idea.tagline}\n{idea.description}"
 
 
-def infer_verticals(idea: Idea) -> list[str]:
-    """Return the list of vertical slugs an idea matches, sorted alphabetically."""
+# Process-level cache: ideas are effectively immutable for the inference
+# inputs (name + tagline + description). Cache key = idea.id; eviction is
+# size-bounded so a runaway DB doesn't bloat memory. Without this, the
+# dashboard's "Browse by Industry" panel takes ~600ms per request to run
+# 500 ideas × 9 verticals × ~10 patterns each through regex.
+_INFER_CACHE: dict[str, list[str]] = {}
+_INFER_CACHE_MAX = 8192
+
+
+def _infer_uncached(idea: Idea) -> list[str]:
     text = _haystack(idea)
     hits: list[str] = []
     for slug, patterns in _VERTICAL_PATTERNS.items():
@@ -98,8 +106,44 @@ def infer_verticals(idea: Idea) -> list[str]:
     return sorted(hits)
 
 
+def infer_verticals(idea: Idea) -> list[str]:
+    """Return the list of vertical slugs an idea matches, sorted alphabetically.
+
+    Cached on idea.id. The cache is fine for normal browsing traffic; if
+    an idea's name/tagline/description is mutated, call invalidate_vertical_cache.
+    """
+    cache_key = idea.id
+    cached = _INFER_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    result = _infer_uncached(idea)
+
+    if len(_INFER_CACHE) >= _INFER_CACHE_MAX:
+        # Simple FIFO eviction — drop the oldest 1/8 of entries.
+        for k in list(_INFER_CACHE.keys())[: _INFER_CACHE_MAX // 8]:
+            _INFER_CACHE.pop(k, None)
+    _INFER_CACHE[cache_key] = result
+    return result
+
+
+def invalidate_vertical_cache(idea_id: str | None = None) -> None:
+    """Drop a cached inference result. Pass None to clear the whole cache."""
+    if idea_id is None:
+        _INFER_CACHE.clear()
+    else:
+        _INFER_CACHE.pop(idea_id, None)
+
+
 def matches_vertical(idea: Idea, vertical: str) -> bool:
-    """True iff the idea matches the given vertical slug."""
-    if vertical not in KNOWN_VERTICALS:
+    """True iff the idea matches the given vertical slug.
+
+    Short-circuits on first matching pattern — does NOT compute the full
+    vertical set for this idea. Use this when filtering by a single
+    vertical; use infer_verticals when you need all matches.
+    """
+    patterns = _VERTICAL_PATTERNS.get(vertical)
+    if not patterns:
         return False
-    return vertical in infer_verticals(idea)
+    text = _haystack(idea)
+    return any(p.search(text) for p in patterns)
