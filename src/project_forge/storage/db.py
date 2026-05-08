@@ -52,6 +52,7 @@ CREATE INDEX IF NOT EXISTS idx_ideas_category ON ideas(category);
 CREATE INDEX IF NOT EXISTS idx_ideas_status ON ideas(status);
 CREATE INDEX IF NOT EXISTS idx_ideas_score ON ideas(feasibility_score);
 CREATE INDEX IF NOT EXISTS idx_ideas_generated ON ideas(generated_at);
+CREATE INDEX IF NOT EXISTS idx_ideas_status_category ON ideas(status, category);
 
 CREATE TABLE IF NOT EXISTS generation_runs (
     id TEXT PRIMARY KEY,
@@ -122,6 +123,8 @@ CREATE TABLE IF NOT EXISTS filtered_ideas (
 
 CREATE INDEX IF NOT EXISTS idx_filtered_category ON filtered_ideas(idea_category);
 CREATE INDEX IF NOT EXISTS idx_filtered_reason ON filtered_ideas(filter_reason);
+CREATE INDEX IF NOT EXISTS idx_filtered_filtered_at ON filtered_ideas(filtered_at);
+CREATE INDEX IF NOT EXISTS idx_filtered_similar_to ON filtered_ideas(similar_to_id) WHERE similar_to_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS resources (
     id TEXT PRIMARY KEY,
@@ -904,6 +907,71 @@ class Database:
 
         await self.db.commit()
         return archived
+
+    async def verify_integrity(self) -> dict[str, list[str]]:
+        """Audit cross-table invariants. Returns a violation report.
+
+        Buckets:
+        - orphaned_filtered_similar_to: filtered_ideas.similar_to_id points at a
+          missing/deleted idea. Pollutes saturation telemetry.
+        - duplicate_active_content_hash: two non-archived/non-rejected ideas share
+          the same content_hash. Should be impossible due to unique partial index,
+          but caught here in case the index was dropped or migration added rows.
+        - super_idea_base_collisions: two active [SUPER] ideas normalize to the
+          same _super_base_name. Means dedup escaped during generation.
+
+        Empty lists for each bucket = clean DB.
+        """
+        from project_forge.engine.dedup import _super_base_name
+
+        report: dict[str, list[str]] = {
+            "orphaned_filtered_similar_to": [],
+            "duplicate_active_content_hash": [],
+            "super_idea_base_collisions": [],
+        }
+
+        # 1. Orphaned filtered_ideas.similar_to_id
+        cursor = await self.db.execute(
+            "SELECT f.id, f.similar_to_id FROM filtered_ideas f "
+            "WHERE f.similar_to_id IS NOT NULL "
+            "AND NOT EXISTS (SELECT 1 FROM ideas i WHERE i.id = f.similar_to_id)",
+        )
+        for row in await cursor.fetchall():
+            report["orphaned_filtered_similar_to"].append(
+                f"{row[0]} -> {row[1]}",
+            )
+
+        # 2. Duplicate active content_hash
+        cursor = await self.db.execute(
+            "SELECT content_hash, COUNT(*) AS n, GROUP_CONCAT(id) AS ids "
+            "FROM ideas "
+            "WHERE content_hash IS NOT NULL "
+            "AND status NOT IN ('rejected', 'archived') "
+            "GROUP BY content_hash HAVING n > 1",
+        )
+        for row in await cursor.fetchall():
+            report["duplicate_active_content_hash"].append(
+                f"hash={row[0]} ids={row[2]}",
+            )
+
+        # 3. Super-idea base-name collisions among active supers
+        cursor = await self.db.execute(
+            "SELECT id, name FROM ideas "
+            "WHERE name LIKE '[SUPER]%' "
+            "AND status NOT IN ('rejected', 'archived')",
+        )
+        rows = await cursor.fetchall()
+        seen: dict[str, list[str]] = {}
+        for row in rows:
+            base = _super_base_name(row[1])
+            seen.setdefault(base, []).append(row[0])
+        for base, ids in seen.items():
+            if len(ids) > 1:
+                report["super_idea_base_collisions"].append(
+                    f"base='{base}' ids={','.join(ids)}",
+                )
+
+        return report
 
     # === FILTERED IDEAS (audit trail) ===
 
