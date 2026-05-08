@@ -9,6 +9,47 @@
     </div>
 </section>
 
+{% if heartbeat %}
+<section class="section">
+    <div class="container">
+        <div class="heartbeat-panel">
+            <div class="heartbeat-header">
+                <h3>Engine Activity</h3>
+                <span class="heartbeat-now">as of {{ heartbeat.now[:19] }}Z</span>
+            </div>
+            <div class="heartbeat-grid">
+                <div class="heartbeat-stat">
+                    <div class="heartbeat-num">{{ heartbeat.accepted_24h }}</div>
+                    <div class="heartbeat-label">Accepted (24h)</div>
+                </div>
+                <div class="heartbeat-stat">
+                    <div class="heartbeat-num heartbeat-num-dim">{{ heartbeat.filtered_24h }}</div>
+                    <div class="heartbeat-label">Dedup-filtered (24h)</div>
+                </div>
+                <div class="heartbeat-stat">
+                    <div class="heartbeat-label">Last super idea</div>
+                    <div class="heartbeat-when">{{ heartbeat.last_super[:19] if heartbeat.last_super else 'never' }}</div>
+                </div>
+            </div>
+            {% if heartbeat.recent_runs %}
+            <details class="heartbeat-runs">
+                <summary>Last {{ heartbeat.recent_runs|length }} generation runs</summary>
+                <ul>
+                    {% for run in heartbeat.recent_runs %}
+                    <li>
+                        <code>{{ run.when[:19] }}</code>
+                        <span class="badge badge-{{ run.category }}">{{ run.category }}</span>
+                        {% if run.ok %}<span class="run-ok">ok</span>{% else %}<span class="run-err">err: {{ (run.error or '')[:60] }}</span>{% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </details>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
 <section class="stats-section">
     <div class="container">
         <div class="stats-grid">

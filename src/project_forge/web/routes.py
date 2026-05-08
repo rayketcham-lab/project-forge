@@ -396,6 +396,8 @@ async def scaffold_idea(
 @router.get("/thinktank", response_class=HTMLResponse)
 async def thinktank_page(request: Request):
     """Think Tank — Forge Lab (AI proposals) + Roadmap (GitHub issues)."""
+    from datetime import UTC, datetime
+
     from project_forge.scaffold.github import list_self_issues
 
     # Roadmap: GitHub issues
@@ -415,6 +417,50 @@ async def thinktank_page(request: Request):
     promoted = [i for i in all_si if i.status == "approved"]
     rejected = [i for i in all_si if i.status == "rejected"]
 
+    # Engine heartbeat: prove the cron is alive. Show recent generation runs,
+    # recent filter activity, and the last super-idea event so the page
+    # doesn't read as "nothing's happening" when the engine is busy upstream.
+    cursor = await db.db.execute(
+        "SELECT category, started_at, success, error FROM generation_runs "
+        "ORDER BY started_at DESC LIMIT 5",
+    )
+    recent_runs = []
+    for row in await cursor.fetchall():
+        recent_runs.append({
+            "category": row[0],
+            "when": row[1],
+            "ok": bool(row[2]),
+            "error": row[3],
+        })
+
+    cursor = await db.db.execute(
+        "SELECT generated_at FROM ideas WHERE name LIKE '[SUPER]%%' "
+        "ORDER BY generated_at DESC LIMIT 1",
+    )
+    row = await cursor.fetchone()
+    last_super = row[0] if row else None
+
+    cursor = await db.db.execute(
+        "SELECT COUNT(*) FROM filtered_ideas "
+        "WHERE filtered_at >= datetime('now', '-1 day')",
+    )
+    row = await cursor.fetchone()
+    filtered_24h = row[0] if row else 0
+
+    cursor = await db.db.execute(
+        "SELECT COUNT(*) FROM ideas WHERE generated_at >= datetime('now', '-1 day')",
+    )
+    row = await cursor.fetchone()
+    accepted_24h = row[0] if row else 0
+
+    heartbeat = {
+        "now": datetime.now(UTC).isoformat(),
+        "recent_runs": recent_runs,
+        "last_super": last_super,
+        "filtered_24h": filtered_24h,
+        "accepted_24h": accepted_24h,
+    }
+
     return templates.TemplateResponse(
         request,
         "thinktank.html",
@@ -430,6 +476,7 @@ async def thinktank_page(request: Request):
             "rejected": rejected,
             "rejected_count": len(rejected),
             "error": error,
+            "heartbeat": heartbeat,
         },
     )
 
