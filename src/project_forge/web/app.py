@@ -26,11 +26,17 @@ STATIC_DIR = WEB_DIR / "static"
 db = Database(settings.db_path)
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
-# Ephemeral dashboard token — changes on every restart, never stored.
-# This allows dashboard JS to make POST requests without exposing the real API token.
+# Ephemeral dashboard token — fresh on each PROCESS start, but persisted
+# across uvicorn --reload module reimports via process env. Without this,
+# every file save would regenerate the token, leaving open browser tabs
+# 401-ing on their next POST (issue-reporter, approve, scaffold, etc.)
+# until the user refreshed the page.
+import os  # noqa: E402
 import secrets  # noqa: E402
 
-_dashboard_token = secrets.token_urlsafe(32)
+_DASHBOARD_TOKEN_ENV = "FORGE_DASHBOARD_TOKEN_RUNTIME"  # noqa: S105
+_dashboard_token = os.environ.get(_DASHBOARD_TOKEN_ENV) or secrets.token_urlsafe(32)
+os.environ[_DASHBOARD_TOKEN_ENV] = _dashboard_token
 templates.env.globals["dashboard_token"] = _dashboard_token
 
 
