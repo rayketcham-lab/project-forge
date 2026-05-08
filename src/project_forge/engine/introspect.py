@@ -2,14 +2,35 @@
 
 Gathers context about the project's own codebase, tests, and open issues,
 then builds a prompt that asks Claude to suggest ONE self-improvement idea.
+
+Modes:
+- 'code-fix' (default): patches lint/test/UX bugs in any file.
+- 'generation': patches idea-generation logic only, must declare a target
+  metric. Powered by engine/telemetry.py signals.
 """
+
+from __future__ import annotations
 
 import json
 import logging
+import re
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from project_forge.models import Idea
+    from project_forge.storage.db import Database
 
 logger = logging.getLogger(__name__)
+
+GENERATION_FILES = (
+    "engine/prompts.py",
+    "engine/categories.py",
+    "engine/super_ideas.py",
+    "engine/router.py",
+    "engine/dedup.py",
+)
 
 # Root of the project relative to this file: src/project_forge/engine/ → ../../..
 _PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
@@ -174,16 +195,156 @@ The feasibility_score should reflect how quickly this can be implemented (0.7–
 """
 
 
-def build_introspection_prompt(context: dict, recent_improvements: list[str]) -> str:
+async def gather_generation_signals(db: Database) -> dict:
+    """Pull telemetry into a structured dict for the generation-mode prompt.
+
+    Each value is the raw output from engine/telemetry; the prompt builder
+    is responsible for formatting.
+    """
+    from project_forge.engine import telemetry
+
+    return {
+        "filter_rate_by_category": await telemetry.filter_rate_by_category(db, days=7),
+        "saturation_per_concept": await telemetry.saturation_per_concept(db, days=30, top_n=10),
+        "novelty_trend": await telemetry.novelty_trend(db, days=14),
+        "diversity_lever_usage": await telemetry.diversity_lever_usage(db, days=7),
+        "coverage_gaps": await telemetry.coverage_gaps(db, threshold=20),
+    }
+
+
+def _format_generation_signals(signals: dict) -> str:
+    lines = []
+
+    rates = signals.get("filter_rate_by_category", {})
+    if rates:
+        sorted_rates = sorted(rates.items(), key=lambda x: -x[1])
+        lines.append("### Filter rate by category (last 7d)")
+        for cat, rate in sorted_rates:
+            cat_val = cat.value if hasattr(cat, "value") else str(cat)
+            lines.append(f"- {cat_val}: {rate:.2%}")
+        lines.append("")
+
+    sat = signals.get("saturation_per_concept", [])
+    if sat:
+        lines.append("### Saturated concepts (last 30d, top 10)")
+        for word, count in sat:
+            lines.append(f"- {word}: {count} rejections")
+        lines.append("")
+
+    trend = signals.get("novelty_trend", [])
+    if trend:
+        lines.append("### Novelty trend — avg tagline-similarity per day (rising = worse)")
+        for day, score in trend[-7:]:
+            lines.append(f"- {day}: {score:.3f}")
+        lines.append("")
+
+    levers = signals.get("diversity_lever_usage", {})
+    if levers:
+        lines.append("### Diversity lever usage (last 7d)")
+        for lever, pct in levers.items():
+            lines.append(f"- {lever}: {pct:.0%}")
+        lines.append("")
+
+    gaps = signals.get("coverage_gaps", [])
+    if gaps:
+        lines.append("### Coverage gaps (categories with <20 active ideas)")
+        for cat in gaps:
+            cat_val = cat.value if hasattr(cat, "value") else str(cat)
+            lines.append(f"- {cat_val}")
+        lines.append("")
+
+    return "\n".join(lines) if lines else "(no signals yet)"
+
+
+_GENERATION_MODE_PROMPT_TEMPLATE = """\
+You are analyzing the Project Forge idea-generation engine to propose ONE \
+surgical patch that improves idea quality. You are NOT proposing a new project. \
+You are NOT fixing lint or unrelated bugs. You ARE editing the generation \
+pipeline so the next batch of ideas is better.
+
+## STRICT RULES
+1. Your patch MUST modify at least one file in:
+   - src/project_forge/engine/prompts.py
+   - src/project_forge/engine/categories.py
+   - src/project_forge/engine/super_ideas.py
+   - src/project_forge/engine/router.py
+   - src/project_forge/engine/dedup.py
+2. Your market_analysis MUST contain the phrase "Target metric:" followed by \
+   the specific metric you expect to move (e.g. \
+   "Target metric: filter_rate[security-tool] should drop").
+3. ONE hypothesis per patch. No shotgun changes across unrelated concerns.
+4. Use these files as reference for what's currently saturated/broken — see \
+   the telemetry signals below.
+
+## Generation Telemetry Signals
+{signals_section}
+
+## Project File Tree (focus on engine/)
+{file_tree_section}
+
+## Recently Suggested Improvements (avoid duplicates)
+{recent_improvements_section}
+
+## Recent Commits
+{commits_section}
+
+## Your Task
+
+Propose ONE concrete patch to the generation pipeline. Reference the \
+saturation, novelty, or coverage signal that motivates it.
+
+Respond with ONLY valid JSON in this exact format:
+{{
+    "name": "Short Patch Name (2-4 words)",
+    "tagline": "What metric moves and why (under 100 chars)",
+    "description": "What's broken in the current generation logic, which file(s) to edit, and the specific change",
+    "category": "self-improvement",
+    "market_analysis": "Target metric: <metric>. Current value: <x>. Expected after patch: <y>. Why.",
+    "feasibility_score": 0.85,
+    "mvp_scope": "Exact files to change in src/project_forge/engine/ and tests/",
+    "tech_stack": ["python", "pytest"],
+    "affected_files": ["src/project_forge/engine/prompts.py", "tests/test_prompts.py"]
+}}
+"""
+
+
+def build_introspection_prompt(
+    context: dict,
+    recent_improvements: list[str],
+    *,
+    mode: Literal["code-fix", "generation"] = "code-fix",
+    generation_signals: dict | None = None,
+) -> str:
     """Build a prompt string for Claude to suggest one self-improvement idea.
 
     Args:
         context: Dict returned by gather_self_context().
         recent_improvements: Names of recently suggested improvements to avoid duplicates.
+        mode: 'code-fix' (default) for the existing lint/test prompt, or
+            'generation' for the surgical idea-quality patch prompt.
+        generation_signals: Required when mode='generation'. Output of
+            gather_generation_signals(db).
 
     Returns:
         A formatted prompt string ready to send to Claude.
     """
+    if mode == "generation":
+        if generation_signals is None:
+            raise ValueError("mode='generation' requires generation_signals")
+        commits = context.get("recent_commits", [])
+        commits_section = "\n".join(f"- {c}" for c in commits) if commits else "(none)"
+        recent_section = "\n".join(f"- {n}" for n in recent_improvements) if recent_improvements else "(none yet)"
+        file_tree = context.get("file_tree", [])
+        engine_files = [f for f in file_tree if "engine/" in f]
+        file_tree_section = "\n".join(f"- {f}" for f in engine_files) if engine_files else "(not available)"
+        return _GENERATION_MODE_PROMPT_TEMPLATE.format(
+            signals_section=_format_generation_signals(generation_signals),
+            file_tree_section=file_tree_section,
+            recent_improvements_section=recent_section,
+            commits_section=commits_section,
+        )
+
+    # Default: code-fix mode (unchanged)
     # Issues section
     issues = context.get("open_issues", [])
     if issues:
@@ -258,5 +419,33 @@ def validate_self_improvement(idea) -> bool:
         if signal in text:
             logger.info("SI idea '%s' rejected: contains new-project signal %r", idea.name, signal)
             return False
+
+    return True
+
+
+_TARGET_METRIC_RE = re.compile(r"target\s*metric\s*:", re.IGNORECASE)
+
+
+def validate_generation_patch(idea: Idea) -> bool:
+    """Validate a generation-mode SI patch.
+
+    Requirements:
+    - market_analysis names a Target metric.
+    - description or mvp_scope mentions a file in GENERATION_FILES.
+
+    Returns True if valid; False otherwise (with a logged reason).
+    """
+    text = f"{idea.description}\n{idea.mvp_scope}\n{idea.market_analysis}"
+
+    if not _TARGET_METRIC_RE.search(idea.market_analysis or ""):
+        logger.info("Generation patch '%s' rejected: missing 'Target metric:' declaration", idea.name)
+        return False
+
+    if not any(path_hint in text for path_hint in GENERATION_FILES):
+        logger.info(
+            "Generation patch '%s' rejected: no generation file referenced (need one of %s)",
+            idea.name, GENERATION_FILES,
+        )
+        return False
 
     return True
