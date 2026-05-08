@@ -5,21 +5,36 @@
 <section class="page-header">
     <div class="container">
         <h1>Explore Ideas</h1>
-        <p class="page-subtitle">{{ total }} ideas to discover. Filter by category, status, or search.</p>
+        <p class="page-subtitle">{{ total }} ideas to discover. Drill down by tech category, industry vertical, or status.</p>
     </div>
 </section>
 
 <section class="section">
     <div class="container">
         <div class="filters-bar">
-            <div class="filter-chips">
-                <a href="/explore" class="chip {% if not category_filter %}chip-active{% endif %}">All</a>
-                {% for cat in categories %}
-                <a href="/explore?category={{ cat.value }}{% if status_filter %}&status={{ status_filter }}{% endif %}"
-                   class="chip chip-{{ cat.value }} {% if category_filter == cat.value %}chip-active{% endif %}">
-                    {{ cat.value }}
-                </a>
-                {% endfor %}
+            <div class="filter-row">
+                <span class="filter-row-label">Industry</span>
+                <div class="filter-chips">
+                    <a href="/explore{% if category_filter %}?category={{ category_filter }}{% endif %}" class="chip chip-vertical {% if not vertical_filter %}chip-active{% endif %}">All</a>
+                    {% for v in verticals %}
+                    <a href="/explore?vertical={{ v }}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+                       class="chip chip-vertical {% if vertical_filter == v %}chip-active{% endif %}">
+                        {{ v }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="filter-row">
+                <span class="filter-row-label">Tech</span>
+                <div class="filter-chips">
+                    <a href="/explore{% if vertical_filter %}?vertical={{ vertical_filter }}{% endif %}" class="chip {% if not category_filter %}chip-active{% endif %}">All</a>
+                    {% for cat in categories %}
+                    <a href="/explore?category={{ cat.value }}{% if vertical_filter %}&vertical={{ vertical_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+                       class="chip chip-{{ cat.value }} {% if category_filter == cat.value %}chip-active{% endif %}">
+                        {{ cat.value }}
+                    </a>
+                    {% endfor %}
+                </div>
             </div>
             <div class="filter-status">
                 <select id="explore-status-select" data-category="{{ category_filter or '' }}">
@@ -72,11 +87,11 @@
 
         <div class="pagination">
             {% if page > 1 %}
-            <a href="/explore?page={{ page - 1 }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}" class="btn btn-sm">&larr; Previous</a>
+            <a href="/explore?page={{ page - 1 }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if vertical_filter %}&vertical={{ vertical_filter }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}" class="btn btn-sm">&larr; Previous</a>
             {% endif %}
             <span class="page-info">Page {{ page }} of {{ pages }}</span>
             {% if page < pages %}
-            <a href="/explore?page={{ page + 1 }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}" class="btn btn-sm">Next &rarr;</a>
+            <a href="/explore?page={{ page + 1 }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if vertical_filter %}&vertical={{ vertical_filter }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}" class="btn btn-sm">Next &rarr;</a>
             {% endif %}
         </div>
         {% else %}

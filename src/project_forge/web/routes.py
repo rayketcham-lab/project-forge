@@ -37,6 +37,8 @@ router = APIRouter()
 
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
+    from project_forge.engine.verticals import KNOWN_VERTICALS, infer_verticals
+
     stats = await db.get_stats()
     all_top = await db.list_ideas(limit=20)
     all_top.sort(key=lambda i: i.feasibility_score, reverse=True)
@@ -50,6 +52,24 @@ async def dashboard(request: Request):
     categories = [
         {"name": cat, "count": cat_counts.get(cat, 0), "avg_score": cat_avgs.get(cat, 0)} for cat in cat_counts
     ]
+
+    # Per-vertical counts + top idea per vertical. Sample a wide pool because
+    # vertical inference is content-based (not indexed); 500 captures the
+    # high-feasibility tail well enough for the panel.
+    pool = await db.list_ideas(limit=500)
+    vertical_data = []
+    for slug in sorted(KNOWN_VERTICALS):
+        matches = [i for i in pool if slug in infer_verticals(i)]
+        if not matches:
+            continue
+        matches.sort(key=lambda i: i.feasibility_score, reverse=True)
+        vertical_data.append({
+            "slug": slug,
+            "count": len(matches),
+            "top": matches[0],
+        })
+    vertical_data.sort(key=lambda v: v["count"], reverse=True)
+
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -58,6 +78,7 @@ async def dashboard(request: Request):
             "top_ideas": top_ideas,
             "super_ideas": super_ideas,
             "categories": sorted(categories, key=lambda c: c["count"], reverse=True),
+            "verticals": vertical_data,
             "score_summary": score_summary,
         },
     )
@@ -68,15 +89,20 @@ async def explore(
     request: Request,
     category: str | None = None,
     status: str | None = None,
+    vertical: str | None = None,
     q: str | None = None,
     page: int = Query(default=1, ge=1),
 ):
+    from project_forge.engine.verticals import KNOWN_VERTICALS, matches_vertical
+
     status = status or None  # treat ?status= (empty string) as no filter
     if status is not None and status not in get_args(IdeaStatus):
         raise HTTPException(status_code=422, detail=f"Invalid status: {status!r}")
     typed_status: IdeaStatus | None = status  # type: ignore[assignment]
+    if vertical and vertical not in KNOWN_VERTICALS:
+        # Render empty result instead of 400 — keeps URL bookmarkable.
+        vertical = "__nomatch__"
     limit = 12
-    offset = (page - 1) * limit
     if category:
         try:
             cat = IdeaCategory(category)
@@ -84,12 +110,35 @@ async def explore(
             raise HTTPException(status_code=400, detail=f"Unknown category: {category!r}") from exc
     else:
         cat = None
-    if q:
-        ideas = await db.search_ideas(q, limit=limit, offset=offset)
-        total = len(await db.search_ideas(q, limit=10000))
+
+    if vertical:
+        # Vertical filter is inferred from text — applied in Python after fetch.
+        # Pull a wider window, filter, then paginate.
+        if q:
+            candidates = await db.search_ideas(q, limit=10000)
+        else:
+            candidates = await db.list_ideas(
+                status=typed_status, category=cat, limit=10000, offset=0,
+            )
+        if vertical == "__nomatch__":
+            filtered = []
+        else:
+            filtered = [i for i in candidates if matches_vertical(i, vertical)]
+        total = len(filtered)
+        offset = (page - 1) * limit
+        ideas = filtered[offset : offset + limit]
     else:
-        ideas = await db.list_ideas(status=typed_status, category=cat, limit=limit, offset=offset)
-        total = await db.count_ideas(status=typed_status)
+        offset = (page - 1) * limit
+        if q:
+            ideas = await db.search_ideas(q, limit=limit, offset=offset)
+            total = len(await db.search_ideas(q, limit=10000))
+        else:
+            ideas = await db.list_ideas(
+                status=typed_status, category=cat, limit=limit, offset=offset,
+            )
+            total = await db.count_ideas(status=typed_status)
+
+    # Pass canonical verticals through to the template for chip rendering
     return templates.TemplateResponse(
         request,
         "explore.html",
@@ -100,8 +149,10 @@ async def explore(
             "pages": max(1, (total + limit - 1) // limit),
             "status_filter": status,
             "category_filter": category,
+            "vertical_filter": (vertical if vertical != "__nomatch__" else None),
             "search_query": q or "",
             "categories": list(IdeaCategory),
+            "verticals": sorted(KNOWN_VERTICALS),
             "score_summary": score_summary,
         },
     )

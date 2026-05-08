@@ -419,6 +419,13 @@ a.stat-card:hover { transform: translateY(-3px); border-color: var(--accent); }
 }
 .chip:hover { border-color: var(--accent); color: var(--text) !important; }
 .chip-active { background: var(--accent); border-color: var(--accent); color: white !important; }
+.chip-vertical { font-style: italic; }
+.chip-vertical.chip-active { background: var(--purple, #7c3aed); border-color: var(--purple, #7c3aed); }
+.filter-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.5rem; width: 100%; }
+.filter-row-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); min-width: 4rem; font-weight: 700; }
+.section-subtitle { font-size: 0.85rem; color: var(--text-dim); font-weight: 400; }
+.vertical-card .cat-name { text-transform: capitalize; }
+.vertical-card .cat-score { font-size: 0.75rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .filter-status select {
     background: var(--surface);
     border: 1px solid var(--border);

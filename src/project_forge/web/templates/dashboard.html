@@ -175,6 +175,27 @@
 <section class="section section-alt">
     <div class="container">
         <div class="section-header">
+            <h2>Browse by Industry</h2>
+            <span class="section-subtitle">Filter ideas by where they fit. Inferred from each idea's text — an idea may appear under several.</span>
+        </div>
+        <div class="category-cards">
+            {% for v in verticals %}
+            <a href="/explore?vertical={{ v.slug }}" class="category-card vertical-card">
+                <div class="cat-count">{{ v.count }}</div>
+                <div class="cat-name">{{ v.slug }}</div>
+                <div class="cat-score" title="{{ v.top.tagline }}">top: {{ v.top.name[:40] }}</div>
+            </a>
+            {% endfor %}
+            {% if not verticals %}
+            <p class="empty-state">No vertical-tagged ideas yet — corpus is mostly horizontal.</p>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="section-header">
             <h2>Browse by Category</h2>
         </div>
         <div class="category-cards">
