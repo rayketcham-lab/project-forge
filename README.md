@@ -2,9 +2,9 @@
 
 ![Version](https://img.shields.io/badge/version-0.1.0-blue) ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/rayketcham-lab/project-forge/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-175+-passing?color=brightgreen) ![Claude](https://img.shields.io/badge/Claude_Sonnet-powered-blueviolet?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCI+PHRleHQgeT0iMTgiIGZvbnQtc2l6ZT0iMTYiPvCfpJY8L3RleHQ+PC9zdmc+)
 
-**Your org's next project shouldn't come from a whiteboard.** Project Forge is an autonomous think-tank engine that generates, scores, synthesizes, and scaffolds IT project ideas — turning strategic gaps into GitHub repos with CI/CD, tests, and issues. No meetings required.
+**An autonomous, human-directed think-tank engine.** Project Forge generates, scores, synthesizes, and scaffolds IT project ideas — turning strategic gaps into GitHub repos with CI/CD, tests, and issues. The system runs autonomously; a human operator approves before anything ships.
 
-Point it at your org. Walk away. Come back to a ranked pipeline of feasibility-scored project concepts, cross-domain mega-projects, and one-click scaffolding into real repositories.
+Point it at your portfolio. Walk away. Come back to a ranked pipeline of feasibility-scored project concepts, cross-domain mega-projects, and one-click scaffolding into real repositories.
 
 > [!NOTE]
 > **Works without an API key.** The auto-scan engine generates ideas locally using seed concepts and domain crossing. Add a Claude API key for richer, more creative generation — but it's optional.
@@ -119,7 +119,7 @@ Brainstorm (manual, biased, slow)     vs.     Project Forge (autonomous, scored,
 | **Web Dashboard** | Browse, search, filter, approve, reject, scaffold | Non-technical stakeholders can participate in the pipeline |
 | **Autonomous Mode** | Cron-driven, no human intervention | Set it and forget it -- ideas accumulate while you sleep |
 | **Optional AI** | Works without Claude API key (auto-scan mode) | Zero cost to start, add AI for richer generation later |
-| **12 Security Categories** | PQC, NIST, RFC, PKI, vuln research, compliance, and more | Purpose-built for security-focused orgs |
+| **13 Categories** | Security, infra, compliance, automation, observability, privacy, and more | Configurable seeds — extend or replace per portfolio |
 
 ---
 
@@ -300,7 +300,7 @@ When `FORGE_ANTHROPIC_API_KEY` is not set, the engine falls back to local auto-s
 
 ## Categories
 
-Project Forge ships with 12 security-focused categories, each with curated seed concepts:
+Project Forge ships with 13 categories, each with curated seed concepts. The default seed lists lean toward security and infrastructure (the use case the project was originally built for), but they're plain Python lists in `engine/categories.py` — extend, replace, or rebalance them for any portfolio:
 
 | Category | Focus | Example Seeds |
 |----------|-------|---------------|

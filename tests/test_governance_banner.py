@@ -39,10 +39,13 @@ class TestGovernanceBannerOnDashboard:
         assert "autonomous" in resp.text.lower()
 
     @pytest.mark.asyncio
-    async def test_banner_mentions_security_oversight(self, client):
+    async def test_banner_mentions_human_oversight(self, client):
         resp = await client.get("/")
         html = resp.text.lower()
-        assert "security" in html or "pki" in html
+        # New contract: emphasize human-directed governance,
+        # not a specific persona/profession.
+        assert "human" in html
+        assert "autonomous" in html
 
     @pytest.mark.asyncio
     async def test_explore_page_has_governance_banner(self, client):
