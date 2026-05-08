@@ -147,6 +147,35 @@ async def diversity_lever_usage(
     return {"contrarian": 0.0, "combinatoric": 0.0, "static": 0.0}
 
 
+async def build_filter_summary(
+    db: Database,
+    *,
+    top_concepts: int = 5,
+    rate_threshold: float = 0.7,
+    days: int = 30,
+) -> dict:
+    """Compose the filter_summary dict consumed by build_generation_prompt.
+
+    Calls saturation_per_concept + filter_rate_by_category and shapes the
+    result for direct injection into the prompt.
+
+    Returns: {"saturated_concepts": list[str],
+              "high_filter_rate_categories": list[tuple[str, float]]}
+    """
+    sat = await saturation_per_concept(db, days=days, top_n=top_concepts)
+    rates = await filter_rate_by_category(db, days=min(days, 7))
+
+    high = sorted(
+        ((cat.value, r) for cat, r in rates.items() if r >= rate_threshold),
+        key=lambda x: -x[1],
+    )
+
+    return {
+        "saturated_concepts": [w for w, _ in sat],
+        "high_filter_rate_categories": list(high),
+    }
+
+
 async def coverage_gaps(
     db: Database, threshold: int = 5,
 ) -> list[IdeaCategory]:

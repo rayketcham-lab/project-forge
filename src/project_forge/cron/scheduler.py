@@ -91,6 +91,11 @@ async def generate_and_store(db: Database, generator: IdeaGenerator) -> Idea:
         "\n".join(f"- {r.repo_full_name}: {r.description}" for r in repos) if repos else None
     )
 
+    # Build saturation/filter-rate summary so Claude knows what to avoid (Phase 4 wiring)
+    from project_forge.engine.telemetry import build_filter_summary
+
+    filter_summary = await build_filter_summary(db)
+
     run = GenerationRun(category=category)
 
     try:
@@ -100,6 +105,7 @@ async def generate_and_store(db: Database, generator: IdeaGenerator) -> Idea:
             use_contrarian=use_contrarian,
             use_combinatoric=use_combinatoric,
             portfolio_context=portfolio_context,
+            filter_summary=filter_summary,
         )
         result = review_idea(idea)
         if not result.passed:
