@@ -120,6 +120,8 @@ _NAME_STOP_WORDS = frozenset({
     # Generic action verbs in idea names
     "using", "detect", "enable", "enforce", "prevent", "handle",
     "improve", "extend", "support", "create", "update", "manage",
+    # Generic tool-type nouns (describe WHAT it is, not WHAT it's about)
+    "mapper", "parser", "proxy", "relay", "store", "queue", "cache",
     # Super-idea marker word — must not contaminate keyword extraction
     "super",
 })
@@ -482,29 +484,7 @@ class SuperIdeaGenerator:
         # Tag with the perspective
         si.description += f"\n\n**Perspective:** {label} — synthesized through the lens of {perspective}."
 
-        # Dedup: reject if an existing super idea already covers the same primary concept.
-        # Primary concept = the text before " + " (or before ":") in the tagline.
-        # This prevents near-duplicate super ideas that differ only in name suffix.
-        existing = await self.db.list_ideas(limit=2000)
-        existing_super_primaries: set[str] = set()
-        existing_base_names: set[str] = set()
-        for ex in existing:
-            if not ex.name.startswith("[SUPER]"):
-                continue
-            # Archived/rejected ideas must not permanently veto future generation
-            if ex.status in ("archived", "rejected"):
-                continue
-            raw = ex.name.replace("[SUPER] ", "")
-            base = re.sub(r"\s*\([^)]+\)\s*$", "", raw).strip()
-            existing_base_names.add(base.lower())
-            # Extract primary concept from tagline for concept-level dedup
-            primary = ex.tagline.split(" + ")[0].split(":")[0].strip().lower()
-            if primary and len(primary) > 5:
-                existing_super_primaries.add(primary)
-
         # Quality gate: reject if tagline is the N-capability-synthesis fallback.
-        # This fallback fires when _build_super_tagline finds no usable concepts in
-        # the cluster ideas, meaning the cluster lacks content to describe meaningfully.
         if re.match(r"^\d+-capability synthesis:", si.tagline):
             logger.info(
                 "Skipping super idea %s: tagline fell back to generic synthesis (poor cluster quality)",
@@ -512,9 +492,30 @@ class SuperIdeaGenerator:
             )
             return None
 
-        if si.name.lower() in existing_base_names:
-            logger.info("Skipping duplicate super idea: %s (base name exists)", si.name)
-            return None
+        # Dedup: use the canonical _super_base_name (single source of truth with
+        # synthesis-suffix stripping + hyphen/ampersand normalization).
+        # Only skip archived/rejected — bad-name supers are archived by purge, so
+        # they no longer veto fresh generation of the same concept.
+        from project_forge.engine.dedup import _super_base_name
+
+        existing = await self.db.list_ideas(limit=2000)
+        candidate_base = _super_base_name(f"[SUPER] {si.name}")
+        existing_super_primaries: set[str] = set()
+        for ex in existing:
+            if not ex.name.startswith("[SUPER]"):
+                continue
+            if ex.status in ("archived", "rejected"):
+                continue
+            if _super_base_name(ex.name) == candidate_base:
+                logger.info(
+                    "Skipping duplicate super idea: %s (base '%s' covered by %s)",
+                    si.name, candidate_base, ex.id,
+                )
+                return None
+            # Also check tagline primary concept for near-duplicate coverage
+            primary = ex.tagline.split(" + ")[0].split(":")[0].strip().lower()
+            if primary and len(primary) > 5:
+                existing_super_primaries.add(primary)
 
         new_primary = si.tagline.split(" + ")[0].split(":")[0].strip().lower()
         if new_primary and new_primary in existing_super_primaries:

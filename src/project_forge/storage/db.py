@@ -860,6 +860,51 @@ class Database:
         await self.db.commit()
         return {"kept": kept_count, "archived": archived_count, "groups": len(groups)}
 
+    async def purge_bad_super_ideas(self) -> set[str]:
+        """Archive super ideas whose names contain pre-fix quality defects.
+
+        Targets:
+        - Hyphenated concept words (Certificate-Pinning, Data-Cardinality)
+        - Names whose base concept is entirely stop words (Multi Control, Well Known,
+          Insecure Direct)
+
+        Skips ideas in terminal statuses: approved, scaffolded, implemented, contributed.
+        Returns the set of archived idea IDs.
+        """
+        import re
+
+        from project_forge.engine.dedup import _super_base_name
+        from project_forge.engine.super_ideas import _NAME_STOP_WORDS
+
+        cursor = await self.db.execute(
+            "SELECT id, name FROM ideas WHERE name LIKE '[SUPER]%' "
+            "AND status NOT IN ('approved', 'scaffolded', 'implemented', 'contributed', 'archived', 'rejected')",
+        )
+        rows = await cursor.fetchall()
+
+        archived: set[str] = set()
+        for row in rows:
+            name = row["name"]
+            core = name.replace("[SUPER] ", "")
+
+            # Detect hyphenated concept words: Certificate-Pinning, Data-Cardinality
+            if re.search(r"[A-Za-z]+-[A-Za-z]+", core):
+                await self.db.execute("UPDATE ideas SET status = 'archived' WHERE id = ?", (row["id"],))
+                archived.add(row["id"])
+                continue
+
+            # Require 2 meaningful keywords (5+ chars, not stop words) in base concept.
+            # Single-keyword or all-stop-word bases indicate low-quality clusters.
+            # e.g. "migration post" has only 1 meaningful word; "mapper multi" has 0.
+            base = _super_base_name(name)
+            meaningful = [w for w in base.split() if len(w) >= 5 and w not in _NAME_STOP_WORDS]
+            if len(meaningful) < 2:
+                await self.db.execute("UPDATE ideas SET status = 'archived' WHERE id = ?", (row["id"],))
+                archived.add(row["id"])
+
+        await self.db.commit()
+        return archived
+
     # === FILTERED IDEAS (audit trail) ===
 
     async def _log_filtered(self, idea: Idea, reason: str, similar_to_id: str | None = None) -> None:
