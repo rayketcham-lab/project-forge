@@ -7,9 +7,11 @@ real-world platforms.
 
 import hashlib
 import logging
+import os
 import random
 import re
 from collections import Counter, defaultdict
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
@@ -18,6 +20,49 @@ from project_forge.models import Idea, IdeaCategory
 from project_forge.storage.db import Database
 
 logger = logging.getLogger(__name__)
+
+
+def _reasoning_llm_call() -> Callable[[str], str] | None:
+    """Construct a callable that sends a prompt to Claude and returns text.
+
+    Reuses the project's anthropic client + model. Returns None when no
+    API key is configured — caller falls back to slot-fill in that case.
+    """
+    import anthropic
+
+    from project_forge.config import settings
+
+    key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+    if not key:
+        logger.info("FORGE_SUPER_REASONING set but no API key — falling back to slot-fill")
+        return None
+
+    client = anthropic.Anthropic(api_key=key)
+    model = settings.anthropic_model
+
+    def _call(prompt: str) -> str:
+        try:
+            resp = client.messages.create(
+                model=model,
+                max_tokens=200,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = resp.content[0].text
+            # Strip markdown fence if present
+            if "```json" in text:
+                text = text.split("```json", 1)[1].split("```", 1)[0]
+            elif "```" in text:
+                text = text.split("```", 1)[1].split("```", 1)[0]
+            return text.strip()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Reasoning LLM call failed: %s", exc)
+            return ""
+
+    return _call
+
+
+# Re-export so monkeypatch can target this module symbol in tests
+__all__ = ["_reasoning_llm_call"]
 
 # Cluster themes: map category pairs to meaningful platform concepts
 THEME_TEMPLATES = {
@@ -271,11 +316,35 @@ def find_idea_clusters(ideas: list[Idea], min_cluster_size: int = 2) -> list[dic
     return clusters
 
 
-def synthesize_super_idea(cluster: dict) -> SuperIdea:
-    """Synthesize a super idea from a cluster of related ideas."""
+def synthesize_super_idea(
+    cluster: dict,
+    *,
+    use_reasoning: bool = False,
+    llm_call=None,
+) -> SuperIdea:
+    """Synthesize a super idea from a cluster of related ideas.
+
+    When use_reasoning=True and llm_call is provided, the cluster name is
+    derived from reason_cluster_name (LLM proposes the unifying capability
+    gap) instead of the slot-fill template. Falls back to slot-fill on LLM
+    failure. Either way, the cluster signature is embedded in the
+    description as [CLUSTER:<sig>] for signature-based dedup.
+    """
+    from project_forge.engine.super_reasoning import (
+        cluster_signature,
+        encode_cluster_tag,
+        reason_cluster_name,
+    )
+
     theme = cluster["theme"]
     ideas = cluster["ideas"]
     categories = list(cluster["categories"])
+
+    # Try LLM-derived name when reasoning is on; fall back to theme on None.
+    if use_reasoning and llm_call is not None:
+        proposed = reason_cluster_name(ideas, llm_call=llm_call)
+        if proposed:
+            theme = proposed
 
     # Combine descriptions
     component_summaries = []
@@ -284,6 +353,7 @@ def synthesize_super_idea(cluster: dict) -> SuperIdea:
         component_summaries.append(f"- **{idea.name}**: {idea.tagline}")
         all_tech.update(idea.tech_stack)
 
+    sig = cluster_signature(ideas)
     description = (
         f"{theme} brings together {len(ideas)} complementary project concepts into a single, "
         f"cohesive platform:\n\n"
@@ -291,6 +361,7 @@ def synthesize_super_idea(cluster: dict) -> SuperIdea:
         + f"\n\nTogether, these components create something greater than the sum of their parts -- "
         f"a platform that addresses the full lifecycle of "
         f"{', '.join(c.value for c in categories)} challenges."
+        f"\n\n{encode_cluster_tag(sig)}"
     )
 
     tagline = _build_super_tagline(ideas)
@@ -480,7 +551,11 @@ class SuperIdeaGenerator:
         if not best:
             return None
 
-        si = synthesize_super_idea(best)
+        # Optional reasoning path — gated on env so existing tests stay deterministic.
+        use_reasoning = bool(os.environ.get("FORGE_SUPER_REASONING"))
+        llm_call = _reasoning_llm_call() if use_reasoning else None
+
+        si = synthesize_super_idea(best, use_reasoning=use_reasoning, llm_call=llm_call)
         # Tag with the perspective
         si.description += f"\n\n**Perspective:** {label} — synthesized through the lens of {perspective}."
 
@@ -492,10 +567,25 @@ class SuperIdeaGenerator:
             )
             return None
 
-        # Dedup: use the canonical _super_base_name (single source of truth with
-        # synthesis-suffix stripping + hyphen/ampersand normalization).
-        # Only skip archived/rejected — bad-name supers are archived by purge, so
-        # they no longer veto fresh generation of the same concept.
+        # Dedup: when reasoning is on, the LLM produces unbounded names so the
+        # base-name anchor stops working. Use the cluster signature instead —
+        # same member-idea set → same signature → dedup hit. When off, fall
+        # through to the legacy base-name dedup.
+        from project_forge.engine.super_reasoning import (
+            extract_cluster_signature,
+            find_super_by_signature,
+        )
+
+        candidate_sig = extract_cluster_signature(si.description)
+        if use_reasoning and candidate_sig:
+            existing_super = await find_super_by_signature(self.db, candidate_sig)
+            if existing_super is not None:
+                logger.info(
+                    "Skipping super idea %s: cluster signature %s already covered by %s",
+                    si.name, candidate_sig, existing_super.id,
+                )
+                return None
+
         from project_forge.engine.dedup import _super_base_name
 
         existing = await self.db.list_ideas(limit=2000)
