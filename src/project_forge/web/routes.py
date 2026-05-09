@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from project_forge.config import settings
 from project_forge.engine.dedup import filter_and_save
+from project_forge.engine.llm_backend import resolve_backend
 from project_forge.engine.scorer import score_summary
 from project_forge.models import (
     Challenge,
@@ -1186,15 +1187,21 @@ def _heuristic_challenge(idea, question: str) -> dict:
 async def _challenge_idea(
     idea, question: str, challenge_type: str = "freeform", focus_area: str = "all", tone: str = "skeptical"
 ) -> dict:
-    """Send the idea + question to Claude and return structured response with changes."""
-    import anthropic
+    """Send the idea + question to an LLM via the backend resolver and
+    return structured response + verdict + suggested changes.
 
-    key = settings.anthropic_api_key
-    if not key:
-        import os
+    Routes through engine.llm_backend.resolve_backend() so it works with:
+      - Anthropic API direct (when ANTHROPIC_API_KEY is set)
+      - Claude Code CLI shell-out (when `claude` is on PATH)
+      - Heuristic fallback (when neither — preserves the question's
+        intent in the response so it's not a generic stub).
 
-        key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not key:
+    Issue #70: previously this function only checked for ANTHROPIC_API_KEY
+    and dropped to a heuristic stub on Claude Code-only hosts, leaving
+    user challenges as inert DB rows.
+    """
+    backend = resolve_backend()
+    if backend is None:
         return _heuristic_challenge(idea, question)
 
     type_desc = _CHALLENGE_TYPES.get(challenge_type, _CHALLENGE_TYPES["freeform"])
@@ -1211,6 +1218,7 @@ async def _challenge_idea(
     }.get(tone, "Be direct and evidence-based.")
 
     prompt = (
+        f"You are a senior technical reviewer. Respond ONLY with valid JSON.\n\n"
         f"You are reviewing a project idea proposal.\n\n"
         f"## Idea: {idea.name}\n"
         f"**Tagline:** {idea.tagline}\n"
@@ -1233,25 +1241,20 @@ async def _challenge_idea(
         f'  "confidence": 0.0 to 1.0,\n'
         f'  "changes": [\n'
         f'    {{"field": "mvp_scope|description|tech_stack|market_analysis|feasibility_score", '
-        f'"action": "added|removed|modified", "text": "what changed"}}\n'
+        f'"action": "added|removed|modified", "text": "what changed (full replacement value, not a diff)"}}\n'
         f"  ]\n"
         f"}}\n\n"
         f"verdict meanings: strengthen=idea is solid, reinforce it; pivot=change direction; "
         f"narrow=reduce scope; expand=scope too small; kill=abandon; no_change=question answered, no changes needed.\n"
-        f"changes array can be empty if no changes are warranted."
+        f"changes array can be empty if no changes are warranted. Each change.text MUST be the COMPLETE new "
+        f"value of the field (not a diff or a fragment), so the apply step can replace it directly."
     )
 
-    client = anthropic.Anthropic(api_key=key)
-    resp = client.messages.create(
-        model=settings.anthropic_model,
-        max_tokens=4096,
-        system="You are a senior technical reviewer. Respond ONLY with valid JSON.",
-        messages=[{"role": "user", "content": prompt}],
-    )
+    raw = backend.call(prompt) or ""
 
     import json as _json
 
-    raw = resp.content[0].text.strip()
+    raw = raw.strip()
     if "```json" in raw:
         raw = raw.split("```json")[1].split("```")[0].strip()
     elif "```" in raw:
@@ -1260,7 +1263,7 @@ async def _challenge_idea(
     try:
         data = _json.loads(raw)
     except _json.JSONDecodeError:
-        data = {"response": raw, "changes": []}
+        data = {"response": raw or "(LLM returned no parseable response)", "changes": []}
 
     return {
         "response": data.get("response", ""),
@@ -1309,6 +1312,54 @@ async def api_challenge_idea(idea_id: str, req: ChallengeRequest):
     await db.save_challenge(challenge)
 
     return challenge.model_dump()
+
+
+@router.post("/api/ideas/{idea_id}/challenges/{challenge_id}/apply")
+async def api_apply_challenge(idea_id: str, challenge_id: str):
+    """Apply a challenge's `changes` array to the idea (#70).
+
+    Each change is `{field, action, text}` where text is the COMPLETE
+    new value. Whitelisted fields only (see Database.apply_idea_field_updates).
+    Idempotent: a second call returns {already_applied: True} without
+    mutating again.
+    """
+    challenge = await db.get_challenge(challenge_id)
+    if challenge is None or challenge.idea_id != idea_id:
+        raise HTTPException(
+            status_code=404,
+            detail="Challenge not found or not associated with this idea",
+        )
+
+    if await db.is_challenge_applied(challenge_id):
+        return {
+            "already_applied": True,
+            "challenge_id": challenge_id,
+            "idea_id": idea_id,
+        }
+
+    # Convert challenge.changes (list of {field, action, text}) → dict
+    # of {field: new_value}. Last entry wins on conflict.
+    field_updates: dict[str, str] = {}
+    for ch in (challenge.changes or []):
+        if not isinstance(ch, dict):
+            continue
+        field = ch.get("field")
+        text = ch.get("text")
+        if field and text is not None:
+            field_updates[field] = text
+
+    updated = await db.apply_idea_field_updates(idea_id, field_updates)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Idea not found")
+
+    await db.mark_challenge_applied(challenge_id)
+    return {
+        "already_applied": False,
+        "challenge_id": challenge_id,
+        "idea_id": idea_id,
+        "fields_updated": list(field_updates.keys()),
+        "idea": updated.model_dump(),
+    }
 
 
 @router.get("/api/ideas/{idea_id}/challenges")

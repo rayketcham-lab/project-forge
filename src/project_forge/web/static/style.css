@@ -487,6 +487,9 @@ a.stat-card:hover { transform: translateY(-3px); border-color: var(--accent); }
 .wizard-field { margin-bottom: 0.75rem; }
 .wizard-field-label { display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 0.25rem; font-weight: 700; }
 .wizard-field input, .wizard-field textarea { width: 100%; }
+
+.challenge-actions { margin-top: 0.75rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.challenge-applied { font-size: 0.8rem; color: var(--green, #10b981); font-weight: 600; }
 .filter-status select {
     background: var(--surface);
     border: 1px solid var(--border);

@@ -105,7 +105,8 @@ CREATE TABLE IF NOT EXISTS challenges (
     verdict TEXT NOT NULL DEFAULT 'no_change',
     confidence REAL NOT NULL DEFAULT 0.5,
     changes TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    applied_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_challenges_idea ON challenges(idea_id);
@@ -207,6 +208,9 @@ class Database:
             "ALTER TABLE challenges ADD COLUMN tone TEXT NOT NULL DEFAULT 'skeptical'",
             "ALTER TABLE challenges ADD COLUMN verdict TEXT NOT NULL DEFAULT 'no_change'",
             "ALTER TABLE challenges ADD COLUMN confidence REAL NOT NULL DEFAULT 0.5",
+            # Issue #70 — track whether a challenge's proposed changes
+            # have been applied to the idea (for idempotency).
+            "ALTER TABLE challenges ADD COLUMN applied_at TEXT",
         ):
             try:
                 await self._db.execute(stmt)
@@ -569,12 +573,104 @@ class Database:
         await self.db.commit()
         return challenge
 
+    async def get_challenge(self, challenge_id: str) -> Challenge | None:
+        cursor = await self.db.execute(
+            "SELECT * FROM challenges WHERE id = ?", (challenge_id,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+
+        def _parse_ts(s: str | None) -> datetime | None:
+            if not s:
+                return None
+            ts = datetime.fromisoformat(s)
+            return ts.replace(tzinfo=UTC) if "+" not in s else ts
+
+        return Challenge(
+            id=row["id"],
+            idea_id=row["idea_id"],
+            question=row["question"],
+            challenge_type=row["challenge_type"],
+            focus_area=row["focus_area"],
+            tone=row["tone"],
+            response=row["response"],
+            verdict=row["verdict"],
+            confidence=row["confidence"],
+            changes=json.loads(row["changes"]),
+            created_at=_parse_ts(row["created_at"]) or datetime.now(UTC),
+            applied_at=_parse_ts(row["applied_at"]),
+        )
+
+    async def is_challenge_applied(self, challenge_id: str) -> bool:
+        """True if the challenge has already been applied via mark_challenge_applied."""
+        cursor = await self.db.execute(
+            "SELECT applied_at FROM challenges WHERE id = ?", (challenge_id,),
+        )
+        row = await cursor.fetchone()
+        return bool(row and row["applied_at"])
+
+    async def mark_challenge_applied(self, challenge_id: str) -> None:
+        await self.db.execute(
+            "UPDATE challenges SET applied_at = ? WHERE id = ?",
+            (datetime.now(UTC).isoformat(), challenge_id),
+        )
+        await self.db.commit()
+
+    async def apply_idea_field_updates(
+        self, idea_id: str, updates: dict[str, str | float | list],
+    ) -> Idea | None:
+        """Apply a dict of field→new_value updates to an idea.
+
+        Whitelisted fields only: mvp_scope, description, market_analysis,
+        tagline, feasibility_score, tech_stack. Returns the refreshed Idea.
+        """
+        ALLOWED = {
+            "mvp_scope", "description", "market_analysis",
+            "tagline", "feasibility_score", "tech_stack",
+        }
+        clean: dict[str, object] = {}
+        for k, v in updates.items():
+            if k not in ALLOWED:
+                continue
+            if k == "feasibility_score":
+                try:
+                    clean[k] = max(0.0, min(1.0, float(v)))
+                except (TypeError, ValueError):
+                    continue
+            elif k == "tech_stack":
+                if isinstance(v, list):
+                    clean[k] = json.dumps(v)
+                elif isinstance(v, str):
+                    clean[k] = json.dumps([s.strip() for s in v.split(",") if s.strip()])
+            else:
+                clean[k] = str(v)
+
+        if not clean:
+            return await self.get_idea(idea_id)
+
+        set_clause = ", ".join(f"{k} = ?" for k in clean)
+        params = list(clean.values()) + [idea_id]
+        await self.db.execute(
+            f"UPDATE ideas SET {set_clause} WHERE id = ?",  # noqa: S608 (allowlist'd keys)
+            params,
+        )
+        await self.db.commit()
+        return await self.get_idea(idea_id)
+
     async def list_challenges(self, idea_id: str) -> list[Challenge]:
         cursor = await self.db.execute(
             "SELECT * FROM challenges WHERE idea_id = ? ORDER BY created_at ASC",
             (idea_id,),
         )
         rows = await cursor.fetchall()
+
+        def _parse_ts(s: str | None) -> datetime | None:
+            if not s:
+                return None
+            ts = datetime.fromisoformat(s)
+            return ts.replace(tzinfo=UTC) if "+" not in s else ts
+
         return [
             Challenge(
                 id=row["id"],
@@ -587,9 +683,8 @@ class Database:
                 verdict=row["verdict"],
                 confidence=row["confidence"],
                 changes=json.loads(row["changes"]),
-                created_at=datetime.fromisoformat(row["created_at"]).replace(tzinfo=UTC)
-                if "+" not in row["created_at"]
-                else datetime.fromisoformat(row["created_at"]),
+                created_at=_parse_ts(row["created_at"]) or datetime.now(UTC),
+                applied_at=_parse_ts(row["applied_at"]),
             )
             for row in rows
         ]

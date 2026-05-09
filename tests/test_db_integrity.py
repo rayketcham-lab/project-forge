@@ -132,6 +132,8 @@ EXPECTED_COLUMNS = {
         "challenge_type", "focus_area", "tone",
         "response", "verdict", "confidence",
         "changes", "created_at",
+        # Issue #70: idempotency tracking for the apply-changes endpoint.
+        "applied_at",
     }),
 }
 

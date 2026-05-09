@@ -225,6 +225,18 @@
                         {% endif %}
                         {% endfor %}
                     </div>
+                    <div class="challenge-actions">
+                        {% if c.applied_at %}
+                        <span class="challenge-applied">&#10003; Changes applied {{ c.applied_at[:19] if c.applied_at is string else c.applied_at.strftime('%b %d, %Y %H:%M') }}</span>
+                        {% else %}
+                        <button class="btn btn-sm btn-primary"
+                                data-action="apply-challenge"
+                                data-idea-id="{{ idea.id }}"
+                                data-challenge-id="{{ c.id }}">
+                            Apply {{ c.changes|length }} change{% if c.changes|length != 1 %}s{% endif %} to idea
+                        </button>
+                        {% endif %}
+                    </div>
                     {% endif %}
                 </div>
                 {% endfor %}

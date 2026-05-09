@@ -105,6 +105,7 @@ class Challenge(BaseModel):
     confidence: float = 0.5
     changes: list[dict] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    applied_at: datetime | None = None  # set when apply-changes endpoint runs
 
 
 class FilteredIdea(BaseModel):

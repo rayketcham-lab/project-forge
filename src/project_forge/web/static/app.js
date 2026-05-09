@@ -58,6 +58,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 rejectProposal(ideaId);
             } else if (action === 'challenge-idea') {
                 toggleChallengeInput();
+            } else if (action === 'apply-challenge') {
+                var challengeId = actionBtn.getAttribute('data-challenge-id');
+                applyChallenge(ideaId, challengeId, actionBtn);
             }
         }
     });
@@ -194,6 +197,33 @@ async function scaffoldIdea(id) {
 // === Challenge ===
 
 var _challengeType = 'freeform';
+
+async function applyChallenge(ideaId, challengeId, btn) {
+    if (!ideaId || !challengeId) return;
+    btn.disabled = true;
+    var orig = btn.textContent;
+    btn.textContent = 'Applying...';
+    try {
+        var resp = await fetch(
+            '/api/ideas/' + ideaId + '/challenges/' + challengeId + '/apply',
+            { method: 'POST', headers: getAuthHeaders() },
+        );
+        var data = await safeJson(resp);
+        if (!resp.ok) {
+            throw new Error(data.detail || ('HTTP ' + resp.status));
+        }
+        if (data.already_applied) {
+            btn.textContent = '✓ Already applied';
+        } else {
+            btn.textContent = '✓ Applied — refreshing...';
+            setTimeout(function() { window.location.reload(); }, 700);
+        }
+    } catch (err) {
+        btn.disabled = false;
+        btn.textContent = orig;
+        alert('Apply failed: ' + err.message);
+    }
+}
 
 function toggleChallengeInput() {
     var input = document.getElementById('challenge-input');
