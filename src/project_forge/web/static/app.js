@@ -1136,9 +1136,14 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
                 alert('Delete failed: ' + err.message);
             });
     });
+})();
 
-    // === 5-Phase Idea Builder Wizard ===
-    function initWizard() {
+
+// === 5-Phase Idea Builder Wizard ===
+// Defined at MODULE scope (was previously trapped inside the project-delete
+// IIFE which early-returned on pages without .project-delete-btn — meaning
+// initWizard was undefined on the dashboard, "Begin Wizard" silently no-op'd.)
+function initWizard() {
         var startBtn = document.getElementById('wizard-start-btn');
         if (!startBtn) return;  // not on this page
 
@@ -1411,4 +1416,3 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
             }
         });
     }
-})();
