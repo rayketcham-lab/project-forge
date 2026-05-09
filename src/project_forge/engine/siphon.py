@@ -163,3 +163,22 @@ async def siphon_duplicates(
         "archived_ids": archived_ids,
         "clusters": report_clusters,
     }
+
+
+async def restore_dedup_archive(db: Database) -> int:
+    """Reverse a siphon apply. Restores only rows the siphon archived
+    (archived_reason='retroactive_dedup'); leaves manually-archived
+    ideas untouched. Returns the number of rows restored.
+    """
+    cur = await db.db.execute(
+        "SELECT COUNT(*) FROM ideas WHERE archived_reason = 'retroactive_dedup'",
+    )
+    n = (await cur.fetchone())[0]
+    if n == 0:
+        return 0
+    await db.db.execute(
+        "UPDATE ideas SET status = 'new', archived_reason = NULL, archived_at = NULL "
+        "WHERE archived_reason = 'retroactive_dedup'",
+    )
+    await db.db.commit()
+    return n

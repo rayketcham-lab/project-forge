@@ -194,6 +194,45 @@ class TestDryRunVsApply:
 
 class TestGoingForwardThreshold:
     @pytest.mark.asyncio
+    async def test_restore_undoes_only_siphon_archives(self, db):
+        """restore_dedup_archive must restore ideas archived BY siphon
+        (archived_reason='retroactive_dedup') and leave manually-archived
+        ideas alone."""
+        from project_forge.engine.siphon import (
+            restore_dedup_archive,
+            siphon_duplicates,
+        )
+
+        # Two near-duplicates → one will get siphoned
+        a = _idea("A", "kubernetes secret rotation tool", score=0.6)
+        b = _idea("B", "kubernetes secret rotation tool", score=0.8)
+        await db.save_idea(a)
+        await db.save_idea(b)
+
+        # A manually-archived idea (different reason)
+        c = _idea("C", "totally separate concept here", score=0.7)
+        await db.save_idea(c)
+        await db.update_idea_status(c.id, "archived")
+
+        await siphon_duplicates(db, dry_run=False)
+
+        # A is now archived by siphon, C is manually archived
+        before_a = await db.get_idea(a.id)
+        before_c = await db.get_idea(c.id)
+        assert before_a.status == "archived"
+        assert before_c.status == "archived"
+
+        restored = await restore_dedup_archive(db)
+        assert restored == 1, f"Should restore exactly the siphon-archived row, got {restored}"
+
+        after_a = await db.get_idea(a.id)
+        after_c = await db.get_idea(c.id)
+        # A back to new
+        assert after_a.status == "new"
+        # C still archived (not touched — different reason)
+        assert after_c.status == "archived"
+
+    @pytest.mark.asyncio
     async def test_06_threshold_catches_what_07_missed(self, db):
         """A pair with 0.65 token Jaccard would pass at 0.7 but fail at 0.6.
 
