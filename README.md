@@ -1,13 +1,18 @@
 # Project Forge
 
-![Version](https://img.shields.io/badge/version-0.1.0-blue) ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/rayketcham-lab/project-forge/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-175+-passing?color=brightgreen) ![Claude](https://img.shields.io/badge/Claude_Sonnet-powered-blueviolet?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCI+PHRleHQgeT0iMTgiIGZvbnQtc2l6ZT0iMTYiPvCfpJY8L3RleHQ+PC9zdmc+)
+![Version](https://img.shields.io/badge/version-0.11.0-blue) ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/rayketcham-lab/project-forge/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-1000+-passing?color=brightgreen) ![Claude](https://img.shields.io/badge/Claude_Sonnet-powered-blueviolet?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCI+PHRleHQgeT0iMTgiIGZvbnQtc2l6ZT0iMTYiPvCfpJY8L3RleHQ+PC9zdmc+)
 
 **An autonomous, human-directed think-tank engine.** Project Forge generates, scores, synthesizes, and scaffolds IT project ideas — turning strategic gaps into GitHub repos with CI/CD, tests, and issues. The system runs autonomously; a human operator approves before anything ships.
 
 Point it at your portfolio. Walk away. Come back to a ranked pipeline of feasibility-scored project concepts, cross-domain mega-projects, and one-click scaffolding into real repositories.
 
 > [!NOTE]
-> **Works without an API key.** The auto-scan engine generates ideas locally using seed concepts and domain crossing. Add a Claude API key for richer, more creative generation — but it's optional.
+> **No API key required.** Three LLM backends, picked automatically:
+> 1. **Anthropic API** when `ANTHROPIC_API_KEY` is set (lowest latency)
+> 2. **Claude Code CLI** when `claude` is on `$PATH` — cost rolls into your Claude subscription, no separate API tier
+> 3. **Static heuristics** when neither — still produces ideas via deterministic seed crossing
+>
+> Override the auto-detect with `FORGE_LLM_BACKEND={api|claude_code|static}` and pick the model with `FORGE_LLM_MODEL={sonnet|opus|haiku}` (default: sonnet).
 
 ---
 
@@ -112,13 +117,18 @@ Brainstorm (manual, biased, slow)     vs.     Project Forge (autonomous, scored,
 |---------|-------------|----------------|
 | **4-Direction Generation** | Basic, contrarian, combinatoric, and crossover idea modes | Contrarian mode alone surfaces ideas your team would never brainstorm |
 | **Feasibility Scoring** | Market timing + competition + MVP complexity (0.0-1.0) | Kill bad ideas early, fund good ones with data |
-| **Super Ideas Engine** | Cross-category synthesis into mega-projects with phased MVPs | The best projects span multiple domains -- this finds those intersections |
+| **Super Ideas Engine** | Cross-category synthesis with LLM-reasoned cluster naming | Sonnet names the unifying capability gap instead of slot-filling templates |
+| **5-Phase Idea Wizard** | Sonnet asks intelligent follow-ups across Discover → Differentiate → Audience → Constraints → Synthesize | Drop a fragment, get a structured project — wizard probes deeper instead of one-shotting it |
+| **Text & URL Ingest** | Paste a fragment OR a URL; Sonnet expands either into a full Idea | Capture half-thoughts in the dashboard the moment you have them |
+| **Industry Drill-Down** | Inferred verticals (government, healthcare, education, finance, retail, hospitality, manufacturing, energy, telco) | Slice 4000+ ideas by where they fit — drop the verticals you don't care about |
 | **Repo Comparison** | Keyword overlap against existing GitHub repos | Never accidentally duplicate effort or miss an enhancement opportunity |
 | **Auto-Scaffolding** | GitHub repo + CI + tests + issues + README in one click | From idea to clonable repo in under 60 seconds |
-| **Content Dedup** | SHA-256 fingerprinting + input-tuple tracking | Run it 1000 times, never get the same idea twice |
-| **Web Dashboard** | Browse, search, filter, approve, reject, scaffold | Non-technical stakeholders can participate in the pipeline |
+| **Content Dedup** | SHA-256 + tagline similarity + cluster signature; rejection-aware prompts | Run it 1000 times, never get the same idea twice. Saturation summary feeds back into the next prompt. |
+| **External Feed Seeds** | NVD CVEs + arXiv cs.CR + IETF I-D RSS pulled into the prompt | Fresh signals from outside the corpus break the data-poverty loop |
+| **Self-Improvement Engine** | Daily introspect cycle proposes patches to its own code | The codebase improves itself — every promoted SI idea ships as a real PR |
+| **Web Dashboard** | Stats, explore, projects, think tank — with drill-down filters | Non-technical stakeholders can participate in the pipeline |
 | **Autonomous Mode** | Cron-driven, no human intervention | Set it and forget it -- ideas accumulate while you sleep |
-| **Optional AI** | Works without Claude API key (auto-scan mode) | Zero cost to start, add AI for richer generation later |
+| **No-API-Key Path** | Static heuristics OR Claude Code CLI when `claude` is on PATH | Zero-cost or subscription-cost — never blocked on API key provisioning |
 | **13 Categories** | Security, infra, compliance, automation, observability, privacy, and more | Configurable seeds — extend or replace per portfolio |
 
 ---
@@ -131,19 +141,19 @@ git clone https://github.com/rayketcham-lab/project-forge.git
 cd project-forge
 pip install -e ".[dev,test]"
 
-# Run the test suite (175+ tests)
+# Run the test suite (1000+ tests)
 pytest tests/ -v
 
 # Start the dashboard
 forge-serve
 # -> http://localhost:55443
 
-# Generate ideas (no API key needed)
+# Generate ideas (LLM auto-detected: Anthropic API, Claude Code CLI, or static)
 forge-generate
 ```
 
 > [!TIP]
-> Add `FORGE_ANTHROPIC_API_KEY` for Claude-powered generation. Without it, the auto-scan engine still produces ideas using seed concept crossing -- just less creative ones.
+> The LLM backend resolver picks the best path automatically. Force a specific one with `FORGE_LLM_BACKEND=claude_code` if you want Claude Code CLI even when an API key is set, or `FORGE_LLM_BACKEND=static` to disable LLM calls entirely. Pick the model with `FORGE_LLM_MODEL=sonnet|opus|haiku` (default: sonnet — cost-effective for creative idea generation).
 
 ### One-liner for the impatient
 
@@ -157,14 +167,25 @@ git clone https://github.com/rayketcham-lab/project-forge.git && cd project-forg
 
 The web dashboard at `http://localhost:55443` provides:
 
-**Home** (`/`) -- Real-time stats: total ideas, category breakdown, average feasibility scores, top-rated ideas.
+**Home** (`/`) -- Real-time stats: total ideas, category breakdown, average feasibility scores, top-rated ideas. Plus "Browse by Industry" and "Browse by Category" cards for one-click drill-down.
+
+**Add Idea** tab (on the Home page) -- Three ways to capture an idea:
+- **From URL** — paste an article/RFC/blog and Sonnet generates a project from it
+- **Build Idea from Text — Quick** — paste a fragment, get a structured Idea in one shot
+- **Idea Builder Wizard — 5 Phases** — the deeper path: Sonnet asks intelligent follow-ups across Discover → Differentiate → Audience → Constraints → Synthesize. Every field of the final draft is editable before save.
 
 **Explore** (`/explore`) -- Browse all ideas with:
 - Full-text search across titles and descriptions
-- Filter by category (12 categories)
+- Industry vertical chip row (government / healthcare / education / finance / retail / hospitality / manufacturing / energy / telco)
+- Tech category chip row (13 categories)
 - Filter by status (pending / approved / rejected / scaffolded)
-- Sort by score, date, or category
+- Both axes preserve each other's selection in links — drill down "Government × Crypto-Infrastructure" by clicking once on each axis.
 - Pagination (12 ideas per page)
+
+**Think Tank** (`/thinktank`) -- Self-improvement pipeline:
+- Engine activity heartbeat: SI proposals accepted/filtered in 24h, last proposal timestamp, recent activity feed
+- Forge Lab: AI-proposed code patches (Decompose X, Add tests for X) — promote to GitHub issue
+- Roadmap: open + closed self-improvement issues from GitHub
 
 **Idea Detail** (`/ideas/{id}`) -- Deep view of any idea:
 - Full description, category, score breakdown
