@@ -418,12 +418,15 @@ async def thinktank_page(request: Request):
     promoted = [i for i in all_si if i.status == "approved"]
     rejected = [i for i in all_si if i.status == "rejected"]
 
-    # Engine heartbeat: prove the cron is alive. Show recent generation runs,
-    # recent filter activity, and the last super-idea event so the page
-    # doesn't read as "nothing's happening" when the engine is busy upstream.
+    # Self-improvement heartbeat: every number on this page is scoped to the
+    # self-improvement category to match the Forge Lab tiles below. Whole-engine
+    # activity belongs on the dashboard, not here.
+    si_value = IdeaCategory.SELF_IMPROVEMENT.value
+
     cursor = await db.db.execute(
         "SELECT category, started_at, success, error FROM generation_runs "
-        "ORDER BY started_at DESC LIMIT 5",
+        "WHERE category = ? ORDER BY started_at DESC LIMIT 5",
+        (si_value,),
     )
     recent_runs = []
     for row in await cursor.fetchall():
@@ -435,21 +438,25 @@ async def thinktank_page(request: Request):
         })
 
     cursor = await db.db.execute(
-        "SELECT generated_at FROM ideas WHERE name LIKE '[SUPER]%%' "
+        "SELECT generated_at FROM ideas WHERE category = ? "
         "ORDER BY generated_at DESC LIMIT 1",
+        (si_value,),
     )
     row = await cursor.fetchone()
-    last_super = row[0] if row else None
+    last_proposal = row[0] if row else None
 
     cursor = await db.db.execute(
         "SELECT COUNT(*) FROM filtered_ideas "
-        "WHERE filtered_at >= datetime('now', '-1 day')",
+        "WHERE filtered_at >= datetime('now', '-1 day') AND idea_category = ?",
+        (si_value,),
     )
     row = await cursor.fetchone()
     filtered_24h = row[0] if row else 0
 
     cursor = await db.db.execute(
-        "SELECT COUNT(*) FROM ideas WHERE generated_at >= datetime('now', '-1 day')",
+        "SELECT COUNT(*) FROM ideas "
+        "WHERE generated_at >= datetime('now', '-1 day') AND category = ?",
+        (si_value,),
     )
     row = await cursor.fetchone()
     accepted_24h = row[0] if row else 0
@@ -457,7 +464,7 @@ async def thinktank_page(request: Request):
     heartbeat = {
         "now": datetime.now(UTC).isoformat(),
         "recent_runs": recent_runs,
-        "last_super": last_super,
+        "last_proposal": last_proposal,
         "filtered_24h": filtered_24h,
         "accepted_24h": accepted_24h,
     }

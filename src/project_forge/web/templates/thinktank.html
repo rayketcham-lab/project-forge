@@ -14,26 +14,26 @@
     <div class="container">
         <div class="heartbeat-panel">
             <div class="heartbeat-header">
-                <h3>Engine Activity</h3>
+                <h3>Self-Improvement Activity <span class="heartbeat-scope">(self-improvement category only)</span></h3>
                 <span class="heartbeat-now">as of {{ heartbeat.now[:19] }}Z</span>
             </div>
             <div class="heartbeat-grid">
                 <div class="heartbeat-stat">
                     <div class="heartbeat-num">{{ heartbeat.accepted_24h }}</div>
-                    <div class="heartbeat-label">Accepted (24h)</div>
+                    <div class="heartbeat-label">SI proposals accepted (24h)</div>
                 </div>
                 <div class="heartbeat-stat">
                     <div class="heartbeat-num heartbeat-num-dim">{{ heartbeat.filtered_24h }}</div>
-                    <div class="heartbeat-label">Dedup-filtered (24h)</div>
+                    <div class="heartbeat-label">SI proposals filtered (24h)</div>
                 </div>
                 <div class="heartbeat-stat">
-                    <div class="heartbeat-label">Last super idea</div>
-                    <div class="heartbeat-when">{{ heartbeat.last_super[:19] if heartbeat.last_super else 'never' }}</div>
+                    <div class="heartbeat-label">Last SI proposal</div>
+                    <div class="heartbeat-when">{{ heartbeat.last_proposal[:19] if heartbeat.last_proposal else 'never' }}</div>
                 </div>
             </div>
             {% if heartbeat.recent_runs %}
             <details class="heartbeat-runs">
-                <summary>Last {{ heartbeat.recent_runs|length }} generation runs</summary>
+                <summary>Last {{ heartbeat.recent_runs|length }} self-improvement runs</summary>
                 <ul>
                     {% for run in heartbeat.recent_runs %}
                     <li>
@@ -44,6 +44,8 @@
                     {% endfor %}
                 </ul>
             </details>
+            {% else %}
+            <p class="heartbeat-empty">No self-improvement runs in history yet — they fire daily via <code>project-forge-introspect.timer</code>.</p>
             {% endif %}
         </div>
     </div>

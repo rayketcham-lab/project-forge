@@ -444,6 +444,8 @@ a.stat-card:hover { transform: translateY(-3px); border-color: var(--accent); }
 .heartbeat-runs code { font-size: 0.75rem; color: var(--text-dim); }
 .run-ok { color: var(--green, #10b981); font-size: 0.75rem; }
 .run-err { color: var(--red, #ef4444); font-size: 0.75rem; }
+.heartbeat-scope { font-size: 0.75rem; color: var(--text-dim); font-weight: 400; margin-left: 0.5rem; }
+.heartbeat-empty { font-size: 0.85rem; color: var(--text-dim); margin-top: 1rem; }
 .filter-status select {
     background: var(--surface);
     border: 1px solid var(--border);
