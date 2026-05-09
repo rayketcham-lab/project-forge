@@ -529,33 +529,63 @@ class SuperIdeaGenerator:
         if not clusters:
             return None
 
-        # Pick the best cluster that overlaps with seed categories
-        best = None
-        for cluster in clusters:
-            cat_overlap = cluster["categories"] & seed_cats
-            if cat_overlap or best is None:
-                best = cluster
-                if cat_overlap:
-                    break
+        # Order clusters: seed-category overlap first, then everything else,
+        # preserving the find_idea_clusters score order within each group.
+        # We then iterate this list and try each cluster — skipping any whose
+        # cluster_signature is already covered (when reasoning is on). Without
+        # iteration, growth stalls on a stable corpus because the same top
+        # cluster always wins and dedup blocks it forever.
+        from project_forge.engine.super_reasoning import (
+            cluster_signature,
+            find_super_by_signature,
+        )
 
-        if not best:
-            return None
+        ordered = sorted(
+            clusters,
+            key=lambda c: (0 if c["categories"] & seed_cats else 1),
+        )
 
-        # Optional reasoning path — gated on env so existing tests stay deterministic.
         use_reasoning = bool(os.environ.get("FORGE_SUPER_REASONING"))
         llm_call = _reasoning_llm_call() if use_reasoning else None
 
-        si = synthesize_super_idea(best, use_reasoning=use_reasoning, llm_call=llm_call)
+        # Pre-skip clusters whose signature is already covered (cheap check
+        # before we burn an LLM call on synthesizing a name).
+        attempted = 0
+        si = None
+        chosen_cluster = None
+        for cluster in ordered:
+            attempted += 1
+            if attempted > 6:
+                # Bound the work — 6 attempts is plenty.
+                break
+            if use_reasoning:
+                sig = cluster_signature(cluster["ideas"])
+                if sig and await find_super_by_signature(self.db, sig) is not None:
+                    logger.info(
+                        "Cluster signature %s already covered — walking to next cluster",
+                        sig,
+                    )
+                    continue
+            candidate = synthesize_super_idea(
+                cluster, use_reasoning=use_reasoning, llm_call=llm_call,
+            )
+            # Quality gate: reject if tagline is the N-capability-synthesis fallback.
+            if re.match(r"^\d+-capability synthesis:", candidate.tagline):
+                logger.info(
+                    "Skipping super idea %s: tagline fell back to generic synthesis "
+                    "(poor cluster quality) — walking to next cluster",
+                    candidate.name,
+                )
+                continue
+            si = candidate
+            chosen_cluster = cluster
+            break
+
+        if si is None or chosen_cluster is None:
+            return None
+
         # Tag with the perspective
         si.description += f"\n\n**Perspective:** {label} — synthesized through the lens of {perspective}."
-
-        # Quality gate: reject if tagline is the N-capability-synthesis fallback.
-        if re.match(r"^\d+-capability synthesis:", si.tagline):
-            logger.info(
-                "Skipping super idea %s: tagline fell back to generic synthesis (poor cluster quality)",
-                si.name,
-            )
-            return None
 
         # Dedup strategy depends on whether reasoning is on:
         #

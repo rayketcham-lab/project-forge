@@ -222,3 +222,67 @@ class TestSignatureBasedDedup:
             f"Reasoning name should pass through; got {new_super.name!r}. "
             f"If this is the slot-fill name, the LLM stub was bypassed."
         )
+
+    @pytest.mark.asyncio
+    async def test_generate_walks_past_covered_clusters(self, db, monkeypatch):
+        """Regression: if the top cluster's signature is already covered,
+        generate_seeded must walk to the next-best cluster instead of
+        returning None.
+
+        Real bug from 2026-05-09: with a stable corpus, the same top
+        clusters re-form deterministically. Once their signatures are
+        stored, every subsequent run hits dedup on the first cluster
+        and gives up — even when there are perfectly good lower-ranked
+        clusters that haven't been supered yet. Growth stalls.
+        """
+        monkeypatch.setenv("FORGE_SUPER_REASONING", "1")
+
+        names = iter(
+            ["Cluster A Concept", "Cluster B Concept", "Cluster C Concept"]
+        )
+
+        def fake_llm(prompt: str) -> str:  # noqa: ARG001
+            return f'{{"name": "{next(names)}"}}'
+
+        monkeypatch.setattr(
+            "project_forge.engine.super_ideas._reasoning_llm_call",
+            lambda: fake_llm,
+        )
+
+        # Seed enough ideas across multiple categories so multiple clusters
+        # form. The TOP cluster's signature is then pre-covered to force
+        # the iteration to walk past.
+        for i in range(8):
+            await db.save_idea(_idea(
+                f"Crypto Tool {i}",
+                category=IdeaCategory.CRYPTO_INFRASTRUCTURE,
+                score=0.95 - i * 0.005,
+            ))
+        for i in range(8):
+            await db.save_idea(_idea(
+                f"PQC Tool {i}",
+                category=IdeaCategory.PQC_CRYPTOGRAPHY,
+                score=0.92 - i * 0.005,
+            ))
+        for i in range(8):
+            await db.save_idea(_idea(
+                f"Standards Tool {i}",
+                category=IdeaCategory.NIST_STANDARDS,
+                score=0.90 - i * 0.005,
+            ))
+
+        gen = SuperIdeaGenerator(db)
+        first = await gen.generate_seeded(slot=0)
+        if first is None:
+            pytest.skip("No cluster formed on first attempt (environmental)")
+
+        # Now the first cluster's signature is in the DB. A second call
+        # MUST find a different cluster and produce a new super, not
+        # return None.
+        second = await gen.generate_seeded(slot=0)
+        assert second is not None, (
+            "generate_seeded gave up on the first dedup-blocked cluster "
+            "instead of walking to the next. Growth stalls because the "
+            "same top cluster always wins on a stable corpus."
+        )
+        assert second.id != first.id
