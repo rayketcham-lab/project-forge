@@ -7,5 +7,11 @@ Type=oneshot
 User=claude
 WorkingDirectory=/opt/project-forge
 Environment=FORGE_DB_PATH=/opt/project-forge/data/forge.db
+# Enable Sonnet-driven super-idea cluster naming (Phase 6 reasoning
+# path). Without these the engine slot-fills the same 5 base names and
+# every cycle hits dedup, never producing growth.
+Environment=FORGE_SUPER_REASONING=1
+Environment=FORGE_LLM_BACKEND=claude_code
+Environment=FORGE_LLM_MODEL=sonnet
 EnvironmentFile=-/opt/project-forge/.env
 ExecStart=/opt/project-forge/scripts/expand-hourly.sh

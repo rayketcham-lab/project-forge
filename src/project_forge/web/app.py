@@ -26,17 +26,46 @@ STATIC_DIR = WEB_DIR / "static"
 db = Database(settings.db_path)
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
-# Ephemeral dashboard token — fresh on each PROCESS start, but persisted
-# across uvicorn --reload module reimports via process env. Without this,
-# every file save would regenerate the token, leaving open browser tabs
-# 401-ing on their next POST (issue-reporter, approve, scaffold, etc.)
-# until the user refreshed the page.
+# Ephemeral dashboard token — fresh on each MACHINE BOOT but stable across
+# process restarts and uvicorn --reload re-imports within a boot. Three
+# layers of persistence make sure open browser tabs don't 401 unless the
+# host actually rebooted:
+#   1. Process env var FORGE_DASHBOARD_TOKEN_RUNTIME — survives module reload
+#   2. File at /tmp/forge-dashboard-token — survives process restart
+#   3. Both reset on machine reboot (/tmp is tmpfs)
 import os  # noqa: E402
 import secrets  # noqa: E402
+import tempfile  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 _DASHBOARD_TOKEN_ENV = "FORGE_DASHBOARD_TOKEN_RUNTIME"  # noqa: S105
-_dashboard_token = os.environ.get(_DASHBOARD_TOKEN_ENV) or secrets.token_urlsafe(32)
+_DASHBOARD_TOKEN_FILE = Path(tempfile.gettempdir()) / "forge-dashboard-token"  # noqa: S105
+
+
+def _load_dashboard_token() -> str:
+    # Layer 1: env var (set by a previous import in this same process)
+    env_val = os.environ.get(_DASHBOARD_TOKEN_ENV)
+    if env_val:
+        return env_val
+    # Layer 2: tmpfs file (set by a previous process boot)
+    try:
+        if _DASHBOARD_TOKEN_FILE.exists():
+            disk_val = _DASHBOARD_TOKEN_FILE.read_text().strip()
+            if disk_val:
+                return disk_val
+    except OSError:
+        pass
+    # Layer 3: fresh
+    return secrets.token_urlsafe(32)
+
+
+_dashboard_token = _load_dashboard_token()
 os.environ[_DASHBOARD_TOKEN_ENV] = _dashboard_token
+try:
+    _DASHBOARD_TOKEN_FILE.write_text(_dashboard_token)
+    _DASHBOARD_TOKEN_FILE.chmod(0o600)
+except OSError as _exc:
+    logger.warning("Could not persist dashboard token to %s: %s", _DASHBOARD_TOKEN_FILE, _exc)
 templates.env.globals["dashboard_token"] = _dashboard_token
 
 

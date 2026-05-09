@@ -7,8 +7,15 @@ Type=oneshot
 User=claude
 WorkingDirectory=/opt/project-forge
 EnvironmentFile=-/opt/project-forge/.env
+# Use Claude Code CLI as LLM backend (no API key needed; rolls into the
+# user's Claude subscription). Enables Sonnet-driven SI proposals
+# instead of falling back to static heuristics.
+Environment=FORGE_LLM_BACKEND=claude_code
+Environment=FORGE_LLM_MODEL=sonnet
 ExecStart=/opt/project-forge/scripts/introspect-daily.sh
-TimeoutStartSec=120
+# Sonnet on the heavy introspect prompt (file tree + commits + lint +
+# issues + telemetry) takes 60-120s; bump from 120 to 300 for headroom.
+TimeoutStartSec=300
 
 [Install]
 WantedBy=multi-user.target

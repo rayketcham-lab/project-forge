@@ -7,6 +7,11 @@ Type=oneshot
 User=claude
 WorkingDirectory=/opt/project-forge
 EnvironmentFile=-/opt/project-forge/.env
+# Self-improvement runner uses the LLM backend to write code patches.
+# Sonnet via Claude Code CLI keeps cost on the user's subscription
+# instead of requiring an ANTHROPIC_API_KEY in .env.
+Environment=FORGE_LLM_BACKEND=claude_code
+Environment=FORGE_LLM_MODEL=sonnet
 ExecStart=/opt/project-forge/scripts/self-improve.sh
 TimeoutStartSec=300
 

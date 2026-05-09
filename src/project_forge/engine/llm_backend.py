@@ -25,7 +25,10 @@ from typing import Protocol
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "sonnet"
-DEFAULT_TIMEOUT = 60  # seconds; Claude Code spin-up + response
+# 180s is generous — short prompts (super-idea cluster naming) finish in
+# ~5s, but the introspect prompt is heavy (file tree + commits + lint +
+# issues + recent rejections) and Sonnet sometimes takes 60-90s.
+DEFAULT_TIMEOUT = 180
 
 
 class LLMBackend(Protocol):
