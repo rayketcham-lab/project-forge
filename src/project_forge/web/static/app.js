@@ -68,6 +68,12 @@ document.addEventListener('DOMContentLoaded', function() {
         urlBtn.addEventListener('click', submitUrl);
     }
 
+    // Text-ingest submit button (Build Idea from Text)
+    var textBtn = document.getElementById('text-submit-btn');
+    if (textBtn) {
+        textBtn.addEventListener('click', submitText);
+    }
+
     // Add as Issue static button
     var addStaticBtn = document.getElementById('add-to-project-static-btn');
     if (addStaticBtn) {
@@ -415,6 +421,105 @@ async function submitUrl() {
     } finally {
         btn.disabled = false;
         btn.textContent = 'Generate Idea';
+    }
+}
+
+
+async function submitText() {
+    var input = document.getElementById('text-input');
+    var catSelect = document.getElementById('text-category');
+    var btn = document.getElementById('text-submit-btn');
+    var resultDiv = document.getElementById('text-result');
+
+    if (!input || !input.value.trim()) {
+        alert('Please paste a fragment to expand');
+        return;
+    }
+    if (input.value.trim().length < 10) {
+        alert('Give Sonnet a little more to work with — at least 10 characters');
+        return;
+    }
+
+    var body = { text: input.value.trim() };
+    if (catSelect && catSelect.value) {
+        body.category = catSelect.value;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Building...';
+    resultDiv.style.display = 'none';
+
+    try {
+        var resp = await fetch('/api/ideas/from-text', {
+            method: 'POST',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, getAuthHeaders()),
+            body: JSON.stringify(body),
+        });
+
+        if (!resp.ok) {
+            var err = await safeJson(resp);
+            throw new Error(err.detail || 'Failed to build idea');
+        }
+
+        var data = await resp.json();
+        // Server returns either a full idea or {filtered: true, reason, idea}
+        var idea = data.filtered ? data.idea : data;
+        var filtered = !!data.filtered;
+
+        while (resultDiv.firstChild) resultDiv.removeChild(resultDiv.firstChild);
+        var successDiv = document.createElement('div');
+        successDiv.className = 'url-result-success';
+
+        if (filtered) {
+            var notice = document.createElement('p');
+            notice.style.color = '#f59e0b';
+            notice.textContent = 'Filtered as duplicate: ' + (data.reason || 'similar idea exists');
+            successDiv.appendChild(notice);
+        }
+
+        var heading = document.createElement('h3');
+        heading.textContent = idea.name;
+        successDiv.appendChild(heading);
+
+        var tagline = document.createElement('p');
+        tagline.textContent = idea.tagline;
+        successDiv.appendChild(tagline);
+
+        var meta = document.createElement('div');
+        meta.className = 'url-result-meta';
+        var scoreBadge = document.createElement('span');
+        scoreBadge.className = 'score-pill';
+        scoreBadge.textContent = Math.round((idea.feasibility_score || 0) * 100) + '%';
+        meta.appendChild(scoreBadge);
+        var catBadge = document.createElement('span');
+        catBadge.className = 'badge';
+        catBadge.textContent = idea.category;
+        meta.appendChild(catBadge);
+        successDiv.appendChild(meta);
+
+        if (idea.id && !filtered) {
+            var viewLink = document.createElement('a');
+            viewLink.href = '/ideas/' + idea.id;
+            viewLink.className = 'btn btn-primary btn-sm';
+            viewLink.textContent = 'View Idea';
+            successDiv.appendChild(viewLink);
+        }
+
+        resultDiv.appendChild(successDiv);
+        resultDiv.style.display = 'block';
+        if (!filtered) {
+            input.value = '';
+        }
+    } catch (err) {
+        while (resultDiv.firstChild) resultDiv.removeChild(resultDiv.firstChild);
+        var errP = document.createElement('p');
+        errP.style.color = '#e74c3c';
+        errP.textContent = 'Error: ' + err.message;
+        resultDiv.appendChild(errP);
+        resultDiv.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Build Idea';
     }
 }
 

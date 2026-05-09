@@ -90,6 +90,68 @@ The feasibility_score should be between 0.0 and 1.0 where:
 - 0.9-1.0: Obviously needed, straightforward to build, immediate value"""
 
 
+TEXT_INGEST_PROMPT_TEMPLATE = """You are an idea-builder. The user has shared \
+a raw fragment of thought — a partial sentence, a research question, a \
+frustration, a code snippet, or a domain observation. Your job is to expand \
+it into a fully-developed, buildable IT project idea.
+
+**User fragment:**
+---
+{text}
+---
+
+{category_section}
+
+Identify:
+1. The core problem or opportunity hidden in the fragment
+2. Who would use the resulting tool (concrete persona, not abstract)
+3. A concrete project that addresses it
+4. The MVP scope achievable in 2-4 weeks by a small team
+5. Why now — what changed that makes this worth building today
+
+Keep the fragment's intent. If the user wrote "I keep having to reconcile \
+SBOMs across forks", don't drift into a general supply-chain dashboard — \
+build the specific reconciliation tool they hinted at.
+
+Respond with ONLY valid JSON in this exact format:
+{{
+    "name": "Short Project Name (2-4 words)",
+    "tagline": "One-sentence hook (under 100 chars)",
+    "description": "2-3 paragraph pitch explaining the problem, the solution, and why now",
+    "category": "{category_value}",
+    "market_analysis": "2-3 sentences on why this matters now, what's the gap, who needs it",
+    "feasibility_score": 0.75,
+    "mvp_scope": "Concrete description of what the MVP includes and doesn't include",
+    "tech_stack": ["python", "fastapi", "sqlite"]
+}}
+
+The feasibility_score should be between 0.0 and 1.0:
+- 0.0-0.3: Interesting but very hard to build or unclear market
+- 0.3-0.5: Feasible but significant unknowns
+- 0.5-0.7: Solid idea, clear path to MVP
+- 0.7-0.9: Strong idea, achievable MVP, clear market need
+- 0.9-1.0: Obviously needed, straightforward to build, immediate value"""
+
+
+def build_text_ingest_prompt(text: str, category_hint: str | None = None) -> str:
+    """Build a prompt for expanding a free-form text fragment into an Idea."""
+    if category_hint:
+        category_section = (
+            f"SUGGESTED CATEGORY: {category_hint} (use this if it fits the fragment)"
+        )
+        category_value = category_hint
+    else:
+        all_cats = ", ".join(c.value for c in IdeaCategory)
+        category_section = f"Choose the most fitting category from: {all_cats}"
+        category_value = "security-tool"
+
+    return TEXT_INGEST_PROMPT_TEMPLATE.format(
+        text=text,
+        category_section=category_section,
+        category_value=category_value,
+    )
+
+
 def build_url_ingest_prompt(
     title: str,
     url: str,

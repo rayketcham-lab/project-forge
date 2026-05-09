@@ -168,6 +168,29 @@
                 </div>
                 <div id="url-result" class="url-result" style="display:none"></div>
             </div>
+
+            <div class="section-header" style="margin-top:2rem">
+                <h2>Build Idea from Text</h2>
+                <span class="section-subtitle">Drop a fragment, half-thought, research question, or rant — Sonnet expands it into a full project pitch.</span>
+            </div>
+            <div class="url-ingest-form">
+                <p class="url-ingest-desc">No URL needed. Type or paste raw thinking — anything from one sentence to a few paragraphs. The builder names the project, drafts the pitch, picks a tech stack, and scores feasibility.</p>
+                <textarea id="text-input"
+                          class="text-input-field"
+                          rows="5"
+                          maxlength="10000"
+                          placeholder="Example: I keep having to reconcile SBOMs across forks of the same project — there's no good way to spot when a transitive dep changed without rebuilding everything..."></textarea>
+                <div class="url-ingest-row" style="margin-top:0.75rem">
+                    <select id="text-category" class="url-category-select">
+                        <option value="">Auto-detect category</option>
+                        {% for cat_name in categories %}
+                        <option value="{{ cat_name.name }}">{{ cat_name.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button id="text-submit-btn" class="btn btn-primary">Build Idea</button>
+                </div>
+                <div id="text-result" class="url-result" style="display:none"></div>
+            </div>
         </div>
     </div>
 </section>

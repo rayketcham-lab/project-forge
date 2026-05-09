@@ -455,6 +455,22 @@ a.stat-card:hover { transform: translateY(-3px); border-color: var(--accent); }
 .heartbeat-event-filtered { color: var(--text-dim); background: rgba(107, 114, 128, 0.1); }
 .heartbeat-event-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
 .heartbeat-event-reason { display: block; font-size: 0.75rem; color: var(--text-dim); grid-column: 3; margin-top: 0.15rem; }
+
+.text-input-field {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    color: var(--text);
+    font-family: var(--font, system-ui), sans-serif;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    resize: vertical;
+    min-height: 6rem;
+}
+.text-input-field:focus { border-color: var(--accent); outline: none; }
+.text-input-field::placeholder { color: var(--text-dim); opacity: 0.7; }
 .filter-status select {
     background: var(--surface);
     border: 1px solid var(--border);

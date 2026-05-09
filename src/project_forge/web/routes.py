@@ -24,6 +24,7 @@ from project_forge.models import (
     IdeaStatus,
     Resource,
     SelectionRound,
+    TextIngestRequest,
     UrlIngestRequest,
 )
 from project_forge.scaffold.github import create_issue
@@ -843,6 +844,26 @@ async def ingest_idea_from_url(request_body: UrlIngestRequest):
 async def ingest_url(request_body: UrlIngestRequest):
     """Generate a project idea from a URL."""
     idea = await ingest_idea_from_url(request_body)
+    _, accepted, reason = await filter_and_save(idea, db)
+    if not accepted:
+        return {"filtered": True, "reason": reason, "idea": idea.model_dump()}
+    return idea.model_dump()
+
+
+# Module-level for monkeypatching in tests.
+async def generate_idea_from_text(text: str, category_hint: str | None = None):
+    from project_forge.engine.text_ingest import generate_idea_from_text as _gen
+
+    return await _gen(text=text, category_hint=category_hint)
+
+
+@router.post("/api/ideas/from-text")
+async def ingest_text(request_body: TextIngestRequest):
+    """Expand a free-form text fragment into a project idea via the LLM
+    backend (or heuristic fallback when no backend is available)."""
+    idea = await generate_idea_from_text(
+        text=request_body.text, category_hint=request_body.category,
+    )
     _, accepted, reason = await filter_and_save(idea, db)
     if not accepted:
         return {"filtered": True, "reason": reason, "idea": idea.model_dump()}

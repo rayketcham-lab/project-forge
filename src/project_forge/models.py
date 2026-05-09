@@ -71,6 +71,28 @@ class UrlIngestRequest(BaseModel):
         return v
 
 
+class TextIngestRequest(BaseModel):
+    """Free-form fragment the user wants expanded into an Idea.
+
+    Companion to UrlIngestRequest. The text can be a half-formed thought,
+    a research question, a frustration, a code snippet — anything Sonnet
+    can structure into a project pitch.
+    """
+
+    text: str
+    category: str | None = None
+
+    @field_validator("text")
+    @classmethod
+    def validate_text_not_empty(cls, v: str) -> str:
+        stripped = (v or "").strip()
+        if not stripped:
+            raise ValueError("text cannot be empty or whitespace-only")
+        if len(stripped) > 10000:
+            raise ValueError(f"text too long ({len(stripped)} chars; max 10000)")
+        return stripped
+
+
 class Challenge(BaseModel):
     id: str = Field(default_factory=lambda: uuid4().hex[:12])
     idea_id: str
