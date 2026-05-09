@@ -80,6 +80,32 @@ document.addEventListener('DOMContentLoaded', function() {
     // 5-phase Idea Builder wizard
     initWizard();
 
+    // Browse toggle (Industry vs Category on the dashboard)
+    document.querySelectorAll('[data-browse-mode]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var mode = btn.getAttribute('data-browse-mode');
+            document.querySelectorAll('[data-browse-mode]').forEach(function(b) {
+                b.classList.toggle('is-active', b === btn);
+            });
+            document.querySelectorAll('.browse-pane').forEach(function(p) {
+                p.classList.toggle('is-active', p.id === 'browse-pane-' + mode);
+            });
+        });
+    });
+
+    // Ingest mode toggle (URL / Quick Text / 5-Phase Wizard)
+    document.querySelectorAll('[data-ingest-mode]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var mode = btn.getAttribute('data-ingest-mode');
+            document.querySelectorAll('[data-ingest-mode]').forEach(function(b) {
+                b.classList.toggle('is-active', b === btn);
+            });
+            document.querySelectorAll('.ingest-pane').forEach(function(p) {
+                p.classList.toggle('is-active', p.id === 'ingest-pane-' + mode);
+            });
+        });
+    });
+
     // Add as Issue static button
     var addStaticBtn = document.getElementById('add-to-project-static-btn');
     if (addStaticBtn) {

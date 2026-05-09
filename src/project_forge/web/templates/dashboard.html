@@ -7,7 +7,7 @@
         <div class="hero-grid">
             <div class="hero-main">
                 <h1 class="hero-title">Your IT Think Tank</h1>
-                <p class="hero-subtitle">{{ stats.total_ideas }} ideas across {{ stats.ideas_by_category | length }} categories. Autonomous generation, human-directed governance.</p>
+                <p class="hero-subtitle">{{ stats.total_active }} active ideas across {{ stats.ideas_by_category | length }} categories.{% if stats.total_archived %} <span class="hero-archived-note">{{ stats.total_archived }} archived (dedup + cleanup).</span>{% endif %} Autonomous generation, human-directed governance.</p>
                 <div class="hero-actions">
                     <a href="/explore" class="btn btn-primary btn-lg">Explore Ideas</a>
                     <a href="/thinktank" class="btn btn-outline btn-lg">Think Tank</a>
@@ -53,9 +53,12 @@
 <section class="stats-section">
     <div class="container">
         <div class="stats-grid">
-            <a href="/explore" class="stat-card stat-accent">
-                <div class="stat-number">{{ stats.total_ideas }}</div>
-                <div class="stat-label">Total Ideas</div>
+            <a href="/explore" class="stat-card stat-accent" title="Active ideas (excludes archived and rejected). Click to browse.">
+                <div class="stat-number">{{ stats.total_active }}</div>
+                <div class="stat-label">Active Ideas</div>
+                {% if stats.total_archived %}
+                <div class="stat-subtitle">+{{ stats.total_archived }} archived</div>
+                {% endif %}
             </a>
             <a href="/explore?status=approved" class="stat-card stat-green">
                 <div class="stat-number">{{ stats.ideas_by_status.get('approved', 0) }}</div>
@@ -73,10 +76,10 @@
                 <div class="stat-number">{{ stats.ideas_by_status.get('contributed', 0) }}</div>
                 <div class="stat-label">Contributed</div>
             </a>
-            <div class="stat-card stat-orange" title="Average feasibility score across all ideas. Each idea is scored 0.0-1.0 by the AI engine based on how achievable the MVP is, market need, and technical clarity.">
-                <div class="stat-number">{{ stats.avg_feasibility_score }}</div>
+            <div class="stat-card stat-orange" title="Average feasibility score across ACTIVE ideas only (archived rows excluded). Each idea is scored 0.0-1.0 by the AI engine based on how achievable the MVP is, market need, and technical clarity.">
+                <div class="stat-number">{{ stats.avg_feasibility_active }}</div>
                 <div class="stat-label">Avg Score</div>
-                <div class="stat-subtitle">AI-assessed feasibility</div>
+                <div class="stat-subtitle">active only</div>
             </div>
         </div>
     </div>
@@ -151,11 +154,14 @@
         </div>
 
         <div id="tab-add-idea" class="tab-panel">
-            <div class="section-header">
-                <h2>Add Idea from URL</h2>
+            <div class="ingest-mode-bar" role="tablist">
+                <button class="ingest-mode-btn is-active" data-ingest-mode="url" type="button">From URL</button>
+                <button class="ingest-mode-btn" data-ingest-mode="text" type="button">Quick Text</button>
+                <button class="ingest-mode-btn" data-ingest-mode="wizard" type="button">5-Phase Wizard</button>
             </div>
-            <div class="url-ingest-form">
-                <p class="url-ingest-desc">Paste a URL to an article, RFC, newsletter, or tech blog and generate a project idea from it.</p>
+
+            <div id="ingest-pane-url" class="ingest-pane is-active">
+                <p class="url-ingest-desc">Paste a URL to an article, RFC, newsletter, or tech blog. Sonnet generates a project idea from the page.</p>
                 <div class="url-ingest-row">
                     <input type="url" id="url-input" placeholder="https://example.com/article-about-new-tech" class="search-input url-input-field" required>
                     <select id="url-category" class="url-category-select">
@@ -169,12 +175,8 @@
                 <div id="url-result" class="url-result" style="display:none"></div>
             </div>
 
-            <div class="section-header" style="margin-top:2rem">
-                <h2>Build Idea from Text — Quick</h2>
-                <span class="section-subtitle">One-shot: drop a fragment, get an Idea.</span>
-            </div>
-            <div class="url-ingest-form">
-                <p class="url-ingest-desc">Type or paste raw thinking — anything from one sentence to a few paragraphs. Sonnet expands it into a full pitch in one shot.</p>
+            <div id="ingest-pane-text" class="ingest-pane">
+                <p class="url-ingest-desc">Drop a fragment — sentence, frustration, half-formed thought. Sonnet expands it into a structured pitch in one shot.</p>
                 <textarea id="text-input"
                           class="text-input-field"
                           rows="4"
@@ -192,10 +194,8 @@
                 <div id="text-result" class="url-result" style="display:none"></div>
             </div>
 
-            <div class="section-header" style="margin-top:2rem">
-                <h2>Idea Builder Wizard — 5 Phases</h2>
-                <span class="section-subtitle">Sonnet asks intelligent follow-ups across 5 phases (Discover → Differentiate → Audience → Constraints → Synthesize) instead of one-shotting it.</span>
-            </div>
+            <div id="ingest-pane-wizard" class="ingest-pane">
+                <p class="url-ingest-desc">Sonnet asks intelligent follow-ups across 5 phases (Discover → Differentiate → Audience → Constraints → Synthesize) before drafting an idea — better than one-shot for complex problems.</p>
             <div class="url-ingest-form" id="wizard-container">
                 <div id="wizard-step-bar" class="wizard-step-bar">
                     <div class="wizard-step is-current" data-step="1"><span class="wizard-step-num">1</span> Discover</div>
@@ -241,6 +241,7 @@
 
                 <div id="wizard-error" class="url-result" style="display:none"></div>
             </div>
+            </div>  {# /ingest-pane-wizard #}
         </div>
     </div>
 </section>
@@ -248,37 +249,38 @@
 <section class="section section-alt">
     <div class="container">
         <div class="section-header">
-            <h2>Browse by Industry</h2>
-            <span class="section-subtitle">Filter ideas by where they fit. Inferred from each idea's text — an idea may appear under several.</span>
+            <h2>Browse</h2>
+            <div class="browse-toggle" role="tablist">
+                <button class="browse-toggle-btn is-active" data-browse-mode="industry" type="button">By Industry</button>
+                <button class="browse-toggle-btn" data-browse-mode="category" type="button">By Category</button>
+            </div>
         </div>
-        <div class="category-cards">
-            {% for v in verticals %}
-            <a href="/explore?vertical={{ v.slug }}" class="category-card vertical-card">
-                <div class="cat-count">{{ v.count }}</div>
-                <div class="cat-name">{{ v.slug }}</div>
-                <div class="cat-score" title="{{ v.top.tagline }}">top: {{ v.top.name[:40] }}</div>
-            </a>
-            {% endfor %}
-            {% if not verticals %}
-            <p class="empty-state">No vertical-tagged ideas yet — corpus is mostly horizontal.</p>
-            {% endif %}
-        </div>
-    </div>
-</section>
 
-<section class="section">
-    <div class="container">
-        <div class="section-header">
-            <h2>Browse by Category</h2>
+        <div id="browse-pane-industry" class="browse-pane is-active">
+            <div class="category-cards">
+                {% for v in verticals %}
+                <a href="/explore?vertical={{ v.slug }}" class="category-card vertical-card">
+                    <div class="cat-count">{{ v.count }}</div>
+                    <div class="cat-name">{{ v.slug }}</div>
+                    <div class="cat-score" title="{{ v.top.tagline }}">top: {{ v.top.name[:40] }}</div>
+                </a>
+                {% endfor %}
+                {% if not verticals %}
+                <p class="empty-state">No vertical-tagged ideas yet — corpus is mostly horizontal.</p>
+                {% endif %}
+            </div>
         </div>
-        <div class="category-cards">
-            {% for cat in categories %}
-            <a href="/explore?category={{ cat.name }}" class="category-card">
-                <div class="cat-count">{{ cat.count }}</div>
-                <div class="cat-name">{{ cat.name }}</div>
-                <div class="cat-score">avg {{ cat.avg_score }}</div>
-            </a>
-            {% endfor %}
+
+        <div id="browse-pane-category" class="browse-pane">
+            <div class="category-cards">
+                {% for cat in categories %}
+                <a href="/explore?category={{ cat.name }}" class="category-card">
+                    <div class="cat-count">{{ cat.count }}</div>
+                    <div class="cat-name">{{ cat.name }}</div>
+                    <div class="cat-score">avg {{ cat.avg_score }}</div>
+                </a>
+                {% endfor %}
+            </div>
         </div>
     </div>
 </section>

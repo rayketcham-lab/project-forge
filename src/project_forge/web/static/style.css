@@ -490,6 +490,18 @@ a.stat-card:hover { transform: translateY(-3px); border-color: var(--accent); }
 
 .challenge-actions { margin-top: 0.75rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 .challenge-applied { font-size: 0.8rem; color: var(--green, #10b981); font-weight: 600; }
+
+/* Hero archived-note (post-siphon context) */
+.hero-archived-note { color: var(--text-dim); font-size: 0.85em; }
+
+/* Browse + ingest mode toggles (dashboard density rework) */
+.browse-toggle, .ingest-mode-bar { display: inline-flex; gap: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 2px; margin-bottom: 1rem; }
+.browse-toggle-btn, .ingest-mode-btn { background: transparent; border: 0; color: var(--text-dim); padding: 0.4rem 0.85rem; font-size: 0.82rem; font-weight: 600; cursor: pointer; border-radius: 6px; transition: background 0.12s, color 0.12s; }
+.browse-toggle-btn:hover, .ingest-mode-btn:hover { color: var(--text); }
+.browse-toggle-btn.is-active, .ingest-mode-btn.is-active { background: var(--accent); color: white; }
+.browse-pane, .ingest-pane { display: none; }
+.browse-pane.is-active, .ingest-pane.is-active { display: block; }
+.ingest-mode-bar { margin-top: 0.5rem; }
 .filter-status select {
     background: var(--surface);
     border: 1px solid var(--border);

@@ -516,6 +516,16 @@ class Database:
         for row in await cursor.fetchall():
             ideas_by_status[row[0]] = row[1]
 
+        # Active vs archived split — after the #71 siphon, total_ideas
+        # alone is misleading because most rows are archived dedup victims.
+        # The dashboard headline should be active.
+        ARCHIVED_STATUSES = {"archived", "rejected"}
+        total_active = sum(
+            v for k, v in ideas_by_status.items() if k not in ARCHIVED_STATUSES
+        )
+        total_archived = ideas_by_status.get("archived", 0)
+        total_rejected = ideas_by_status.get("rejected", 0)
+
         ideas_by_category = await self.count_ideas_by_category()
 
         cursor = await self.db.execute("SELECT COUNT(*) FROM generation_runs")
@@ -525,6 +535,15 @@ class Database:
         cursor = await self.db.execute("SELECT AVG(feasibility_score) FROM ideas")
         row = await cursor.fetchone()
         avg_score = round(row[0], 2) if row and row[0] else 0.0
+
+        # Average feasibility over ACTIVE ideas only — archived rows would
+        # drag the visible average toward historical noise.
+        cursor = await self.db.execute(
+            "SELECT AVG(feasibility_score) FROM ideas "
+            "WHERE status NOT IN ('archived', 'rejected')",
+        )
+        row = await cursor.fetchone()
+        avg_feasibility_active = round(row[0], 2) if row and row[0] else 0.0
 
         super_count = len(await self.list_super_ideas())
 
@@ -541,7 +560,13 @@ class Database:
         total_denials = row[0] if row else 0
 
         return {
+            # total_ideas kept for backward compat (existing tests / integrations).
+            # Dashboard prefers total_active for the headline tile.
             "total_ideas": sum(ideas_by_status.values()),
+            "total_active": total_active,
+            "total_archived": total_archived,
+            "total_rejected": total_rejected,
+            "avg_feasibility_active": avg_feasibility_active,
             "ideas_by_status": ideas_by_status,
             "ideas_by_category": ideas_by_category,
             "total_runs": total_runs,
