@@ -74,6 +74,9 @@ document.addEventListener('DOMContentLoaded', function() {
         textBtn.addEventListener('click', submitText);
     }
 
+    // 5-phase Idea Builder wizard
+    initWizard();
+
     // Add as Issue static button
     var addStaticBtn = document.getElementById('add-to-project-static-btn');
     if (addStaticBtn) {
@@ -1133,4 +1136,279 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
                 alert('Delete failed: ' + err.message);
             });
     });
+
+    // === 5-Phase Idea Builder Wizard ===
+    function initWizard() {
+        var startBtn = document.getElementById('wizard-start-btn');
+        if (!startBtn) return;  // not on this page
+
+        var state = {
+            step: 1,
+            fragment: '',
+            category: null,
+            answers: [],
+            currentQuestions: [],
+            draft: null,
+        };
+
+        var stageFragment = document.getElementById('wizard-stage-fragment');
+        var stageQuestions = document.getElementById('wizard-stage-questions');
+        var stageDraft = document.getElementById('wizard-stage-draft');
+        var qContainer = document.getElementById('wizard-questions-container');
+        var draftContainer = document.getElementById('wizard-draft-container');
+        var stepBar = document.getElementById('wizard-step-bar');
+        var errorDiv = document.getElementById('wizard-error');
+        var nextBtn = document.getElementById('wizard-next-btn');
+        var backBtn = document.getElementById('wizard-back-btn');
+        var saveBtn = document.getElementById('wizard-save-btn');
+        var restartBtn = document.getElementById('wizard-restart-btn');
+
+        function showStage(name) {
+            stageFragment.style.display = name === 'fragment' ? '' : 'none';
+            stageQuestions.style.display = name === 'questions' ? '' : 'none';
+            stageDraft.style.display = name === 'draft' ? '' : 'none';
+        }
+
+        function updateStepBar() {
+            var steps = stepBar.querySelectorAll('.wizard-step');
+            for (var i = 0; i < steps.length; i++) {
+                var s = steps[i];
+                var n = parseInt(s.getAttribute('data-step'), 10);
+                s.classList.remove('is-current', 'is-done');
+                if (n < state.step) s.classList.add('is-done');
+                if (n === state.step) s.classList.add('is-current');
+            }
+        }
+
+        function showError(msg) {
+            while (errorDiv.firstChild) errorDiv.removeChild(errorDiv.firstChild);
+            var p = document.createElement('p');
+            p.style.color = '#e74c3c';
+            p.textContent = msg;
+            errorDiv.appendChild(p);
+            errorDiv.style.display = 'block';
+        }
+
+        function clearError() {
+            errorDiv.style.display = 'none';
+        }
+
+        async function callStep() {
+            clearError();
+            nextBtn.disabled = true;
+            startBtn.disabled = true;
+            var prevText = state.step === 1 ? 'Begin Wizard' : 'Next →';
+            (state.step === 1 ? startBtn : nextBtn).textContent = 'Asking Sonnet...';
+
+            try {
+                var resp = await fetch('/api/ideas/builder/step', {
+                    method: 'POST',
+                    headers: Object.assign({ 'Content-Type': 'application/json' }, getAuthHeaders()),
+                    body: JSON.stringify({
+                        step: state.step,
+                        fragment: state.fragment,
+                        answers: state.answers,
+                        category: state.category,
+                    }),
+                });
+                if (!resp.ok) {
+                    var err = await safeJson(resp);
+                    throw new Error(err.detail || ('HTTP ' + resp.status));
+                }
+                var data = await resp.json();
+                if (data.error) throw new Error(data.error);
+
+                if (state.step < 5) {
+                    state.currentQuestions = data.questions || [];
+                    renderQuestions();
+                    showStage('questions');
+                    updateStepBar();
+                } else {
+                    state.draft = data.draft;
+                    renderDraft();
+                    showStage('draft');
+                    updateStepBar();
+                }
+            } catch (err) {
+                showError('Wizard step failed: ' + err.message);
+            } finally {
+                nextBtn.disabled = false;
+                startBtn.disabled = false;
+                startBtn.textContent = 'Begin Wizard';
+                nextBtn.textContent = state.step === 4 ? 'Synthesize →' : 'Next →';
+            }
+        }
+
+        function renderQuestions() {
+            while (qContainer.firstChild) qContainer.removeChild(qContainer.firstChild);
+            var phaseLabels = {1:'Discover', 2:'Differentiate', 3:'Audience', 4:'Constraints'};
+            var heading = document.createElement('h3');
+            heading.className = 'wizard-phase-heading';
+            heading.textContent = 'Phase ' + state.step + '/5 — ' + phaseLabels[state.step];
+            qContainer.appendChild(heading);
+
+            for (var i = 0; i < state.currentQuestions.length; i++) {
+                var q = state.currentQuestions[i];
+                var wrap = document.createElement('div');
+                wrap.className = 'wizard-question';
+                var label = document.createElement('label');
+                label.className = 'wizard-question-text';
+                label.textContent = q;
+                var idAttr = 'wizard-q-' + state.step + '-' + i;
+                label.setAttribute('for', idAttr);
+                wrap.appendChild(label);
+                var ta = document.createElement('textarea');
+                ta.className = 'text-input-field wizard-answer';
+                ta.id = idAttr;
+                ta.rows = 2;
+                ta.setAttribute('data-question', q);
+                wrap.appendChild(ta);
+                qContainer.appendChild(wrap);
+            }
+
+            backBtn.style.display = state.step > 1 ? '' : 'none';
+        }
+
+        function renderDraft() {
+            while (draftContainer.firstChild) draftContainer.removeChild(draftContainer.firstChild);
+            var d = state.draft || {};
+            var heading = document.createElement('h3');
+            heading.className = 'wizard-phase-heading';
+            heading.textContent = 'Phase 5/5 — Review & Save';
+            draftContainer.appendChild(heading);
+
+            var fields = [
+                ['name', 'Project Name', 'input'],
+                ['tagline', 'Tagline', 'input'],
+                ['description', 'Description', 'textarea'],
+                ['mvp_scope', 'MVP Scope', 'textarea'],
+                ['market_analysis', 'Market Analysis', 'textarea'],
+                ['feasibility_score', 'Feasibility (0–1)', 'input'],
+                ['category', 'Category', 'input'],
+                ['tech_stack', 'Tech Stack (comma)', 'input'],
+            ];
+            for (var i = 0; i < fields.length; i++) {
+                var key = fields[i][0], label = fields[i][1], kind = fields[i][2];
+                var wrap = document.createElement('div');
+                wrap.className = 'wizard-field';
+                var lab = document.createElement('label');
+                lab.className = 'wizard-field-label';
+                lab.textContent = label;
+                lab.setAttribute('for', 'wizard-draft-' + key);
+                wrap.appendChild(lab);
+                var el;
+                if (kind === 'textarea') {
+                    el = document.createElement('textarea');
+                    el.rows = 3;
+                    el.className = 'text-input-field';
+                } else {
+                    el = document.createElement('input');
+                    el.type = 'text';
+                    el.className = 'search-input';
+                }
+                el.id = 'wizard-draft-' + key;
+                var v = d[key];
+                if (Array.isArray(v)) v = v.join(', ');
+                el.value = (v == null ? '' : String(v));
+                wrap.appendChild(el);
+                draftContainer.appendChild(wrap);
+            }
+        }
+
+        function captureAnswers() {
+            var nodes = document.querySelectorAll('.wizard-answer');
+            for (var i = 0; i < nodes.length; i++) {
+                state.answers.push({
+                    question: nodes[i].getAttribute('data-question'),
+                    answer: nodes[i].value.trim() || '(skipped)',
+                });
+            }
+        }
+
+        startBtn.addEventListener('click', function() {
+            var frag = (document.getElementById('wizard-fragment').value || '').trim();
+            if (frag.length < 10) {
+                showError('Give the wizard at least 10 characters to work with.');
+                return;
+            }
+            state.fragment = frag;
+            state.category = document.getElementById('wizard-category').value || null;
+            state.answers = [];
+            state.step = 1;
+            updateStepBar();
+            callStep();
+        });
+
+        nextBtn.addEventListener('click', function() {
+            captureAnswers();
+            state.step += 1;
+            callStep();
+        });
+
+        backBtn.addEventListener('click', function() {
+            if (state.step <= 1) return;
+            // Drop the answers from the most-recent step (assume same number as currentQuestions)
+            var dropCount = state.currentQuestions.length;
+            state.answers = state.answers.slice(0, Math.max(0, state.answers.length - dropCount));
+            state.step -= 1;
+            callStep();
+        });
+
+        restartBtn.addEventListener('click', function() {
+            state = { step: 1, fragment: '', category: null, answers: [], currentQuestions: [], draft: null };
+            document.getElementById('wizard-fragment').value = '';
+            updateStepBar();
+            showStage('fragment');
+            clearError();
+        });
+
+        saveBtn.addEventListener('click', async function() {
+            clearError();
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+            try {
+                var payload = {};
+                var fields = ['name', 'tagline', 'description', 'mvp_scope', 'market_analysis', 'category'];
+                for (var i = 0; i < fields.length; i++) {
+                    payload[fields[i]] = document.getElementById('wizard-draft-' + fields[i]).value.trim();
+                }
+                payload.feasibility_score = parseFloat(
+                    document.getElementById('wizard-draft-feasibility_score').value
+                ) || 0.7;
+                var techVal = document.getElementById('wizard-draft-tech_stack').value;
+                payload.tech_stack = techVal.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+
+                var resp = await fetch('/api/ideas/builder/save', {
+                    method: 'POST',
+                    headers: Object.assign({ 'Content-Type': 'application/json' }, getAuthHeaders()),
+                    body: JSON.stringify(payload),
+                });
+                if (!resp.ok) {
+                    var err = await safeJson(resp);
+                    throw new Error(err.detail || ('HTTP ' + resp.status));
+                }
+                var data = await resp.json();
+                var idea = data.filtered ? data.idea : data;
+                while (draftContainer.firstChild) draftContainer.removeChild(draftContainer.firstChild);
+                var msg = document.createElement('p');
+                msg.style.color = data.filtered ? '#f59e0b' : '#10b981';
+                msg.textContent = data.filtered
+                    ? 'Saved as duplicate (similar idea exists): ' + (data.reason || '')
+                    : 'Idea saved!';
+                draftContainer.appendChild(msg);
+                if (idea && idea.id && !data.filtered) {
+                    var link = document.createElement('a');
+                    link.href = '/ideas/' + idea.id;
+                    link.className = 'btn btn-primary btn-sm';
+                    link.textContent = 'View "' + idea.name + '"';
+                    draftContainer.appendChild(link);
+                }
+            } catch (err) {
+                showError('Save failed: ' + err.message);
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save Idea';
+            }
+        });
+    }
 })();

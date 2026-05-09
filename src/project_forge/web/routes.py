@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from project_forge.config import settings
 from project_forge.engine.dedup import filter_and_save
@@ -864,6 +864,77 @@ async def ingest_text(request_body: TextIngestRequest):
     idea = await generate_idea_from_text(
         text=request_body.text, category_hint=request_body.category,
     )
+    _, accepted, reason = await filter_and_save(idea, db)
+    if not accepted:
+        return {"filtered": True, "reason": reason, "idea": idea.model_dump()}
+    return idea.model_dump()
+
+
+# ── Multi-step wizard ───────────────────────────────────────────────
+
+
+class _BuilderStepRequest(BaseModel):
+    step: int = Field(..., ge=1, le=5)
+    fragment: str
+    answers: list[dict] = Field(default_factory=list)
+    category: str | None = None
+
+    @field_validator("fragment")
+    @classmethod
+    def _frag_not_empty(cls, v: str) -> str:
+        if not (v or "").strip():
+            raise ValueError("fragment cannot be empty")
+        return v.strip()
+
+
+@router.post("/api/ideas/builder/step")
+async def builder_step(request_body: _BuilderStepRequest):
+    """Run one phase of the 5-step idea builder wizard.
+
+    Returns:
+      {"questions": [...]}        — for steps 1-4 (follow-ups for the user)
+      {"draft": {...}}            — for step 5 (final Idea draft, NOT yet saved)
+      503 with helpful error      — when no LLM backend is available
+    """
+    from project_forge.engine.idea_builder import run_wizard_step
+
+    result = run_wizard_step(
+        step=request_body.step,
+        fragment=request_body.fragment,
+        answers=request_body.answers,
+        category_hint=request_body.category,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "No LLM backend available. Set ANTHROPIC_API_KEY in .env, or "
+                "ensure `claude` CLI is on PATH so the wizard can call Sonnet."
+            ),
+        )
+    return result
+
+
+@router.post("/api/ideas/builder/save")
+async def builder_save(payload: dict):
+    """Persist a finalized wizard draft as an Idea.
+
+    Accepts the draft fields from step 5 (after any user edits) and runs
+    them through the same filter_and_save dedup gate as other ingest paths.
+    """
+    try:
+        idea = Idea(
+            name=payload["name"],
+            tagline=payload["tagline"],
+            description=payload["description"],
+            category=IdeaCategory(payload["category"]),
+            market_analysis=payload["market_analysis"],
+            feasibility_score=max(0.0, min(1.0, float(payload["feasibility_score"]))),
+            mvp_scope=payload["mvp_scope"],
+            tech_stack=payload.get("tech_stack", []),
+        )
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=f"Bad draft: {exc}") from exc
     _, accepted, reason = await filter_and_save(idea, db)
     if not accepted:
         return {"filtered": True, "reason": reason, "idea": idea.model_dump()}

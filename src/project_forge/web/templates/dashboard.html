@@ -170,16 +170,16 @@
             </div>
 
             <div class="section-header" style="margin-top:2rem">
-                <h2>Build Idea from Text</h2>
-                <span class="section-subtitle">Drop a fragment, half-thought, research question, or rant — Sonnet expands it into a full project pitch.</span>
+                <h2>Build Idea from Text — Quick</h2>
+                <span class="section-subtitle">One-shot: drop a fragment, get an Idea.</span>
             </div>
             <div class="url-ingest-form">
-                <p class="url-ingest-desc">No URL needed. Type or paste raw thinking — anything from one sentence to a few paragraphs. The builder names the project, drafts the pitch, picks a tech stack, and scores feasibility.</p>
+                <p class="url-ingest-desc">Type or paste raw thinking — anything from one sentence to a few paragraphs. Sonnet expands it into a full pitch in one shot.</p>
                 <textarea id="text-input"
                           class="text-input-field"
-                          rows="5"
+                          rows="4"
                           maxlength="10000"
-                          placeholder="Example: I keep having to reconcile SBOMs across forks of the same project — there's no good way to spot when a transitive dep changed without rebuilding everything..."></textarea>
+                          placeholder="Example: I keep having to reconcile SBOMs across forks — no way to spot when a transitive dep changed..."></textarea>
                 <div class="url-ingest-row" style="margin-top:0.75rem">
                     <select id="text-category" class="url-category-select">
                         <option value="">Auto-detect category</option>
@@ -190,6 +190,56 @@
                     <button id="text-submit-btn" class="btn btn-primary">Build Idea</button>
                 </div>
                 <div id="text-result" class="url-result" style="display:none"></div>
+            </div>
+
+            <div class="section-header" style="margin-top:2rem">
+                <h2>Idea Builder Wizard — 5 Phases</h2>
+                <span class="section-subtitle">Sonnet asks intelligent follow-ups across 5 phases (Discover → Differentiate → Audience → Constraints → Synthesize) instead of one-shotting it.</span>
+            </div>
+            <div class="url-ingest-form" id="wizard-container">
+                <div id="wizard-step-bar" class="wizard-step-bar">
+                    <div class="wizard-step is-current" data-step="1"><span class="wizard-step-num">1</span> Discover</div>
+                    <div class="wizard-step" data-step="2"><span class="wizard-step-num">2</span> Differentiate</div>
+                    <div class="wizard-step" data-step="3"><span class="wizard-step-num">3</span> Audience</div>
+                    <div class="wizard-step" data-step="4"><span class="wizard-step-num">4</span> Constraints</div>
+                    <div class="wizard-step" data-step="5"><span class="wizard-step-num">5</span> Synthesize</div>
+                </div>
+
+                <div id="wizard-stage-fragment">
+                    <p class="url-ingest-desc">Start with anything — a sentence, a frustration, a half-formed thought. The wizard will probe deeper through follow-up questions.</p>
+                    <textarea id="wizard-fragment"
+                              class="text-input-field"
+                              rows="4"
+                              maxlength="10000"
+                              placeholder="I keep having to reconcile SBOMs across forks of the same project..."></textarea>
+                    <div class="url-ingest-row" style="margin-top:0.75rem">
+                        <select id="wizard-category" class="url-category-select">
+                            <option value="">Auto-detect category</option>
+                            {% for cat_name in categories %}
+                            <option value="{{ cat_name.name }}">{{ cat_name.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button id="wizard-start-btn" class="btn btn-primary">Begin Wizard</button>
+                    </div>
+                </div>
+
+                <div id="wizard-stage-questions" style="display:none">
+                    <div id="wizard-questions-container"></div>
+                    <div class="url-ingest-row" style="margin-top:0.75rem; justify-content: space-between">
+                        <button id="wizard-back-btn" class="btn btn-outline" style="display:none">&larr; Back</button>
+                        <button id="wizard-next-btn" class="btn btn-primary">Next &rarr;</button>
+                    </div>
+                </div>
+
+                <div id="wizard-stage-draft" style="display:none">
+                    <div id="wizard-draft-container"></div>
+                    <div class="url-ingest-row" style="margin-top:0.75rem; justify-content: space-between">
+                        <button id="wizard-restart-btn" class="btn btn-outline">Start Over</button>
+                        <button id="wizard-save-btn" class="btn btn-primary">Save Idea</button>
+                    </div>
+                </div>
+
+                <div id="wizard-error" class="url-result" style="display:none"></div>
             </div>
         </div>
     </div>

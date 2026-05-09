@@ -471,6 +471,22 @@ a.stat-card:hover { transform: translateY(-3px); border-color: var(--accent); }
 }
 .text-input-field:focus { border-color: var(--accent); outline: none; }
 .text-input-field::placeholder { color: var(--text-dim); opacity: 0.7; }
+
+.wizard-step-bar { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+.wizard-step { display: flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.75rem; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); font-size: 0.78rem; color: var(--text-dim); }
+.wizard-step-num { display: inline-flex; align-items: center; justify-content: center; width: 1.4rem; height: 1.4rem; border-radius: 50%; background: var(--bg, #0d1117); border: 1px solid var(--border); font-weight: 700; font-size: 0.7rem; }
+.wizard-step.is-current { background: var(--accent); color: white; border-color: var(--accent); }
+.wizard-step.is-current .wizard-step-num { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.4); }
+.wizard-step.is-done { background: rgba(16, 185, 129, 0.12); color: var(--green, #10b981); border-color: rgba(16, 185, 129, 0.4); }
+.wizard-step.is-done .wizard-step-num { background: var(--green, #10b981); color: white; border-color: var(--green, #10b981); }
+
+.wizard-phase-heading { margin: 0 0 0.75rem 0; font-size: 1rem; color: var(--text); }
+.wizard-question { margin-bottom: 1rem; }
+.wizard-question-text { display: block; font-size: 0.9rem; margin-bottom: 0.4rem; color: var(--text); font-weight: 500; }
+.wizard-answer { min-height: 4.5rem; }
+.wizard-field { margin-bottom: 0.75rem; }
+.wizard-field-label { display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 0.25rem; font-weight: 700; }
+.wizard-field input, .wizard-field textarea { width: 100%; }
 .filter-status select {
     background: var(--surface);
     border: 1px solid var(--border);
