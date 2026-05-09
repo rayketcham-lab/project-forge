@@ -103,22 +103,17 @@ async def test_heartbeat_filtered_count_is_si_only(client):
 
 
 @pytest.mark.asyncio
-async def test_recent_runs_are_si_only(client):
-    """Last 5 generation runs in the heartbeat must filter to self-improvement."""
-    from project_forge.models import GenerationRun
-    from project_forge.web.app import db
-
-    # Insert generation runs across categories
-    await db.save_run(GenerationRun(category=IdeaCategory.SELF_IMPROVEMENT))
-    await db.save_run(GenerationRun(category=IdeaCategory.SECURITY_TOOL))
-    await db.save_run(GenerationRun(category=IdeaCategory.PRIVACY))
-
+async def test_recent_si_activity_shows_real_events(client):
+    """Recent SI activity feed must show actual accepted + filtered SI events
+    (not stale rows from generation_runs table that the introspect runner
+    doesn't write to)."""
     resp = await client.get("/thinktank")
     html = resp.text
 
-    # The recent runs section, if shown, lists self-improvement runs only.
-    # We assert the SI badge appears in the recent-runs block but not the
-    # other categories' badges.
-    if "Last 5 generation runs" in html or "generation runs" in html.lower():
-        # If the runs section renders, only SI runs appear there.
-        assert "self-improvement" in html
+    # The activity feed surfaces actual SI ideas — the SI Recent name from
+    # the fixture must appear (proves we read the right tables).
+    assert "SI Recent 0" in html or "Recent SI activity" in html
+    # The non-SI ideas in the fixture (50 SECURITY_TOOL, 200 filtered)
+    # must NOT leak into the SI panel.
+    assert "Other 0" not in html
+    assert "Other Reject 0" not in html

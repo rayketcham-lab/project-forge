@@ -31,21 +31,27 @@
                     <div class="heartbeat-when">{{ heartbeat.last_proposal[:19] if heartbeat.last_proposal else 'never' }}</div>
                 </div>
             </div>
-            {% if heartbeat.recent_runs %}
-            <details class="heartbeat-runs">
-                <summary>Last {{ heartbeat.recent_runs|length }} self-improvement runs</summary>
-                <ul>
-                    {% for run in heartbeat.recent_runs %}
-                    <li>
-                        <code>{{ run.when[:19] }}</code>
-                        <span class="badge badge-{{ run.category }}">{{ run.category }}</span>
-                        {% if run.ok %}<span class="run-ok">ok</span>{% else %}<span class="run-err">err: {{ (run.error or '')[:60] }}</span>{% endif %}
+            {% if heartbeat.recent_events %}
+            <details class="heartbeat-runs" open>
+                <summary>Recent SI activity ({{ heartbeat.recent_events|length }} events — accepted + filtered)</summary>
+                <ul class="heartbeat-events">
+                    {% for ev in heartbeat.recent_events %}
+                    <li class="heartbeat-event heartbeat-event-{{ ev.kind }}">
+                        <code class="heartbeat-event-when">{{ ev.when[:19] }}</code>
+                        {% if ev.kind == 'accepted' %}
+                        <span class="heartbeat-event-kind heartbeat-event-accepted">&#10003; accepted</span>
+                        <span class="heartbeat-event-title">{{ ev.title }}</span>
+                        {% else %}
+                        <span class="heartbeat-event-kind heartbeat-event-filtered">&#10007; filtered</span>
+                        <span class="heartbeat-event-title">{{ ev.title }}</span>
+                        {% if ev.reason %}<span class="heartbeat-event-reason">{{ ev.reason }}</span>{% endif %}
+                        {% endif %}
                     </li>
                     {% endfor %}
                 </ul>
             </details>
             {% else %}
-            <p class="heartbeat-empty">No self-improvement runs in history yet — they fire daily via <code>project-forge-introspect.timer</code>.</p>
+            <p class="heartbeat-empty">No self-improvement activity yet — the introspect runner fires daily via <code>project-forge-introspect.timer</code>.</p>
             {% endif %}
         </div>
     </div>

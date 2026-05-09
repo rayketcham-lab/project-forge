@@ -424,20 +424,6 @@ async def thinktank_page(request: Request):
     si_value = IdeaCategory.SELF_IMPROVEMENT.value
 
     cursor = await db.db.execute(
-        "SELECT category, started_at, success, error FROM generation_runs "
-        "WHERE category = ? ORDER BY started_at DESC LIMIT 5",
-        (si_value,),
-    )
-    recent_runs = []
-    for row in await cursor.fetchall():
-        recent_runs.append({
-            "category": row[0],
-            "when": row[1],
-            "ok": bool(row[2]),
-            "error": row[3],
-        })
-
-    cursor = await db.db.execute(
         "SELECT generated_at FROM ideas WHERE category = ? "
         "ORDER BY generated_at DESC LIMIT 1",
         (si_value,),
@@ -461,9 +447,34 @@ async def thinktank_page(request: Request):
     row = await cursor.fetchone()
     accepted_24h = row[0] if row else 0
 
+    # Recent SI activity feed: the actual events the introspect runner has
+    # produced — accepted ideas + filtered attempts — interleaved by timestamp.
+    # This replaces a "Last 5 runs" view that pulled from generation_runs,
+    # which the introspect runner doesn't write to (it was showing 5-week-old
+    # leftover entries from when SI was a regular scheduler category).
+    cursor = await db.db.execute(
+        "SELECT 'accepted' AS kind, name AS title, generated_at AS ts, "
+        "       NULL AS reason "
+        "FROM ideas WHERE category = ? "
+        "UNION ALL "
+        "SELECT 'filtered' AS kind, idea_name AS title, filtered_at AS ts, "
+        "       filter_reason AS reason "
+        "FROM filtered_ideas WHERE idea_category = ? "
+        "ORDER BY ts DESC LIMIT 8",
+        (si_value, si_value),
+    )
+    recent_events = []
+    for row in await cursor.fetchall():
+        recent_events.append({
+            "kind": row[0],
+            "title": row[1],
+            "when": row[2],
+            "reason": (row[3] or "")[:100] if row[3] else None,
+        })
+
     heartbeat = {
         "now": datetime.now(UTC).isoformat(),
-        "recent_runs": recent_runs,
+        "recent_events": recent_events,
         "last_proposal": last_proposal,
         "filtered_24h": filtered_24h,
         "accepted_24h": accepted_24h,
