@@ -106,7 +106,10 @@ class TestResolveBackend:
         from project_forge.engine.llm_backend import resolve_backend
 
         monkeypatch.setenv("FORGE_LLM_BACKEND", "claude_code")
-        with patch("shutil.which", return_value=None):
+        with patch(
+            "project_forge.engine.llm_backend._has_claude_cli",
+            return_value=False,
+        ):
             assert resolve_backend() is None
 
     def test_auto_prefers_api_when_key_set(self, monkeypatch):

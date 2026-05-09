@@ -90,9 +90,12 @@ class ClaudeCodeBackend:
         return f"claude-code:{self.model}"
 
     def call(self, prompt: str) -> str | None:
+        # Resolve absolute path each call so a systemd-launched service
+        # without ~/.local/bin on PATH still finds the binary.
+        bin_path = _claude_cli_path() or "claude"
         try:
             result = subprocess.run(
-                ["claude", "--print", "--model", self.model, prompt],
+                [bin_path, "--print", "--model", self.model, prompt],
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
@@ -130,9 +133,32 @@ def _expand_model_alias(model: str) -> str:
     return aliases.get(model, model)
 
 
+def _claude_cli_path() -> str | None:
+    """Locate the `claude` CLI. Tries $PATH first, then common install
+    locations (npm-global, ~/.local/bin) since systemd services often
+    start with a minimal PATH that excludes user-local bin directories.
+    """
+    found = shutil.which("claude")
+    if found:
+        return found
+    candidates = [
+        os.path.expanduser("~/.local/bin/claude"),
+        "/home/claude/.local/bin/claude",
+        os.path.expanduser("~/.npm-global/bin/claude"),
+        "/usr/local/bin/claude",
+    ]
+    for p in candidates:
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+    return None
+
+
 def _has_claude_cli() -> bool:
-    """True if `claude` is on $PATH. Wrapped so tests can monkeypatch."""
-    return shutil.which("claude") is not None
+    """True if `claude` is on $PATH or a common install location.
+
+    Wrapped so tests can monkeypatch.
+    """
+    return _claude_cli_path() is not None
 
 
 def resolve_backend(*, force: str | None = None) -> LLMBackend | None:
