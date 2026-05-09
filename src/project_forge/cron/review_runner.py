@@ -144,12 +144,17 @@ def build_review_prompt(idea: Idea) -> str:
 
 
 async def _review_idea_with_api(idea: Idea, api_key: str, model: str) -> dict:
-    """Send an idea to Claude for review. Returns verdict dict."""
+    """Send an idea to Claude for review. Returns verdict dict.
+
+    Uses anthropic.AsyncAnthropic so the HTTP call doesn't block the
+    event loop (#69 — the sync client was blocking review cycles for
+    1-10s per idea on the same loop serving the dashboard).
+    """
     import anthropic
 
     prompt = build_review_prompt(idea)
-    client = anthropic.Anthropic(api_key=api_key)
-    resp = client.messages.create(
+    client = anthropic.AsyncAnthropic(api_key=api_key)
+    resp = await client.messages.create(
         model=model,
         max_tokens=2048,
         system="You are a senior technical reviewer. Respond ONLY with valid JSON.",
