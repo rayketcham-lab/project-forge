@@ -23,40 +23,30 @@ logger = logging.getLogger(__name__)
 
 
 def _reasoning_llm_call() -> Callable[[str], str] | None:
-    """Construct a callable that sends a prompt to Claude and returns text.
+    """Construct a callable that sends a prompt to an LLM and returns text.
 
-    Reuses the project's anthropic client + model. Returns None when no
-    API key is configured — caller falls back to slot-fill in that case.
+    Uses the pluggable backend resolver — Anthropic API direct (when
+    ANTHROPIC_API_KEY is set) OR Claude Code CLI shell-out (when `claude`
+    is on PATH). Returns None when neither is available — caller falls
+    back to slot-fill in that case.
     """
-    import anthropic
+    from project_forge.engine.llm_backend import resolve_backend
 
-    from project_forge.config import settings
-
-    key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-    if not key:
-        logger.info("FORGE_SUPER_REASONING set but no API key — falling back to slot-fill")
+    backend = resolve_backend()
+    if backend is None:
+        logger.info("FORGE_SUPER_REASONING set but no LLM backend — slot-fill fallback")
         return None
 
-    client = anthropic.Anthropic(api_key=key)
-    model = settings.anthropic_model
+    logger.info("Super reasoning using backend: %s", backend.name)
 
     def _call(prompt: str) -> str:
-        try:
-            resp = client.messages.create(
-                model=model,
-                max_tokens=200,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            text = resp.content[0].text
-            # Strip markdown fence if present
-            if "```json" in text:
-                text = text.split("```json", 1)[1].split("```", 1)[0]
-            elif "```" in text:
-                text = text.split("```", 1)[1].split("```", 1)[0]
-            return text.strip()
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Reasoning LLM call failed: %s", exc)
-            return ""
+        text = backend.call(prompt) or ""
+        # Strip markdown fence if present (responses sometimes wrap JSON)
+        if "```json" in text:
+            text = text.split("```json", 1)[1].split("```", 1)[0]
+        elif "```" in text:
+            text = text.split("```", 1)[1].split("```", 1)[0]
+        return text.strip()
 
     return _call
 

@@ -74,13 +74,25 @@ async def _run() -> None:
     await db.connect()
     try:
         api_key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        generator = None
+
         if api_key:
             from project_forge.engine.generator import IdeaGenerator
 
             generator = IdeaGenerator(api_key=api_key)
+            logger.info("Introspection using Anthropic API")
         else:
-            logger.info("No API key — using static introspection")
-            generator = None
+            # No API key — try Claude Code CLI before falling back to static.
+            from project_forge.engine.llm_backend import resolve_backend
+
+            backend = resolve_backend(force="claude_code")
+            if backend is not None:
+                from project_forge.engine.generator import LLMBackendIdeaGenerator
+
+                generator = LLMBackendIdeaGenerator(backend)
+                logger.info("Introspection using backend: %s", backend.name)
+            else:
+                logger.info("No LLM backend — using static introspection")
 
         await run_introspect_cycle(db, generator)
     except Exception:

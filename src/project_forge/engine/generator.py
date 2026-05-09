@@ -89,9 +89,8 @@ class IdeaGenerator:
         return idea
 
     @staticmethod
-    def _parse_response(response, source_url: str | None = None) -> Idea:
-        """Extract and parse JSON from an API response into an Idea."""
-        text = response.content[0].text
+    def _parse_response_text(text: str, source_url: str | None = None) -> Idea:
+        """Parse JSON text from an LLM response into an Idea (shared with adapter)."""
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0]
         elif "```" in text:
@@ -100,7 +99,7 @@ class IdeaGenerator:
         try:
             data = json.loads(text.strip())
         except json.JSONDecodeError as exc:
-            raise ValueError(f"Failed to parse JSON from API response: {exc}") from exc
+            raise ValueError(f"Failed to parse JSON from LLM response: {exc}") from exc
 
         try:
             kwargs: dict = {
@@ -114,9 +113,59 @@ class IdeaGenerator:
                 "tech_stack": data.get("tech_stack", []),
             }
         except KeyError as exc:
-            raise ValueError(f"API response missing required field: {exc}") from exc
+            raise ValueError(f"LLM response missing required field: {exc}") from exc
 
         if source_url:
             kwargs["source_url"] = source_url
 
         return Idea(**kwargs)
+
+    @staticmethod
+    def _parse_response(response, source_url: str | None = None) -> Idea:
+        """Extract and parse JSON from an Anthropic API response into an Idea."""
+        text = response.content[0].text
+        return IdeaGenerator._parse_response_text(text, source_url=source_url)
+
+
+class LLMBackendIdeaGenerator:
+    """Adapter that lets introspect_runner use any LLMBackend (including
+    Claude Code CLI) where it expected an IdeaGenerator. Mirrors the
+    minimal IdeaGenerator surface used by run_introspect_cycle:
+    `await .generate(category=..., prompt_override=...)`.
+    """
+
+    def __init__(self, backend, system_prompt: str | None = None):
+        from project_forge.engine.prompts import SYSTEM_PROMPT
+
+        self.backend = backend
+        # Concatenate system + user since the Claude Code CLI takes one prompt.
+        self.system_prompt = system_prompt or SYSTEM_PROMPT
+        # Compatibility shim — IdeaGenerator exposes .client + .model.
+        self.client = None
+        self.model = backend.name
+
+    async def generate(
+        self,
+        category: IdeaCategory,
+        recent_ideas: list[str] | None = None,  # noqa: ARG002
+        use_contrarian: bool = False,  # noqa: ARG002
+        use_combinatoric: bool = False,  # noqa: ARG002
+        prompt_override: str | None = None,
+        portfolio_context: str | None = None,  # noqa: ARG002
+        *,
+        filter_summary: dict | None = None,  # noqa: ARG002
+        external_seeds: list[dict] | None = None,  # noqa: ARG002
+    ) -> Idea:
+        if prompt_override is None:
+            raise ValueError(
+                "LLMBackendIdeaGenerator requires prompt_override; "
+                "build the prompt in the caller (e.g. introspect path)",
+            )
+        full_prompt = f"{self.system_prompt}\n\n{prompt_override}"
+        text = self.backend.call(full_prompt)
+        if not text:
+            raise ValueError(f"LLM backend {self.backend.name} returned empty response")
+        idea = IdeaGenerator._parse_response_text(text)
+        # Force category in case the LLM picked something else
+        idea.category = category
+        return idea
