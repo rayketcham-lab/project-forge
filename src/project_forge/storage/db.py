@@ -190,16 +190,28 @@ class Database:
         await self._db.execute("PRAGMA journal_mode = WAL")
         await self._db.execute("PRAGMA busy_timeout = 5000")
         await self._db.executescript(SCHEMA)
-        # Migration: add content_hash column if missing (safe for existing DBs)
-        try:
-            await self._db.execute("ALTER TABLE ideas ADD COLUMN content_hash TEXT")
-        except Exception:  # noqa: S110
-            pass  # Column already exists on migrated DBs
-        # Migration: add source_url column if missing
-        try:
-            await self._db.execute("ALTER TABLE ideas ADD COLUMN source_url TEXT")
-        except Exception:  # noqa: S110
-            pass  # Column already exists on migrated DBs
+        # Migration discipline: CREATE TABLE IF NOT EXISTS does NOTHING when
+        # the table already exists, so adding a column to the SCHEMA literal
+        # above is invisible to existing DBs unless we ALTER TABLE here.
+        # Issue #68 ate this lesson the hard way (challenges table). Every
+        # column added to an existing table must be mirrored below.
+        for stmt in (
+            # ideas table
+            "ALTER TABLE ideas ADD COLUMN content_hash TEXT",
+            "ALTER TABLE ideas ADD COLUMN source_url TEXT",
+            # challenges table — these columns shipped in the SCHEMA literal
+            # without migrations, so prod DBs created before that change
+            # were stuck on a 6-column table. Issue #68.
+            "ALTER TABLE challenges ADD COLUMN challenge_type TEXT NOT NULL DEFAULT 'freeform'",
+            "ALTER TABLE challenges ADD COLUMN focus_area TEXT NOT NULL DEFAULT 'all'",
+            "ALTER TABLE challenges ADD COLUMN tone TEXT NOT NULL DEFAULT 'skeptical'",
+            "ALTER TABLE challenges ADD COLUMN verdict TEXT NOT NULL DEFAULT 'no_change'",
+            "ALTER TABLE challenges ADD COLUMN confidence REAL NOT NULL DEFAULT 0.5",
+        ):
+            try:
+                await self._db.execute(stmt)
+            except Exception:  # noqa: S110, BLE001
+                pass  # column already exists — idempotent
         # Add indexes (safe to re-run)
         await self._db.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_ideas_content_hash "

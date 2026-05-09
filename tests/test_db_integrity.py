@@ -122,6 +122,17 @@ EXPECTED_COLUMNS = {
         "id", "idea_name", "idea_tagline", "idea_category",
         "filter_reason", "original_idea_json", "filtered_at", "similar_to_id",
     }),
+    # Challenges table schema regression (issue #68): SCHEMA literal
+    # was extended without a corresponding ALTER TABLE migration, so
+    # production DBs were left without these columns and POSTs to
+    # /api/ideas/{id}/challenge crashed with "no column named
+    # challenge_type". Lock all 11 columns here.
+    "challenges": frozenset({
+        "id", "idea_id", "question",
+        "challenge_type", "focus_area", "tone",
+        "response", "verdict", "confidence",
+        "changes", "created_at",
+    }),
 }
 
 
@@ -158,6 +169,57 @@ class TestSchemaLock:
         actual = {r[1] for r in rows}
         missing = EXPECTED_COLUMNS["filtered_ideas"] - actual
         assert not missing, f"filtered_ideas missing columns: {missing}"
+
+    @pytest.mark.asyncio
+    async def test_challenges_columns_locked(self, db):
+        """Issue #68: SCHEMA literal had columns the production DB lacked
+        because no ALTER TABLE migration was added. CI gate so this never
+        repeats — every column declared in db.SCHEMA must be present after
+        Database.connect().
+        """
+        cursor = await db.db.execute("PRAGMA table_info(challenges)")
+        rows = await cursor.fetchall()
+        actual = {r[1] for r in rows}
+        missing = EXPECTED_COLUMNS["challenges"] - actual
+        assert not missing, f"challenges missing columns: {missing}"
+
+    @pytest.mark.asyncio
+    async def test_existing_db_picks_up_new_columns_via_migration(self, tmp_path):
+        """Regression for #68: an existing DB created BEFORE a column was
+        added must pick up the new column on next connect(). Simulates
+        how the production DB ended up missing challenge_type.
+        """
+        import aiosqlite
+
+        path = tmp_path / "old_schema.db"
+        # Create the DB with the OLD challenges schema (the one prod had).
+        async with aiosqlite.connect(path) as old:
+            await old.execute("""
+                CREATE TABLE challenges (
+                    id TEXT PRIMARY KEY,
+                    idea_id TEXT NOT NULL,
+                    question TEXT NOT NULL,
+                    response TEXT NOT NULL DEFAULT '',
+                    changes TEXT NOT NULL DEFAULT '[]',
+                    created_at TEXT NOT NULL
+                )
+            """)
+            await old.commit()
+
+        # Now connect via Database — migrations must add the missing columns.
+        new_db = Database(path)
+        await new_db.connect()
+        try:
+            cursor = await new_db.db.execute("PRAGMA table_info(challenges)")
+            rows = await cursor.fetchall()
+            actual = {r[1] for r in rows}
+            missing = EXPECTED_COLUMNS["challenges"] - actual
+            assert not missing, (
+                f"Database.connect() did not migrate the legacy challenges "
+                f"table. Missing columns: {missing}. Add ALTER TABLE migrations."
+            )
+        finally:
+            await new_db.close()
 
 
 # ── verify_integrity ──────────────────────────────────────────────────
