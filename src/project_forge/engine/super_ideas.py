@@ -557,10 +557,19 @@ class SuperIdeaGenerator:
             )
             return None
 
-        # Dedup: when reasoning is on, the LLM produces unbounded names so the
-        # base-name anchor stops working. Use the cluster signature instead —
-        # same member-idea set → same signature → dedup hit. When off, fall
-        # through to the legacy base-name dedup.
+        # Dedup strategy depends on whether reasoning is on:
+        #
+        # Reasoning ON: cluster_signature is the only authoritative dedup.
+        #   The LLM produces unbounded names AND the tagline is built from
+        #   the first member idea's tagline (which often shares concepts
+        #   with existing supers even when the cluster signature is novel).
+        #   Running base-name + tagline-primary-concept dedup on top
+        #   over-blocks — every new combination involving a previously-seen
+        #   idea would be rejected. Trust the signature.
+        #
+        # Reasoning OFF: fall through to the legacy belt-and-suspenders
+        #   chain (base-name + tagline-primary) because slot-fill names
+        #   collide too easily for signature alone to be safe.
         from project_forge.engine.super_reasoning import (
             extract_cluster_signature,
             find_super_by_signature,
@@ -575,6 +584,17 @@ class SuperIdeaGenerator:
                     si.name, candidate_sig, existing_super.id,
                 )
                 return None
+            # Reasoning path uses signature-only dedup — skip the legacy gates
+            # below and proceed to store.
+            await self._store_super(si)
+            logger.info(
+                "Seeded super [%s] (reasoning): %s (impact: %.2f, %d components)",
+                label,
+                si.name,
+                si.impact_score,
+                len(si.component_idea_ids),
+            )
+            return si
 
         from project_forge.engine.dedup import _super_base_name
 
