@@ -20,20 +20,20 @@ class TestListOrgRepos:
         mock_run.return_value.returncode = 0
         # Real gh output uses owner/name format in the first column
         mock_run.return_value.stdout = (
-            "rayketcham-lab/pki-ca-engine\tPKI Certificate Authority Engine\tpublic\n"
+            "rayketcham-lab/cert-engine\tPKI Certificate Authority Engine\tpublic\n"
             "rayketcham-lab/project-forge\tAutonomous project think-tank\tpublic\n"
-            "rayketcham-lab/honeypot\tSSH honeypot\tprivate\n"
+            "rayketcham-lab/network-monitor\tSSH network-monitor\tprivate\n"
         )
         mock_run.return_value.stderr = ""
 
         repos = list_org_repos("rayketcham-lab")
         assert len(repos) == 3
         # Names must be short (repo only), not owner/repo
-        assert repos[0]["name"] == "pki-ca-engine"
+        assert repos[0]["name"] == "cert-engine"
         assert repos[0]["description"] == "PKI Certificate Authority Engine"
         assert repos[0]["visibility"] == "public"
         assert repos[1]["name"] == "project-forge"
-        assert repos[2]["name"] == "honeypot"
+        assert repos[2]["name"] == "network-monitor"
 
     @patch("project_forge.scaffold.github.subprocess.run")
     def test_list_org_repos_empty(self, mock_run):
@@ -77,7 +77,7 @@ class TestGetRepoDetails:
 
         api_response = json.dumps(
             {
-                "name": "pki-ca-engine",
+                "name": "cert-engine",
                 "description": "A PKI certificate authority engine with ACME support",
                 "topics": ["pki", "cryptography", "acme", "x509"],
                 "language": "Rust",
@@ -92,8 +92,8 @@ class TestGetRepoDetails:
             type("Result", (), {"returncode": 0, "stdout": readme_response, "stderr": ""})(),
         ]
 
-        details = get_repo_details("rayketcham-lab", "pki-ca-engine")
-        assert details["name"] == "pki-ca-engine"
+        details = get_repo_details("rayketcham-lab", "cert-engine")
+        assert details["name"] == "cert-engine"
         assert "PKI" in details["description"] or "pki" in details["description"].lower()
         assert "pki" in details["topics"]
         assert details["language"] == "Rust"
@@ -143,7 +143,7 @@ class TestCompareLogic:
             tech_stack=["Rust", "OpenSSL", "ACME"],
         )
         repo_details = {
-            "name": "pki-ca-engine",
+            "name": "cert-engine",
             "description": "A PKI certificate authority engine with ACME support",
             "topics": ["pki", "cryptography", "acme", "x509"],
             "language": "Rust",
@@ -164,10 +164,11 @@ class TestCompareLogic:
         from project_forge.engine.compare import compare_idea_to_repo
 
         idea = Idea(
-            name="SSH Honeypot Analytics Dashboard",
-            tagline="Visualize attacker patterns from honeypot logs",
+            name="SSH Monitor Analytics Dashboard",
+            tagline="Visualize attacker patterns from network-monitor logs",
             description=(
-                "Build a real-time dashboard for analyzing SSH honeypot data, tracking attacker IPs and techniques."
+                "Build a real-time dashboard for analyzing SSH network-monitor data, "
+                "tracking attacker IPs and techniques."
             ),
             category=IdeaCategory.SECURITY_TOOL,
             market_analysis="Security monitoring market growing.",
@@ -176,7 +177,7 @@ class TestCompareLogic:
             tech_stack=["Python", "FastAPI", "D3.js"],
         )
         repo_details = {
-            "name": "pki-ca-engine",
+            "name": "cert-engine",
             "description": "A PKI certificate authority engine",
             "topics": ["pki", "cryptography", "x509"],
             "language": "Rust",
@@ -202,7 +203,7 @@ class TestCompareLogic:
             tech_stack=["Python", "FastAPI", "React"],
         )
         repo_details = {
-            "name": "pki-ca-engine",
+            "name": "cert-engine",
             "description": "A PKI certificate authority engine with ACME support",
             "topics": ["pki", "cryptography", "acme", "x509"],
             "language": "Rust",
@@ -228,7 +229,7 @@ class TestCompareLogic:
             tech_stack=["Go", "ACME"],
         )
         repo_details = {
-            "name": "pki-ca-engine",
+            "name": "cert-engine",
             "description": "PKI CA with ACME support",
             "topics": ["acme", "pki", "x509"],
             "language": "Rust",
@@ -277,7 +278,7 @@ class TestCompareAPI:
         ):
             # Simulate list_org_repos returning realistic gh output
             mock_run.return_value.returncode = 0
-            mock_run.return_value.stdout = "rayketcham-lab/pki-ca-engine\tPKI CA\tpublic\n"
+            mock_run.return_value.stdout = "rayketcham-lab/cert-engine\tPKI CA\tpublic\n"
             mock_run.return_value.stderr = ""
 
             resp = await client.get("/api/repos")
@@ -286,7 +287,7 @@ class TestCompareAPI:
 
             # Now use that repo_name in compare — this is what the frontend does
             mock_details.return_value = {
-                "name": "pki-ca-engine",
+                "name": "cert-engine",
                 "description": "PKI CA engine",
                 "topics": ["pki"],
                 "language": "Rust",
@@ -307,7 +308,7 @@ class TestCompareAPI:
         client, idea = client_with_idea
         with patch("project_forge.scaffold.github.get_repo_details") as mock_details:
             mock_details.return_value = {
-                "name": "pki-ca-engine",
+                "name": "cert-engine",
                 "description": "PKI CA engine",
                 "topics": ["pki"],
                 "language": "Rust",
@@ -315,7 +316,7 @@ class TestCompareAPI:
             }
             resp = await client.post(
                 f"/api/ideas/{idea.id}/compare",
-                params={"owner": "rayketcham-lab", "repo": "pki-ca-engine"},
+                params={"owner": "rayketcham-lab", "repo": "cert-engine"},
             )
             assert resp.status_code == 200
             data = resp.json()
@@ -338,14 +339,14 @@ class TestCompareAPI:
         client, _ = client_with_idea
         with patch("project_forge.scaffold.github.list_org_repos") as mock_list:
             mock_list.return_value = [
-                {"name": "pki-ca-engine", "description": "PKI CA", "visibility": "public"},
+                {"name": "cert-engine", "description": "PKI CA", "visibility": "public"},
                 {"name": "project-forge", "description": "Forge", "visibility": "public"},
             ]
             resp = await client.get("/api/repos")
             assert resp.status_code == 200
             data = resp.json()
             assert len(data["repos"]) == 2
-            assert data["repos"][0]["name"] == "pki-ca-engine"
+            assert data["repos"][0]["name"] == "cert-engine"
 
 
 # === Add Idea to Existing Project ===
@@ -359,10 +360,10 @@ class TestAddToProject:
         """POST /api/ideas/{id}/add-to-project should exist and accept repo param."""
         client, idea = client_with_idea
         with patch("project_forge.scaffold.github.create_issue") as mock_create:
-            mock_create.return_value = "https://github.com/rayketcham-lab/pki-ca-engine/issues/42"
+            mock_create.return_value = "https://github.com/rayketcham-lab/cert-engine/issues/42"
             resp = await client.post(
                 f"/api/ideas/{idea.id}/add-to-project",
-                params={"owner": "rayketcham-lab", "repo": "pki-ca-engine"},
+                params={"owner": "rayketcham-lab", "repo": "cert-engine"},
             )
             assert resp.status_code == 200
             data = resp.json()
@@ -374,14 +375,14 @@ class TestAddToProject:
         """The created issue should contain the idea's name, description, and tech stack."""
         client, idea = client_with_idea
         with patch("project_forge.scaffold.github.create_issue") as mock_create:
-            mock_create.return_value = "https://github.com/rayketcham-lab/pki-ca-engine/issues/42"
+            mock_create.return_value = "https://github.com/rayketcham-lab/cert-engine/issues/42"
             await client.post(
                 f"/api/ideas/{idea.id}/add-to-project",
-                params={"owner": "rayketcham-lab", "repo": "pki-ca-engine"},
+                params={"owner": "rayketcham-lab", "repo": "cert-engine"},
             )
             mock_create.assert_called_once()
             kw = mock_create.call_args.kwargs
-            assert kw["repo"] == "rayketcham-lab/pki-ca-engine"
+            assert kw["repo"] == "rayketcham-lab/cert-engine"
             assert idea.name in kw["title"]
             assert idea.description in kw["body"]
             assert "Rust" in kw["body"]  # from tech_stack
@@ -390,12 +391,12 @@ class TestAddToProject:
     async def test_add_to_project_returns_issue_url(self, client_with_idea):
         """Response should include the created issue URL."""
         client, idea = client_with_idea
-        expected_url = "https://github.com/rayketcham-lab/pki-ca-engine/issues/99"
+        expected_url = "https://github.com/rayketcham-lab/cert-engine/issues/99"
         with patch("project_forge.scaffold.github.create_issue") as mock_create:
             mock_create.return_value = expected_url
             resp = await client.post(
                 f"/api/ideas/{idea.id}/add-to-project",
-                params={"owner": "rayketcham-lab", "repo": "pki-ca-engine"},
+                params={"owner": "rayketcham-lab", "repo": "cert-engine"},
             )
             data = resp.json()
             assert data["issue_url"] == expected_url
@@ -406,7 +407,7 @@ class TestAddToProject:
         client, _ = client_with_idea
         resp = await client.post(
             "/api/ideas/nonexistent/add-to-project",
-            params={"owner": "rayketcham-lab", "repo": "pki-ca-engine"},
+            params={"owner": "rayketcham-lab", "repo": "cert-engine"},
         )
         assert resp.status_code == 404
 
@@ -418,7 +419,7 @@ class TestAddToProject:
             mock_create.side_effect = RuntimeError("gh: not found")
             resp = await client.post(
                 f"/api/ideas/{idea.id}/add-to-project",
-                params={"owner": "rayketcham-lab", "repo": "pki-ca-engine"},
+                params={"owner": "rayketcham-lab", "repo": "cert-engine"},
             )
             assert resp.status_code == 502
 
@@ -465,10 +466,10 @@ class TestAddToProject:
         """Issue body must warn that this came from an external AI idea generator."""
         client, idea = client_with_idea
         with patch("project_forge.scaffold.github.create_issue") as mock_create:
-            mock_create.return_value = "https://github.com/rayketcham-lab/pki-ca-engine/issues/42"
+            mock_create.return_value = "https://github.com/rayketcham-lab/cert-engine/issues/42"
             await client.post(
                 f"/api/ideas/{idea.id}/add-to-project",
-                params={"owner": "rayketcham-lab", "repo": "pki-ca-engine"},
+                params={"owner": "rayketcham-lab", "repo": "cert-engine"},
             )
             body = mock_create.call_args.kwargs["body"]
             # Must have a prominent warning/disclaimer section
@@ -540,10 +541,10 @@ class TestAddToProject:
         """Issue should be labeled with 'project-forge' and the idea category."""
         client, idea = client_with_idea
         with patch("project_forge.scaffold.github.create_issue") as mock_create:
-            mock_create.return_value = "https://github.com/rayketcham-lab/pki-ca-engine/issues/42"
+            mock_create.return_value = "https://github.com/rayketcham-lab/cert-engine/issues/42"
             await client.post(
                 f"/api/ideas/{idea.id}/add-to-project",
-                params={"owner": "rayketcham-lab", "repo": "pki-ca-engine"},
+                params={"owner": "rayketcham-lab", "repo": "cert-engine"},
             )
             call_args = mock_create.call_args
             # Labels passed as keyword arg or positional arg
