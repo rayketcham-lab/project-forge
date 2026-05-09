@@ -1,0 +1,219 @@
+"""TDD: idea siphon (#71) — retroactive dedup + tighter going-forward gate.
+
+Two modes:
+- dry_run=True: return a report (clusters + which idea would be kept,
+  which archived) without touching the DB.
+- dry_run=False: perform the archives, set archived_reason / archived_at,
+  write audit log rows.
+"""
+
+from __future__ import annotations
+
+import pytest
+import pytest_asyncio
+
+from project_forge.models import Idea, IdeaCategory
+from project_forge.storage.db import Database
+
+
+def _idea(name: str, tagline: str, *,
+          category: IdeaCategory = IdeaCategory.SECURITY_TOOL,
+          score: float = 0.7) -> Idea:
+    return Idea(
+        name=name,
+        tagline=tagline,
+        description="d",
+        category=category,
+        market_analysis="m",
+        feasibility_score=score,
+        mvp_scope="mvp",
+        tech_stack=["python"],
+    )
+
+
+@pytest_asyncio.fixture
+async def db(tmp_path):
+    d = Database(tmp_path / "siphon.db")
+    await d.connect()
+    yield d
+    await d.close()
+
+
+# ── Cluster detection ────────────────────────────────────────────────
+
+
+class TestClusterDetection:
+    @pytest.mark.asyncio
+    async def test_finds_paraphrase_cluster(self, db):
+        from project_forge.engine.siphon import find_duplicate_clusters
+
+        await db.save_idea(_idea("Cert Pin Detector",
+                                 "certificate pinning misconfiguration scanner"))
+        await db.save_idea(_idea("Pinning Misconfig Scanner",
+                                 "certificate pinning misconfiguration detector"))
+        await db.save_idea(_idea("Unrelated Tool",
+                                 "post-quantum migration playbook engine"))
+
+        clusters = await find_duplicate_clusters(db)
+
+        # 1 cluster of 2; the unrelated tool is its own cluster (or excluded).
+        cluster_sizes = sorted(len(c) for c in clusters if len(c) > 1)
+        assert cluster_sizes == [2], (
+            f"Expected one 2-idea cluster; got sizes {cluster_sizes}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_separates_by_category(self, db):
+        """Identical taglines across DIFFERENT categories are NOT clustered.
+        Each category bucket is scanned independently."""
+        from project_forge.engine.siphon import find_duplicate_clusters
+
+        same = "supply chain attack detector"
+        await db.save_idea(_idea("ST", same, category=IdeaCategory.SECURITY_TOOL))
+        await db.save_idea(_idea("VR", same, category=IdeaCategory.VULNERABILITY_RESEARCH))
+
+        clusters = await find_duplicate_clusters(db)
+        # No cross-category clustering — both ideas survive
+        cluster_sizes = sorted(len(c) for c in clusters if len(c) > 1)
+        assert cluster_sizes == [], (
+            f"Cross-category match was clustered (shouldn't be): {clusters}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_transitive_clustering(self, db):
+        """A ~ B and B ~ C → all three in one cluster."""
+        from project_forge.engine.siphon import find_duplicate_clusters
+
+        await db.save_idea(_idea("A", "supply chain attack detection automation"))
+        await db.save_idea(_idea("B", "supply chain attack detection orchestration"))
+        await db.save_idea(_idea("C", "supply chain attack detection workflow"))
+
+        clusters = await find_duplicate_clusters(db)
+        big = [c for c in clusters if len(c) >= 3]
+        assert len(big) == 1, (
+            f"Expected one transitive cluster of 3; got {[len(c) for c in clusters]}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_archived_ideas_excluded(self, db):
+        """Already-archived ideas don't pollute cluster results."""
+        from project_forge.engine.siphon import find_duplicate_clusters
+
+        a = _idea("A", "api key rotation automation tool")
+        b = _idea("B", "api key rotation automation engine")
+        await db.save_idea(a)
+        await db.save_idea(b)
+        await db.update_idea_status(a.id, "archived")
+
+        clusters = await find_duplicate_clusters(db)
+        assert all(len(c) <= 1 for c in clusters), (
+            "Archived ideas leaked into clusters"
+        )
+
+
+# ── Pick-the-survivor logic ──────────────────────────────────────────
+
+
+class TestSurvivorChoice:
+    @pytest.mark.asyncio
+    async def test_keeps_highest_feasibility(self, db):
+        from project_forge.engine.siphon import siphon_duplicates
+
+        a = _idea("A", "secrets sprawl scanner across repos", score=0.65)
+        b = _idea("B", "secrets sprawl scanner across repos", score=0.85)
+        c = _idea("C", "secrets sprawl scanner across repos", score=0.70)
+        await db.save_idea(a)
+        await db.save_idea(b)
+        await db.save_idea(c)
+
+        report = await siphon_duplicates(db, dry_run=True)
+        clusters = report["clusters"]
+        target = [c for c in clusters if len(c["members"]) == 3][0]
+        assert target["keep"] == b.id, (
+            f"Should keep B (highest score 0.85); kept {target['keep']}"
+        )
+        assert set(target["archive"]) == {a.id, c.id}
+
+
+# ── Dry-run vs apply ─────────────────────────────────────────────────
+
+
+class TestDryRunVsApply:
+    @pytest.mark.asyncio
+    async def test_dry_run_does_not_mutate(self, db):
+        from project_forge.engine.siphon import siphon_duplicates
+
+        a = _idea("A", "lateral movement detection in containers", score=0.6)
+        b = _idea("B", "lateral movement detection in containers", score=0.8)
+        await db.save_idea(a)
+        await db.save_idea(b)
+
+        await siphon_duplicates(db, dry_run=True)
+
+        fresh_a = await db.get_idea(a.id)
+        fresh_b = await db.get_idea(b.id)
+        assert fresh_a.status == "new"
+        assert fresh_b.status == "new"
+
+    @pytest.mark.asyncio
+    async def test_apply_archives_loser(self, db):
+        from project_forge.engine.siphon import siphon_duplicates
+
+        a = _idea("A", "lateral movement detection in containers", score=0.6)
+        b = _idea("B", "lateral movement detection in containers", score=0.8)
+        await db.save_idea(a)
+        await db.save_idea(b)
+
+        report = await siphon_duplicates(db, dry_run=False)
+
+        assert report["archived_count"] == 1
+        fresh_a = await db.get_idea(a.id)
+        fresh_b = await db.get_idea(b.id)
+        assert fresh_a.status == "archived"
+        assert fresh_b.status == "new"
+
+    @pytest.mark.asyncio
+    async def test_apply_idempotent(self, db):
+        """Running siphon twice doesn't double-archive."""
+        from project_forge.engine.siphon import siphon_duplicates
+
+        a = _idea("A", "OAuth scope minimization tool", score=0.6)
+        b = _idea("B", "OAuth scope minimization tool", score=0.8)
+        await db.save_idea(a)
+        await db.save_idea(b)
+
+        first = await siphon_duplicates(db, dry_run=False)
+        second = await siphon_duplicates(db, dry_run=False)
+
+        assert first["archived_count"] == 1
+        assert second["archived_count"] == 0
+
+
+# ── Going-forward tightening ─────────────────────────────────────────
+
+
+class TestGoingForwardThreshold:
+    @pytest.mark.asyncio
+    async def test_06_threshold_catches_what_07_missed(self, db):
+        """A pair with 0.65 token Jaccard would pass at 0.7 but fail at 0.6.
+
+        Concrete: tagline_similarity is the existing engine.dedup function;
+        we lower the constant from 0.7 to 0.6 so should_accept rejects more.
+        """
+        from project_forge.engine.dedup import SIMILARITY_THRESHOLD, should_accept
+
+        # The new threshold must be lower than the old default (≤ 0.65)
+        assert SIMILARITY_THRESHOLD <= 0.65, (
+            f"SIMILARITY_THRESHOLD is {SIMILARITY_THRESHOLD}; expected ≤ 0.65 "
+            f"after the going-forward tightening."
+        )
+
+        # Seed an existing idea, try to insert a near-paraphrase
+        existing = _idea("Existing", "container image provenance verification scanner")
+        await db.save_idea(existing)
+        candidate = _idea("Candidate", "container image provenance verification engine")
+        ok, reason = await should_accept(candidate, db)
+        # At 0.6 threshold this should be blocked
+        assert ok is False, (
+            f"Tighter threshold did not catch a near-paraphrase. reason={reason}"
+        )

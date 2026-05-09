@@ -21,8 +21,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Similarity threshold: ideas above this score are considered duplicates
-SIMILARITY_THRESHOLD = 0.7
+# Similarity threshold: ideas above this score are considered duplicates.
+# Tightened 0.7 → 0.6 in #71 — retroactive siphon revealed many pairs at
+# 0.6-0.7 that are clearly paraphrases. Going-forward, reject them at
+# INSERT time so the historical fat-trim doesn't have to repeat.
+SIMILARITY_THRESHOLD = 0.6
 
 
 def _normalize(text: str) -> str:

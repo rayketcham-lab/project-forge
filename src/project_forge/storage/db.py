@@ -211,6 +211,10 @@ class Database:
             # Issue #70 — track whether a challenge's proposed changes
             # have been applied to the idea (for idempotency).
             "ALTER TABLE challenges ADD COLUMN applied_at TEXT",
+            # Issue #71 — track WHY an idea was archived and WHEN, so the
+            # retroactive siphon is fully reversible and visible in the UI.
+            "ALTER TABLE ideas ADD COLUMN archived_reason TEXT",
+            "ALTER TABLE ideas ADD COLUMN archived_at TEXT",
         ):
             try:
                 await self._db.execute(stmt)
