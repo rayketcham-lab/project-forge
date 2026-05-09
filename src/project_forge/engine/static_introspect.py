@@ -70,10 +70,37 @@ def find_untested_modules(project_root: Path) -> list[dict]:
     return findings
 
 
+def _largest_top_level_blocks(py_file: Path, top_n: int = 5) -> list[dict]:
+    """Return the largest top-level functions/classes in a file by line span.
+
+    Used by the "Decompose X" proposal to suggest concrete split candidates
+    instead of a generic "this file is big" message.
+    """
+    try:
+        source = py_file.read_text()
+        tree = ast.parse(source)
+    except (SyntaxError, UnicodeDecodeError):
+        return []
+
+    blocks: list[dict] = []
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        end_lineno = getattr(node, "end_lineno", None) or node.lineno
+        span = end_lineno - node.lineno + 1
+        kind = "class" if isinstance(node, ast.ClassDef) else "def"
+        blocks.append({"name": node.name, "kind": kind, "lines": span})
+
+    blocks.sort(key=lambda b: -b["lines"])
+    return blocks[:top_n]
+
+
 def find_large_files(project_root: Path, threshold: int = 300) -> list[dict]:
     """Find source files exceeding *threshold* lines.
 
-    Returns a list of dicts with 'path' (relative str) and 'lines' (int).
+    Returns a list of dicts with 'path' (relative str), 'lines' (int), and
+    'blocks' (list of dicts: top-N largest top-level functions/classes by
+    line span — the natural decomposition seams).
     """
     src_dir = project_root / "src" / "project_forge"
     if not src_dir.exists():
@@ -84,7 +111,11 @@ def find_large_files(project_root: Path, threshold: int = 300) -> list[dict]:
         line_count = len(py_file.read_text().splitlines())
         if line_count > threshold:
             rel = py_file.relative_to(project_root)
-            findings.append({"path": str(rel), "lines": line_count})
+            findings.append({
+                "path": str(rel),
+                "lines": line_count,
+                "blocks": _largest_top_level_blocks(py_file, top_n=5),
+            })
 
     return findings
 
@@ -184,19 +215,59 @@ def generate_static_proposals(project_root: Path | None = None) -> list[Idea]:
         if name in seen_names:
             continue
         seen_names.add(name)
+
+        blocks = finding.get("blocks") or []
+        # Build a richer description: name the actual largest blocks (the
+        # natural split candidates) instead of a generic "it's big" message.
+        desc_parts = [
+            f"{finding['path']} is {finding['lines']} lines — past the 300-line "
+            f"split threshold."
+        ]
+        if blocks:
+            top_lines = ", ".join(
+                f"{b['kind']} {b['name']} ({b['lines']} lines)"
+                for b in blocks[:3]
+            )
+            desc_parts.append(
+                f"Largest top-level blocks (natural split candidates): {top_lines}.",
+            )
+            biggest_share = blocks[0]["lines"] / finding["lines"]
+            if biggest_share >= 0.40:
+                desc_parts.append(
+                    f"{blocks[0]['kind']} {blocks[0]['name']} alone is "
+                    f"{biggest_share:.0%} of the file — likely its own module.",
+                )
+        desc_parts.append(
+            "Splitting reduces cognitive load and makes future edits less risky.",
+        )
+        description = " ".join(desc_parts)
+
+        # Concrete mvp_scope: name the suggested new files.
+        if blocks:
+            split_targets = ", ".join(
+                f"{Path(finding['path']).parent}/{b['name'].lower()}.py"
+                for b in blocks[:3]
+            )
+            mvp_scope = (
+                f"Extract the top blocks ({', '.join(b['name'] for b in blocks[:3])}) "
+                f"into separate modules — e.g. {split_targets}. Update imports "
+                f"in callers; keep public API unchanged."
+            )
+        else:
+            mvp_scope = (
+                f"Identify logical sections in {finding['path']} and split into "
+                f"smaller modules with clear responsibilities."
+            )
+
         proposals.append(
             Idea(
                 name=name,
                 tagline=f"{finding['path']} has {finding['lines']} lines",
-                description=(
-                    f"The file {finding['path']} is {finding['lines']} lines long. "
-                    f"Decomposing it into smaller, focused modules improves readability "
-                    f"and maintainability."
-                ),
+                description=description,
                 category=IdeaCategory.SELF_IMPROVEMENT,
                 market_analysis="Internal quality improvement — reduces cognitive load.",
                 feasibility_score=0.7,
-                mvp_scope=f"Split {finding['path']} into smaller modules with clear responsibilities.",
+                mvp_scope=mvp_scope,
                 tech_stack=["python"],
             )
         )
