@@ -1,5 +1,6 @@
 """FastAPI application for Project Forge dashboard."""
 
+import asyncio
 import logging
 import uuid
 from contextlib import asynccontextmanager
@@ -103,9 +104,26 @@ class CSPMiddleware(BaseHTTPMiddleware):
 async def lifespan(app: FastAPI):
     await db.connect()
     logger.info("Database connected: %s", settings.db_path)
-    yield
-    await db.close()
-    logger.info("Database closed")
+
+    # In-process scheduler — owns the cadences that used to live in
+    # `/etc/systemd/system/project-forge-*.timer` units. Those are
+    # unreachable from the sandboxed runtime, so the FastAPI lifespan
+    # carries them and uvicorn --reload is the deploy path.
+    from project_forge.web.lifespan_scheduler import start_scheduler
+
+    scheduler_task = start_scheduler(db)
+    logger.info("In-process scheduler started")
+
+    try:
+        yield
+    finally:
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
+        await db.close()
+        logger.info("Database closed")
 
 
 app = FastAPI(
