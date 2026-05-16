@@ -36,10 +36,12 @@
                         <span class="hero-activity-num">{{ stats.ideas_by_category.get('self-improvement', 0) }}</span>
                         <span class="hero-activity-label">Self-Improvement Proposals</span>
                     </div>
-                    <div class="hero-activity-item">
+                    <a class="hero-activity-item hero-activity-link"
+                       href="/explore?challenged=1"
+                       title="View ideas that have been challenged">
                         <span class="hero-activity-num">{{ stats.total_challenges }}</span>
                         <span class="hero-activity-label">Challenges Filed</span>
-                    </div>
+                    </a>
                     <div class="hero-activity-item">
                         <span class="hero-activity-num">{{ stats.ideas_by_status.get('rejected', 0) }}</span>
                         <span class="hero-activity-label">Rejected</span>

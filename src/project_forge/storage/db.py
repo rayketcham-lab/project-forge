@@ -366,6 +366,26 @@ class Database:
         rows = await cursor.fetchall()
         return {row[0]: row[1] for row in rows}
 
+    async def list_challenged_ideas(self, limit: int = 50, offset: int = 0) -> list[Idea]:
+        """Ideas that have at least one challenge filed against them."""
+        cursor = await self.db.execute(
+            """SELECT i.* FROM ideas i
+            WHERE EXISTS (SELECT 1 FROM challenges c WHERE c.idea_id = i.id)
+            ORDER BY i.generated_at DESC LIMIT ? OFFSET ?""",
+            (limit, offset),
+        )
+        rows = await cursor.fetchall()
+        return [self._row_to_idea(row) for row in rows]
+
+    async def count_challenged_ideas(self) -> int:
+        """Distinct ideas with one or more challenges."""
+        cursor = await self.db.execute(
+            """SELECT COUNT(DISTINCT idea_id) FROM challenges
+            WHERE idea_id IN (SELECT id FROM ideas)"""
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
     async def search_ideas(self, query: str, limit: int = 50, offset: int = 0) -> list[Idea]:
         """SQL LIKE search -- no Python-side filtering."""
         like_q = f"%{query}%"

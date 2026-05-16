@@ -36,6 +36,17 @@
                     {% endfor %}
                 </div>
             </div>
+            <div class="filter-row">
+                <span class="filter-row-label">Reviewed</span>
+                <div class="filter-chips">
+                    <a href="/explore"
+                       class="chip {% if not challenged_filter %}chip-active{% endif %}">All</a>
+                    <a href="/explore?challenged=1"
+                       class="chip {% if challenged_filter %}chip-active{% endif %}">
+                        Challenged Only
+                    </a>
+                </div>
+            </div>
             <div class="filter-status">
                 <select id="explore-status-select" data-category="{{ category_filter or '' }}">
                     <option value="">All Statuses</option>

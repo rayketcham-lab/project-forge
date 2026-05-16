@@ -94,6 +94,7 @@ async def explore(
     status: str | None = None,
     vertical: str | None = None,
     q: str | None = None,
+    challenged: int = 0,
     page: int = Query(default=1, ge=1),
 ):
     from project_forge.engine.verticals import KNOWN_VERTICALS, matches_vertical
@@ -113,6 +114,43 @@ async def explore(
             raise HTTPException(status_code=400, detail=f"Unknown category: {category!r}") from exc
     else:
         cat = None
+
+    if challenged:
+        # ?challenged=1 short-circuits other filters: the set of challenged
+        # ideas is small enough (typically <50) that we list all of them and
+        # paginate the result client-side. We still respect ?q if present.
+        offset = (page - 1) * limit
+        if q:
+            all_chal = await db.list_challenged_ideas(limit=10000)
+            ql = q.lower()
+            filtered = [
+                i for i in all_chal
+                if ql in i.name.lower()
+                or ql in i.tagline.lower()
+                or ql in i.description.lower()
+            ]
+        else:
+            filtered = await db.list_challenged_ideas(limit=10000)
+        total = len(filtered)
+        ideas = filtered[offset : offset + limit]
+        return templates.TemplateResponse(
+            request,
+            "explore.html",
+            {
+                "ideas": ideas,
+                "total": total,
+                "page": page,
+                "pages": max(1, (total + limit - 1) // limit),
+                "status_filter": status,
+                "category_filter": category,
+                "vertical_filter": None,
+                "challenged_filter": True,
+                "search_query": q or "",
+                "categories": list(IdeaCategory),
+                "verticals": sorted(KNOWN_VERTICALS),
+                "score_summary": score_summary,
+            },
+        )
 
     if vertical:
         # Vertical filter is inferred from text — applied in Python after fetch.
@@ -153,6 +191,7 @@ async def explore(
             "status_filter": status,
             "category_filter": category,
             "vertical_filter": (vertical if vertical != "__nomatch__" else None),
+            "challenged_filter": False,
             "search_query": q or "",
             "categories": list(IdeaCategory),
             "verticals": sorted(KNOWN_VERTICALS),
