@@ -109,10 +109,15 @@ async def lifespan(app: FastAPI):
     # `/etc/systemd/system/project-forge-*.timer` units. Those are
     # unreachable from the sandboxed runtime, so the FastAPI lifespan
     # carries them and uvicorn --reload is the deploy path.
-    from project_forge.web.lifespan_scheduler import start_scheduler
+    from project_forge.web.lifespan_scheduler import default_cadences, start_scheduler
 
-    scheduler_task = start_scheduler(db)
-    logger.info("In-process scheduler started")
+    cadences = default_cadences()
+    scheduler_task = start_scheduler(db, cadences=cadences)
+    logger.info(
+        "In-process scheduler started with %d cadences: %s",
+        len(cadences),
+        ", ".join(c.name for c in cadences),
+    )
 
     try:
         yield
