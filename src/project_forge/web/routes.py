@@ -299,6 +299,58 @@ async def api_promote(idea_id: str):
     }
 
 
+@router.get("/api/backend-info")
+async def api_backend_info():
+    """Diagnostic: which LLM backend the engine is actually using, and
+    whether the user's API-key env vars are visible to the running
+    uvicorn process. Returns a CENSORED view — never the raw key, just
+    presence + first-7-char prefix.
+
+    User asked 2026-06-08 "how is that coming and shouldn the money bot
+    have made API hits? Or we using Claude code?" — this is the answer
+    surface so they can self-check without grep'ing logs.
+    """
+    import os as _os
+
+    from project_forge.config import settings as _settings
+    from project_forge.engine.llm_backend import (
+        _has_claude_cli,
+        resolve_backend,
+        resolve_cheap_backend,
+    )
+
+    def _maskprefix(v: str) -> str | None:
+        if not v:
+            return None
+        return v[:7] + "…"
+
+    env_view = {
+        "ANTHROPIC_API_KEY": _maskprefix(_os.environ.get("ANTHROPIC_API_KEY", "")),
+        "FORGE_ANTHROPIC_API_KEY": _maskprefix(
+            _os.environ.get("FORGE_ANTHROPIC_API_KEY", "")
+        ),
+        "FORGE_HAIKU_API_KEY": _maskprefix(_os.environ.get("FORGE_HAIKU_API_KEY", "")),
+        "FORGE_LLM_BACKEND": _os.environ.get("FORGE_LLM_BACKEND", ""),
+        "FORGE_LLM_MODEL": _os.environ.get("FORGE_LLM_MODEL", ""),
+        "settings.anthropic_api_key": _maskprefix(_settings.anthropic_api_key),
+    }
+
+    default_b = resolve_backend()
+    cheap_b = resolve_cheap_backend()
+    return {
+        "claude_cli_on_path": _has_claude_cli(),
+        "default_backend": default_b.name if default_b else None,
+        "cheap_backend": cheap_b.name if cheap_b else None,
+        "env_visible_to_process": env_view,
+        "note": (
+            "If cheap_backend starts with 'claude-code:' the calls run "
+            "through your Claude Code (Pro Max) subscription — no API "
+            "token spend. If it starts with 'anthropic-api:' you're "
+            "spending API credits."
+        ),
+    }
+
+
 @router.post("/api/churn")
 async def api_churn(request: Request):
     """On-demand idea generation. Fires the LLM-first generator once

@@ -58,6 +58,7 @@ VERDICT_AUDIT_INTERVAL = _interval_from_env("FORGE_VERDICT_AUDIT_INTERVAL_HOURS"
 FEED_REFRESH_INTERVAL = _interval_from_env("FORGE_FEED_REFRESH_INTERVAL_HOURS", 24.0)
 FUNDABILITY_SCORE_INTERVAL = _interval_from_env("FORGE_FUNDABILITY_INTERVAL_HOURS", 24.0)
 AUTO_PROMOTE_INTERVAL = _interval_from_env("FORGE_AUTO_PROMOTE_INTERVAL_HOURS", 168.0)
+ISSUE_SYNC_INTERVAL = _interval_from_env("FORGE_ISSUE_SYNC_INTERVAL_HOURS", 1.0)
 
 def _seconds_from_env(var: str, default_seconds: float) -> timedelta:
     """Same warn-and-fallback pattern as `_interval_from_env`, but the
@@ -368,6 +369,19 @@ async def _fire_auto_promote(db: Database) -> None:
         logger.info("Auto-promote cycle: no candidate this round")
 
 
+async def _fire_issue_sync(db: Database) -> None:
+    """Pull live GH issue state for every approved+promoted idea and update
+    the DB so the dashboard never shows '✓ promoted' on a closed issue."""
+    from project_forge.cron.issue_sync_runner import run_issue_sync_cycle
+
+    result = await run_issue_sync_cycle(db)
+    logger.info(
+        "Issue-sync cycle: checked=%d updated=%d",
+        result.get("checked", 0),
+        result.get("updated", 0),
+    )
+
+
 async def _fire_feed_refresh(db: Database) -> None:
     """Refresh NVD / arXiv / IETF caches that feed prompt-seed material.
 
@@ -516,6 +530,18 @@ def default_cadences() -> list[Cadence]:
             runner=_fire_fundability_score,
             delay_query=None,
             tick_interval=FUNDABILITY_SCORE_INTERVAL.total_seconds(),
+            initial_delay=initial,
+        ),
+        Cadence(
+            # v0.14c — pull live GitHub issue state for promoted ideas and
+            # update DB status so the dashboard never shows '✓ promoted'
+            # on a closed issue. Hourly is cheap (≤ N gh API calls where
+            # N = active promotions, usually < 10).
+            name="issue_sync",
+            interval=ISSUE_SYNC_INTERVAL,
+            runner=_fire_issue_sync,
+            delay_query=None,
+            tick_interval=ISSUE_SYNC_INTERVAL.total_seconds(),
             initial_delay=initial,
         ),
         # REMOVED v0.14b — auto_promote cadence: the user explicitly
