@@ -182,22 +182,35 @@ class Database:
         self.db_path = db_path
         self._db: aiosqlite.Connection | None = None
         self.query_times: list[float] = []  # recent query durations in seconds
+        # Asyncio-level write serializer. aiosqlite already serializes
+        # statements on a single connection, but cadences can interleave
+        # their multi-statement transactions (an LLM call mid-transaction
+        # holds the writer for seconds) and SQLite returns "database is
+        # locked" when busy_timeout exhausts. The lock makes writes wait
+        # politely in-process instead of racing through fcntl into
+        # busy-timeout territory. Acquired by the `_write_serialized`
+        # helper; safe methods (reads) skip it.
+        import asyncio
+        self._write_lock = asyncio.Lock()
 
     async def connect(self):
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._db = await aiosqlite.connect(self.db_path)
         self._db.row_factory = aiosqlite.Row
         # Hardening: WAL mode + generous busy_timeout for concurrent safety.
-        # Bumped from 5s to 30s after the v0.14 churn endpoint started hitting
-        # "database is locked" 500s under contention with the auto_promote and
-        # fundability cadences that hold writer transactions for a few seconds
-        # while running their LLM calls. Cheap to wait; the alternative is the
-        # browser seeing 500s on a Churn click.
+        # 60s wins over a user-visible 500 every time. Cadences holding the
+        # writer for tens of seconds (Haiku-mid-transaction) just have to
+        # wait politely behind the asyncio lock above.
         await self._db.execute("PRAGMA journal_mode = WAL")
-        await self._db.execute("PRAGMA busy_timeout = 30000")
+        await self._db.execute("PRAGMA busy_timeout = 60000")
         # synchronous=NORMAL is the standard WAL pairing — durable on commit
         # but skips the fsync after every page write that FULL imposes.
         await self._db.execute("PRAGMA synchronous = NORMAL")
+        # cache_spill=OFF keeps a tiny transaction from triggering disk I/O
+        # mid-flight; matters because our typical write is one INSERT/UPDATE.
+        await self._db.execute("PRAGMA cache_spill = OFF")
+        # WAL autocheckpoint at 1000 pages (~4MB) — keeps the WAL bounded.
+        await self._db.execute("PRAGMA wal_autocheckpoint = 1000")
         await self._db.executescript(SCHEMA)
         # Migration discipline: CREATE TABLE IF NOT EXISTS does NOTHING when
         # the table already exists, so adding a column to the SCHEMA literal
@@ -294,35 +307,36 @@ class Database:
     async def save_idea(self, idea: Idea) -> Idea:
         content_hash = getattr(idea, "content_hash", None)
         auto_ts = getattr(idea, "auto_promoted_at", None)
-        await self.db.execute(
-            """INSERT OR REPLACE INTO ideas
-            (id, name, tagline, description, category, market_analysis,
-             feasibility_score, mvp_scope, tech_stack, generated_at, status,
-             github_issue_url, project_repo_url, content_hash, source_url,
-             generation_mode, fundability_score, auto_promoted_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                idea.id,
-                idea.name,
-                idea.tagline,
-                idea.description,
-                idea.category.value,
-                idea.market_analysis,
-                idea.feasibility_score,
-                idea.mvp_scope,
-                json.dumps(idea.tech_stack),
-                idea.generated_at.isoformat(),
-                idea.status,
-                idea.github_issue_url,
-                idea.project_repo_url,
-                content_hash,
-                idea.source_url,
-                getattr(idea, "generation_mode", None),
-                getattr(idea, "fundability_score", None),
-                auto_ts.isoformat() if auto_ts is not None else None,
-            ),
-        )
-        await self.db.commit()
+        async with self._write_lock:
+            await self.db.execute(
+                """INSERT OR REPLACE INTO ideas
+                (id, name, tagline, description, category, market_analysis,
+                 feasibility_score, mvp_scope, tech_stack, generated_at, status,
+                 github_issue_url, project_repo_url, content_hash, source_url,
+                 generation_mode, fundability_score, auto_promoted_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    idea.id,
+                    idea.name,
+                    idea.tagline,
+                    idea.description,
+                    idea.category.value,
+                    idea.market_analysis,
+                    idea.feasibility_score,
+                    idea.mvp_scope,
+                    json.dumps(idea.tech_stack),
+                    idea.generated_at.isoformat(),
+                    idea.status,
+                    idea.github_issue_url,
+                    idea.project_repo_url,
+                    content_hash,
+                    idea.source_url,
+                    getattr(idea, "generation_mode", None),
+                    getattr(idea, "fundability_score", None),
+                    auto_ts.isoformat() if auto_ts is not None else None,
+                ),
+            )
+            await self.db.commit()
         return idea
 
     async def get_idea(self, idea_id: str) -> Idea | None:
@@ -353,23 +367,26 @@ class Database:
         return [self._row_to_idea(row) for row in rows]
 
     async def update_idea_status(self, idea_id: str, status: IdeaStatus) -> Idea | None:
-        await self.db.execute("UPDATE ideas SET status = ? WHERE id = ?", (status, idea_id))
-        await self.db.commit()
+        async with self._write_lock:
+            await self.db.execute("UPDATE ideas SET status = ? WHERE id = ?", (status, idea_id))
+            await self.db.commit()
         return await self.get_idea(idea_id)
 
     async def delete_idea(self, idea_id: str) -> None:
         """Hard-delete an idea by ID. No-op if the idea does not exist."""
-        await self.db.execute("DELETE FROM ideas WHERE id = ?", (idea_id,))
-        await self.db.commit()
+        async with self._write_lock:
+            await self.db.execute("DELETE FROM ideas WHERE id = ?", (idea_id,))
+            await self.db.commit()
 
     async def update_idea_urls(
         self, idea_id: str, github_issue_url: str | None = None, project_repo_url: str | None = None
     ) -> Idea | None:
-        if github_issue_url is not None:
-            await self.db.execute("UPDATE ideas SET github_issue_url = ? WHERE id = ?", (github_issue_url, idea_id))
-        if project_repo_url is not None:
-            await self.db.execute("UPDATE ideas SET project_repo_url = ? WHERE id = ?", (project_repo_url, idea_id))
-        await self.db.commit()
+        async with self._write_lock:
+            if github_issue_url is not None:
+                await self.db.execute("UPDATE ideas SET github_issue_url = ? WHERE id = ?", (github_issue_url, idea_id))
+            if project_repo_url is not None:
+                await self.db.execute("UPDATE ideas SET project_repo_url = ? WHERE id = ?", (project_repo_url, idea_id))
+            await self.db.commit()
         return await self.get_idea(idea_id)
 
     # === COUNTING & SEARCH (SQL-optimized, no Python-side filtering) ===

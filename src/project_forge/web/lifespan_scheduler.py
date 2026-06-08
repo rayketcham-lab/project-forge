@@ -321,11 +321,17 @@ async def _fire_verdict_audit(db: Database) -> None:
 
 
 async def _fire_fundability_score(db: Database) -> None:
-    """Score recent unscored ideas for monetization viability. Bulk run
-    so the auto-promote cadence always has fresh signal."""
+    """Score recent unscored ideas for monetization viability.
+
+    Batch deliberately small (5) so each tick holds the SQLite writer for
+    seconds, not a minute. With 50 unscored ideas plus a Haiku tie-break
+    averaging 6s each, a batch=50 tick held the writer ~5 minutes and
+    made every browser POST 500 with 'database is locked'. We just
+    catch up over multiple ticks instead.
+    """
     from project_forge.engine.fundability import score_pending_ideas
 
-    result = await score_pending_ideas(db, limit=50)
+    result = await score_pending_ideas(db, limit=5)
     logger.info("Fundability cycle scored %d ideas", result.get("scored", 0))
 
 
