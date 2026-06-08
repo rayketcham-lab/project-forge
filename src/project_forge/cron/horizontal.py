@@ -11,6 +11,7 @@ import random
 from project_forge.cron.auto_scan import generate_local_idea
 from project_forge.engine.categories import CATEGORY_SEEDS
 from project_forge.engine.dedup import filter_and_save
+from project_forge.engine.llm_generator import generate_idea_llm
 from project_forge.engine.quality_review import review_idea
 from project_forge.engine.super_ideas import SuperIdeaGenerator, pick_least_covered_slot
 from project_forge.models import Idea, IdeaCategory
@@ -55,9 +56,25 @@ async def generate_cross_idea(
 ) -> Idea:
     """Generate an idea that bridges two categories.
 
-    Uses the primary category's structure with concepts injected
-    from the secondary category for genuine cross-pollination.
+    LLM-first when a cheap backend resolves — each call rotates through
+    persona + 1-of-5 generation modes + anti-similarity injection, so
+    new ideas don't look like remixes of old ones. Falls back to the
+    template generator on no-backend / parse-failure so the cycle never
+    stalls.
     """
+    llm_result = await generate_idea_llm(db, primary_cat)
+    if llm_result is not None:
+        idea = llm_result.idea
+        # Note the cross-category bridge inline so the routing layer's
+        # category-pair telemetry still has something to work with.
+        idea.description = (
+            idea.description
+            + "\n\n**Cross-category bridge:** "
+            f"primary {primary_cat.value} × secondary {secondary_cat.value} "
+            f"(LLM mode: {llm_result.mode})."
+        )
+        return idea
+
     recent_names = list(set(await db.get_all_idea_names()))
 
     # Generate from primary category — generate_local_idea picks a random

@@ -15,6 +15,20 @@ from project_forge.models import Idea, IdeaCategory
 from project_forge.storage.db import Database
 
 
+@pytest.fixture(autouse=True)
+def _disable_llm_generator(monkeypatch):
+    """horizontal.generate_cross_idea now prefers the LLM generator
+    when a backend resolves. In CI/test environments we want the
+    deterministic template path AND fast runs (~5s saved per test).
+    Force the LLM path to return None so every test exercises the
+    template fallback."""
+    async def _none(*_a, **_kw):
+        return None
+    monkeypatch.setattr(
+        "project_forge.cron.horizontal.generate_idea_llm", _none,
+    )
+
+
 @pytest_asyncio.fixture
 async def db(tmp_path: Path):
     database = Database(tmp_path / "test_horizontal.db")
