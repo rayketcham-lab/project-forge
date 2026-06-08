@@ -23,6 +23,14 @@ class IdeaCategory(StrEnum):
     RFC_SECURITY = "rfc-security"
     CRYPTO_INFRASTRUCTURE = "crypto-infrastructure"
     SELF_IMPROVEMENT = "self-improvement"
+    # v0.12 scope expansion beyond IT/security so generation has fresh
+    # idea space once the original 13 categories saturate. Adding here
+    # lets every downstream stage (CATEGORY_SEEDS, horizontal pair
+    # picker, super-idea rotation) pick them up automatically.
+    AUTOMATION_INCOME = "automation-income"
+    CONSUMER_APP = "consumer-app"
+    PRODUCTIVITY = "productivity"
+    CREATOR_TOOLS = "creator-tools"
 
 
 IdeaStatus = Literal["new", "approved", "scaffolded", "rejected", "archived", "contributed", "implemented"]

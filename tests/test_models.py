@@ -49,8 +49,10 @@ class TestIdea:
             )
 
     def test_all_categories_exist(self):
-        assert len(IdeaCategory) == 13
-        expected = {
+        # v0.12 added 4 new categories beyond the original 13 IT/security
+        # ones (AUTOMATION_INCOME, CONSUMER_APP, PRODUCTIVITY, CREATOR_TOOLS)
+        # to give generation fresh fertile space once the IT side saturates.
+        expected_required = {
             "security-tool",
             "market-gap",
             "vulnerability-research",
@@ -64,8 +66,17 @@ class TestIdea:
             "rfc-security",
             "crypto-infrastructure",
             "self-improvement",
+            # v0.12 scope expansion
+            "automation-income",
+            "consumer-app",
+            "productivity",
+            "creator-tools",
         }
-        assert {c.value for c in IdeaCategory} == expected
+        actual = {c.value for c in IdeaCategory}
+        # Required set is a subset — future categories are allowed without
+        # breaking this test, but the originals + v0.12 set must all be present.
+        missing = expected_required - actual
+        assert not missing, f"missing required categories: {missing}"
 
     def test_idea_serialization_roundtrip(self):
         idea = Idea(

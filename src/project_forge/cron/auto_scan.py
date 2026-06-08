@@ -91,6 +91,32 @@ TECH_STACKS = {
         ["node", "express", "react"],
         ["python", "django", "celery"],
     ],
+    # v0.12 scope expansion stacks. Picked to bias toward shippable
+    # web/mobile work rather than infra-heavy stacks.
+    IdeaCategory.AUTOMATION_INCOME: [
+        ["python", "fastapi", "anthropic", "stripe"],
+        ["node", "next.js", "vercel", "stripe"],
+        ["python", "celery", "redis", "playwright"],
+        ["python", "fastapi", "supabase", "stripe"],
+    ],
+    IdeaCategory.CONSUMER_APP: [
+        ["typescript", "react-native", "expo", "supabase"],
+        ["swift", "swiftui", "cloudkit"],
+        ["typescript", "next.js", "tailwind", "supabase"],
+        ["kotlin", "jetpack-compose", "firebase"],
+    ],
+    IdeaCategory.PRODUCTIVITY: [
+        ["typescript", "next.js", "tailwind", "trpc"],
+        ["python", "fastapi", "htmx", "alpine.js"],
+        ["typescript", "tauri", "rust", "sqlite"],
+        ["typescript", "raycast-api"],
+    ],
+    IdeaCategory.CREATOR_TOOLS: [
+        ["typescript", "next.js", "ffmpeg", "openai-whisper"],
+        ["python", "fastapi", "moviepy", "ffmpeg"],
+        ["typescript", "remotion", "react"],
+        ["python", "celery", "yt-dlp", "ffmpeg"],
+    ],
 }
 
 

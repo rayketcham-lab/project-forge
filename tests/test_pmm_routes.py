@@ -47,7 +47,10 @@ async def test_api_categories(client):
     resp = await client.get("/api/categories")
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data) == 13  # All categories
+    # 17+ categories after v0.12 scope expansion. Use >= so adding new
+    # categories later doesn't break this test.
+    from project_forge.models import IdeaCategory
+    assert len(data) == len(IdeaCategory)
     for cat in data:
         assert "name" in cat
         assert "count" in cat

@@ -441,6 +441,37 @@ DAILY_ROTATION = [
         },
         "perspective": "privacy-preserving technology and untapped market opportunities",
     },
+    # v0.12 — scope expansion slots beyond IT/security.
+    {
+        "slot": 5,
+        "label": "Money & Automation",
+        "seed_categories": {
+            IdeaCategory.AUTOMATION_INCOME,
+            IdeaCategory.AUTOMATION,
+        },
+        "perspective": "legal scalable automation for revenue — content engines, niche SaaS, lead-gen, outreach",
+    },
+    {
+        "slot": 6,
+        "label": "Consumer & Productivity",
+        "seed_categories": {
+            IdeaCategory.CONSUMER_APP,
+            IdeaCategory.PRODUCTIVITY,
+        },
+        "perspective": "everyday apps and personal/work productivity that flips daily behavior",
+    },
+    {
+        "slot": 7,
+        "label": "Creator Economy",
+        "seed_categories": {
+            IdeaCategory.CREATOR_TOOLS,
+            IdeaCategory.MARKET_GAP,
+        },
+        "perspective": (
+            "tools for creators making content — writing, audio, video, "
+            "newsletters, social, design, education"
+        ),
+    },
 ]
 
 
