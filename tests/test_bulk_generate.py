@@ -128,16 +128,34 @@ class TestBulkGenerator:
         mock_client = MagicMock()
         mock_anthropic_cls.return_value = mock_client
 
-        # Return unique taglines per call so universal dedup doesn't block
+        # Return genuinely distinct names per call. v0.11 added a
+        # name-token Jaccard gate (≥0.55) to INSERT dedup, so numbered
+        # variants of the same name now collapse — bulk tests must vary
+        # the concept words, not just the suffix.
         call_count = 0
+        distinct_names = [
+            "CRL Quantum Guard",
+            "Certificate Signature Migrator",
+            "Revocation List Hybrid Validator",
+            "OCSP Stapling Companion",
+            "PKI Ceremony Orchestrator",
+        ]
+        distinct_taglines = [
+            "PQC-safe CRL management for revocation pipelines",
+            "Hybrid classical/ML-DSA signature switchover",
+            "Audit trail for revocation-list transitions",
+            "OCSP stapling with PQC fallback",
+            "PKI key ceremony scripts for ML-DSA",
+        ]
 
         def _make_response(*args, **kwargs):
             nonlocal call_count
+            slot = call_count
             call_count += 1
             idea_json = json.dumps(
                 {
-                    "name": f"CRL Quantum Guard {call_count}",
-                    "tagline": f"PQC-safe CRL management variant {call_count}",
+                    "name": distinct_names[slot % len(distinct_names)],
+                    "tagline": distinct_taglines[slot % len(distinct_taglines)],
                     "description": "Manages CRLs with PQC signatures.",
                     "category": "pqc-cryptography",
                     "market_analysis": "PQC transition is happening now.",

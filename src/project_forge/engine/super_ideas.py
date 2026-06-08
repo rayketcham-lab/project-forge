@@ -444,6 +444,34 @@ DAILY_ROTATION = [
 ]
 
 
+async def pick_least_covered_slot(db: Database) -> int:
+    """Pick the DAILY_ROTATION slot whose seed_categories are most
+    under-represented among active [SUPER] ideas.
+
+    Replaces the original `hour % 5` rotation, which mechanically revisited
+    each slot regardless of saturation and let the corpus pile up on the
+    densest themes. Tiebreak on lowest slot index for deterministic output.
+    """
+    cur = await db.db.execute(
+        "SELECT category, COUNT(*) c FROM ideas "
+        "WHERE name LIKE '[SUPER]%' "
+        "AND status NOT IN ('archived', 'rejected') "
+        "GROUP BY category"
+    )
+    rows = await cur.fetchall()
+    per_cat: dict[str, int] = {r["category"]: int(r["c"]) for r in rows}
+
+    best_slot = 0
+    best_count = None
+    for slot, lens in enumerate(DAILY_ROTATION):
+        # Count supers across this slot's seed categories.
+        slot_count = sum(per_cat.get(c.value, 0) for c in lens["seed_categories"])
+        if best_count is None or slot_count < best_count:
+            best_count = slot_count
+            best_slot = slot
+    return best_slot
+
+
 class SuperIdeaGenerator:
     def __init__(self, db: Database):
         self.db = db

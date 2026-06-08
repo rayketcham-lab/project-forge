@@ -7,13 +7,12 @@ coverage of all 66 possible intersections.
 
 import logging
 import random
-from datetime import UTC, datetime
 
 from project_forge.cron.auto_scan import generate_local_idea
 from project_forge.engine.categories import CATEGORY_SEEDS
 from project_forge.engine.dedup import filter_and_save
 from project_forge.engine.quality_review import review_idea
-from project_forge.engine.super_ideas import SuperIdeaGenerator
+from project_forge.engine.super_ideas import SuperIdeaGenerator, pick_least_covered_slot
 from project_forge.models import Idea, IdeaCategory
 from project_forge.storage.db import Database
 
@@ -115,7 +114,11 @@ async def run_horizontal_cycle(db: Database) -> list[Idea]:
     )
 
     # --- Idea 2: Super idea synthesis ---
-    slot = datetime.now(UTC).hour % 5
+    # Coverage-aware rotation: pick the slot whose seed_categories carry
+    # the fewest active supers. Replaces `hour % 5` (May 2026 corpus audit
+    # showed the mechanical rotation let top 6 themes accrue ~20% of all
+    # supers).
+    slot = await pick_least_covered_slot(db)
     sig = SuperIdeaGenerator(db)
     super_idea = await sig.generate_seeded(slot=slot)
 

@@ -27,6 +27,55 @@ logger = logging.getLogger(__name__)
 # INSERT time so the historical fat-trim doesn't have to repeat.
 SIMILARITY_THRESHOLD = 0.6
 
+# Additional INSERT-time gates (added after the May 2026 corpus inspection
+# showed the corpus regrowing dupes the moment generation resumed).
+NAME_JACCARD_THRESHOLD = 0.55  # token-Jaccard on names within a category
+VERTICAL_CAP = 2  # max active ideas per stripped "X for {vertical}" concept
+SUPER_COMPONENT_OVERLAP_MIN = 3  # shared atoms before two supers are dups
+
+# Matches the trailing "for <vertical>" suffix (one to four words) so we can
+# strip it and detect the concept stem ("Pqc Tracker for Healthcare" → "Pqc
+# Tracker"). Keep in sync with siphon._FOR_VERTICAL_RE.
+_NAME_VERTICAL_RE = re.compile(
+    r"\s+for\s+[\w/&\-]+(\s+[\w/&\-]+){0,3}\s*$",
+    re.IGNORECASE,
+)
+
+# Component bullet extractor for super-idea descriptions. The synthesiser
+# emits each component as `- **Name**: blurb…`. Keep in sync with
+# siphon._COMPONENT_BULLET_RE.
+_COMPONENT_BULLET_RE = re.compile(r"^-\s*\*\*(?P<name>[^*]+)\*\*", re.MULTILINE)
+
+
+def _name_token_jaccard(a: str, b: str) -> float:
+    """Token-Jaccard similarity on two names after vertical-strip + lowercase."""
+    ta = set(_normalize(a).split())
+    tb = set(_normalize(b).split())
+    if not ta and not tb:
+        return 1.0
+    if not ta or not tb:
+        return 0.0
+    return len(ta & tb) / len(ta | tb)
+
+
+def _strip_vertical_name(name: str) -> str | None:
+    """Return concept stem of 'X for {vertical}', or None if no match."""
+    m = _NAME_VERTICAL_RE.search(name)
+    if not m:
+        return None
+    stem = name[: m.start()].strip()
+    return _normalize(stem) or None
+
+
+def _extract_super_components(description: str) -> set[str]:
+    """Pull normalised component names out of a super-idea description body."""
+    out: set[str] = set()
+    for m in _COMPONENT_BULLET_RE.finditer(description):
+        n = _normalize(m.group("name"))
+        if n:
+            out.add(n)
+    return out
+
 
 def _normalize(text: str) -> str:
     """Strip Claude generation suffix artifacts and normalize."""
@@ -77,30 +126,77 @@ async def should_accept(idea: Idea, db: Database) -> tuple[bool, str | None]:
         if existing:
             return False, f"duplicate:content_hash (matches {existing[0]})"
 
-    # Check 2: super idea base-name dedup (cross-category)
+    # Check 2: super idea dedup (cross-category)
     if idea.name.startswith("[SUPER]"):
+        # 2a — exact-base-name match
         candidate_base = _super_base_name(idea.name)
         cursor = await db.db.execute(
-            "SELECT id, name FROM ideas WHERE name LIKE '[SUPER]%' AND status NOT IN ('rejected', 'archived')",
+            "SELECT id, name, description FROM ideas "
+            "WHERE name LIKE '[SUPER]%' AND status NOT IN ('rejected', 'archived')",
         )
         rows = await cursor.fetchall()
         for row in rows:
             existing_base = _super_base_name(row[1])
             if candidate_base == existing_base:
                 return False, f"duplicate:super_base_name (matches {row[0]})"
+
+        # 2b — component-overlap: reject if the candidate shares ≥ N atoms
+        # with any existing super. Catches the "Drift Tracker / Drift
+        # Tracking / Compliance Verification" remake pattern where the
+        # base names differ but the underlying atoms are the same.
+        cand_components = _extract_super_components(idea.description or "")
+        if len(cand_components) >= SUPER_COMPONENT_OVERLAP_MIN:
+            for row in rows:
+                existing_components = _extract_super_components(row[2] or "")
+                shared = len(cand_components & existing_components)
+                if shared >= SUPER_COMPONENT_OVERLAP_MIN:
+                    return False, (
+                        f"duplicate:super_overlap:{shared} (shares atoms with {row[0]})"
+                    )
         return True, None
 
-    # Check 3: fuzzy tagline dedup (regular ideas only)
+    # Check 3: vertical-cap. Done BEFORE the tagline / name-similarity loop
+    # so a vertical clone whose stem already has ≥ cap siblings is rejected
+    # by the cap (clean reason), and so the cap rules — not name-sim — own
+    # the "X for V₁" vs "X for V₂" comparison.
+    cand_stem = _strip_vertical_name(idea.name)
+    if cand_stem is not None:
+        cursor = await db.db.execute(
+            "SELECT id, name FROM ideas "
+            "WHERE lower(name) LIKE '% for %' "
+            "AND status NOT IN ('archived', 'rejected')",
+        )
+        same_concept = 0
+        for row in await cursor.fetchall():
+            other_stem = _strip_vertical_name(row[1])
+            if other_stem == cand_stem:
+                same_concept += 1
+        if same_concept >= VERTICAL_CAP:
+            return False, (
+                f"duplicate:vertical_cap:{same_concept}>={VERTICAL_CAP} "
+                f"(concept stem '{cand_stem}')"
+            )
+
+    # Check 4: fuzzy tagline dedup + name-token Jaccard (regular ideas only).
+    # Skip rows that belong to the same vertical-clone family as the candidate;
+    # the cap above is the authority for that family.
     cursor = await db.db.execute(
-        "SELECT id, tagline FROM ideas WHERE category = ? AND status != 'rejected'",
+        "SELECT id, name, tagline FROM ideas "
+        "WHERE category = ? AND status != 'rejected'",
         (idea.category.value,),
     )
     rows = await cursor.fetchall()
     for row in rows:
-        existing_id, existing_tagline = row[0], row[1]
+        existing_id, existing_name, existing_tagline = row[0], row[1], row[2]
+        if cand_stem is not None and _strip_vertical_name(existing_name) == cand_stem:
+            # Same vertical family — already passed the cap.
+            continue
         score = tagline_similarity(idea.tagline, existing_tagline)
         if score >= SIMILARITY_THRESHOLD:
             return False, f"duplicate:tagline_similarity:{score:.2f} (similar to {existing_id})"
+        n_score = _name_token_jaccard(idea.name, existing_name)
+        if n_score >= NAME_JACCARD_THRESHOLD:
+            return False, f"duplicate:name_similarity:{n_score:.2f} (similar to {existing_id})"
 
     return True, None
 
