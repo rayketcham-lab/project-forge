@@ -1,8 +1,10 @@
 # Project Forge
 
-![Version](https://img.shields.io/badge/version-0.14.0-blue) ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/rayketcham-lab/project-forge/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-1100+-passing?color=brightgreen)
+![Version](https://img.shields.io/badge/version-0.14c-blue) ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/rayketcham-lab/project-forge/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-1280+-passing?color=brightgreen)
 
-An autonomous project idea generator. It runs an in-process scheduler inside the FastAPI app, calls an LLM (or falls back to deterministic heuristics), scores ideas for both feasibility and **fundability**, deduplicates aggressively, and stores everything in SQLite. A web dashboard lets a human review, approve, and optionally scaffold approved ideas into GitHub repos. As of v0.14, the engine can also auto-promote its top monetizable idea each week into a real GitHub issue with a full MVP spec — closing the loop from "idea factory" to "weekly MVP candidate shipper."
+An autonomous project idea generator. It runs an in-process scheduler inside the FastAPI app, calls an LLM (or falls back to deterministic heuristics), scores ideas for both feasibility and **fundability**, deduplicates aggressively, and stores everything in SQLite. A web dashboard lets a human review, approve, and — with a single click — promote the top money-bot idea into a real GitHub issue with a full MVP spec. **Promotion is human-gated**: the engine ranks and surfaces, you approve.
+
+> Operating philosophy: **autonomous, human-driven**. The engine generates, scores, dedups, sweeps, and audits itself on a schedule. Anything that touches external state (GitHub issues, repos) is one click away — never autonomous. The v0.14 weekly auto-promote cadence was removed in v0.14b after a uvicorn-reload bug fired it three times. Today, the Money Bots page exposes a Promote ➤ button per card; nothing else can flip an idea to `approved` without an operator.
 
 This is a personal project that's been running for several months. It's open-sourced because some of the patterns (LLM backend abstraction, multi-stage dedup, persona-driven generation, fundability scoring, in-process multi-cadence scheduling) might be useful to others. It is not a product — there's no support, no roadmap commitment, and no SLA.
 
@@ -28,7 +30,8 @@ This is a personal project that's been running for several months. It's open-sou
 | **Compare** | Token-overlap (Jaccard) between an idea and a GitHub repo's README + topics + description. Returns a verdict (new / enhance / duplicate). |
 | **Approval check (v0.11)** | When a human flips an idea to `approved`, a non-blocking think-tank coherence checker runs: empty tech stack? mvp scope drifting from description? super-idea components with no shared theme? fake-perfect feasibility score? Results land in `approval_checks` and surface as a banner on the idea detail page. |
 | **Verdict audit (v0.11)** | A "who watches the watcher" cadence samples recent LLM verdicts (challenge / review) and re-runs them with a flipped tone. Divergences land in `verdict_audits` for inspection. |
-| **Auto-promote (v0.14)** | Weekly money-flipper cadence. Picks the top-`fundability_score` idea in money categories that hasn't been promoted, files a full GitHub issue (MVP spec + market analysis + tech stack), flips it to `approved`, and stamps `auto_promoted_at` so it never fires twice on the same idea. |
+| **Manual promote (v0.14b)** | One click on /money-bots → POST `/api/promote/{id}` → `gh issue create` with the full MVP spec + market analysis + tech stack → idea flips to `approved` and stamps `auto_promoted_at` so re-clicks return the existing issue. The autonomous weekly cadence was removed after a uvicorn-reload bug fired it three times — promotion is human-gated now. |
+| **Issue sync (v0.14c)** | Hourly cadence. Pulls live GitHub state for every approved + promoted idea via `gh issue view --json state,stateReason`. CLOSED + COMPLETED → `contributed`. CLOSED + NOT_PLANNED → `archived`. OPEN → leave alone. Keeps the dashboard honest after an operator closes an issue. |
 | **Scaffold** | Calls `gh repo create`, pushes a language-appropriate template tree (Python / Rust / Go / Node), opens 3–5 starter issues from the idea's MVP scope, applies labels. |
 
 ---
@@ -40,7 +43,7 @@ git clone https://github.com/rayketcham-lab/project-forge.git
 cd project-forge
 pip install -e ".[dev,test]"
 
-# Run tests (~1100 tests, ~50s)
+# Run tests (~1280 tests, ~50s)
 pytest tests/ -v
 
 # Start dashboard — the in-process scheduler boots with it
@@ -76,6 +79,16 @@ The "Add Idea" tab has three independent paths:
 - **Text — Quick** — paste a fragment, one LLM call, get an idea.
 - **5-Phase Wizard** — Discover → Differentiate → Audience → Constraints → Synthesize. Each phase asks 2–3 follow-up questions based on prior answers. Final phase produces a draft you can edit before saving.
 
+### Card UX (v0.14c)
+
+Every idea card across the dashboard, money-bots, super-ideas, and explore pages carries the same triage UX:
+
+- **Hover tooltip** — 220 ms after mouse-over, a floating panel shows name + tagline + feasibility / fundability / mode pills + the first 280 chars of the description. Reads from `data-*` attributes for an instant first paint, then lazy-fetches `/api/ideas/{id}` to fill the description. Move off the card and it disappears.
+- **In-window modal** — click anywhere on a card (not on a link/button) and the full idea opens in place: description, market, MVP scope, tech-stack chips, the GitHub issue if promoted, a Reject button, and a "Full page ↗" escape hatch. Backdrop / × / ESC all close. No more page navigations for just-peek-at-an-idea.
+- **Per-card Reject button** — a small red × top-right of every card, invisible until you hover. Confirms via dialog, posts to `/ideas/{id}/reject`, removes the card from the DOM.
+- **Churn Now button** (on /money-bots) — fires `/api/churn` for the current category filter. New idea appears in the grid after a 1.5 s reload. ~$0.003/click at Haiku.
+- **Promote ➤ button** (on /money-bots, only for un-promoted ideas) — confirms, posts to `/api/promote/{id}`, files the GitHub issue, flips status to `approved`. The only path that touches GitHub state.
+
 ---
 
 ## API
@@ -88,16 +101,19 @@ A subset of the routes exposed by `web/routes.py`. There are more — see the `@
 | `GET`  | `/api/stats` | Aggregate counts |
 | `GET`  | `/api/categories` | Category counts + average score |
 | `GET`  | `/api/ideas` | Paginated list |
+| `GET`  | `/api/ideas/{id}` | JSON detail + recent challenges + 4 related ideas. Powers the hover tooltip and in-window modal (v0.14c) |
 | `GET`  | `/api/money-bots/top` | Top monetizable ideas (v0.14) |
 | `POST` | `/api/churn` | On-demand idea generation for the money pipeline (v0.14) |
+| `POST` | `/api/promote/{id}` | Manual promote → GH issue (v0.14b — replaces the removed auto-promote cadence) |
+| `GET`  | `/api/backend-info` | Diagnostic: which LLM backend is in use + censored view of the API-key env vars seen by the running process |
 | `POST` | `/api/ideas/{id}/compare` | Compare to a repo |
-| `POST` | `/api/ideas/from-url` | Ingest from URL |
-| `POST` | `/api/ideas/from-text` | Ingest from text fragment |
+| `POST` | `/api/ideas/from-url` | Ingest from URL (rate-limited) |
+| `POST` | `/api/ideas/from-text` | Ingest from text fragment (rate-limited) |
 | `POST` | `/api/ideas/builder/step` | One step of the wizard |
 | `POST` | `/api/ideas/builder/save` | Save the wizard's final draft |
 | `POST` | `/ideas/{id}/approve` | Move to approved (triggers the approval-check) |
 | `POST` | `/ideas/{id}/reject` | Move to rejected |
-| `POST` | `/ideas/{id}/scaffold` | Scaffold to GitHub |
+| `POST` | `/ideas/{id}/scaffold` | Scaffold to GitHub (rate-limited) |
 | `GET`  | `/api/ideas/{id}/approval-check` | Read back the coherence-check result |
 
 Non-read methods require a Bearer token when `FORGE_API_TOKEN` is set. The dashboard uses an ephemeral per-process token rendered into the page meta tag — see `web/auth.py`.
@@ -133,17 +149,19 @@ All in hours. The in-process scheduler owns these — no systemd timers required
 | `FORGE_VERDICT_AUDIT_INTERVAL_HOURS` | 24 | Verdict meta-audit ("who watches the watcher") |
 | `FORGE_FEED_REFRESH_INTERVAL_HOURS` | 24 | NVD / arXiv / IETF cache refresh |
 | `FORGE_FUNDABILITY_INTERVAL_HOURS` | 24 | Score recent ideas for monetization viability |
-| `FORGE_AUTO_PROMOTE_INTERVAL_HOURS` | 168 | Weekly money-flipper |
+| `FORGE_ISSUE_SYNC_INTERVAL_HOURS` | 1 | v0.14c. Sync `auto_promoted_at` ideas with their live GH issue state |
 | `FORGE_CHALLENGE_INTERVAL_HOURS` | 168 | Autonomous adversarial pass on top unchallenged ideas |
 | `FORGE_SCHED_INITIAL_DELAY_SEC` | 60 | Boot grace period before the first tick |
 | `FORGE_FEEDS_DIR` | `<db_dir>/feeds` | Where the NVD / arXiv / IETF caches live |
 
-### Money-flipper (v0.14)
+### Money-flipper (v0.14b — manual)
+
+These knobs gate the **manual** Promote ➤ button on /money-bots and the underlying `/api/promote/{id}` endpoint. The cadence that used to read them autonomously was removed in v0.14b.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `FORGE_PROMOTE_CATEGORIES` | `automation-income,creator-tools,consumer-app,productivity` | Comma-separated category whitelist for auto-promotion |
-| `FORGE_PROMOTE_MIN_SCORE` | `0.55` | Minimum `fundability_score` to be eligible |
+| `FORGE_PROMOTE_CATEGORIES` | `automation-income,creator-tools,consumer-app,productivity` | Comma-separated category whitelist — only ideas in these categories surface on /money-bots |
+| `FORGE_PROMOTE_MIN_SCORE` | `0.55` | Minimum `fundability_score` for the candidate-picker to consider the idea promotable |
 | `FORGE_PROMOTE_REPO` | `<owner>/<repo>` | Where the promotion issue gets filed. Set this to a dedicated "money-bot board" repo if you want them off your main forge backlog. |
 
 ---
@@ -208,7 +226,9 @@ src/project_forge/
     review_runner.py         Idea-quality review cycle
     challenge_runner.py      Autonomous adversarial pass
     verdict_audit_runner.py  v0.11. Verdict meta-audit
-    auto_promote_runner.py   v0.14. Money-flipper loop
+    auto_promote_runner.py   v0.14. Money-flipper logic. The cadence was removed in v0.14b;
+                             still used by POST /api/promote/{id} for the manual button.
+    issue_sync_runner.py     v0.14c. Pulls live GH issue state for promoted ideas → DB.
   scaffold/
     builder.py               Project structure
     github.py                gh CLI wrapper
@@ -224,16 +244,18 @@ There's no systemd. The original deployment shipped one timer per cron-driven cy
 The defaults are tuned so a single host can run the full engine on roughly **$2–3/month** of LLM spend at Haiku 4.5 prices:
 
 ```
-expand            1h    cross-category + super idea generation
+expand            1h    cross-category + super idea generation (LLM-first)
+issue_sync        1h    pull live GH state for promoted ideas → DB
 review            12h   auto-archive sweeps over aged ideas
 self_improve      6h    GitHub ci-queue → PR loop
 introspect        24h   self-improvement idea proposals
 verdict_audit     24h   "who watches the watcher" — samples recent LLM verdicts
 feed_refresh      24h   NVD / arXiv / IETF cache refresh
 fundability       24h   score recent ideas for monetization viability
-auto_promote      168h  weekly money-flipper
 challenge         168h  autonomous adversarial pass on top unchallenged ideas
 ```
+
+There is no `auto_promote` cadence anymore. The weekly money-flipper was removed in v0.14b after a uvicorn-reload bug fired it three times in one session. The runner code at `cron/auto_promote_runner.py` stays — it's invoked by the manual `/api/promote/{id}` endpoint that the Promote ➤ button on /money-bots POSTs to.
 
 Each cadence is overridable via env (see the table above). The scheduler honours per-cadence watermarks (e.g. `expand` consults `MAX(generated_at)` so a manual `forge-generate` resets the clock), so frequent restarts don't double-fire.
 
@@ -341,7 +363,9 @@ CI runs the same on a self-hosted runner.
 
 ## Status
 
-Active. The in-process scheduler fires generation hourly, fundability scoring + verdict audits daily, and the money-flipper weekly. The dashboard at the operator's host shows live activity. Issues / PRs welcome but not necessarily merged on any timeline — see `CONTRIBUTING.md` and `SECURITY.md`.
+Active. The in-process scheduler fires generation hourly, issue-sync hourly, fundability scoring + verdict audits + feed refresh daily, and the autonomous challenge cadence weekly. Promotion to GitHub is human-gated via the Promote ➤ button on /money-bots. Issues / PRs welcome but not necessarily merged on any timeline — see `CONTRIBUTING.md` and `SECURITY.md`.
+
+See `ROADMAP.md` for the v0.15+ plan — top three: Stripe revenue webhook (so the engine learns which categories actually convert), an edge-finder pre-pass (Haiku-derived "fresh angles" injected as anti-tropes before each generation), and auto-scaffold of the promoted idea into a real starter repo (close the loop from "approved" → "running MVP" without an operator click).
 
 ---
 
