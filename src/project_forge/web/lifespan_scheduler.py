@@ -56,6 +56,8 @@ SELF_IMPROVE_INTERVAL = _interval_from_env("FORGE_SELF_IMPROVE_INTERVAL_HOURS", 
 CHALLENGE_INTERVAL = _interval_from_env("FORGE_CHALLENGE_INTERVAL_HOURS", 168.0)
 VERDICT_AUDIT_INTERVAL = _interval_from_env("FORGE_VERDICT_AUDIT_INTERVAL_HOURS", 24.0)
 FEED_REFRESH_INTERVAL = _interval_from_env("FORGE_FEED_REFRESH_INTERVAL_HOURS", 24.0)
+FUNDABILITY_SCORE_INTERVAL = _interval_from_env("FORGE_FUNDABILITY_INTERVAL_HOURS", 24.0)
+AUTO_PROMOTE_INTERVAL = _interval_from_env("FORGE_AUTO_PROMOTE_INTERVAL_HOURS", 168.0)
 
 INITIAL_DELAY = timedelta(seconds=float(os.environ.get("FORGE_SCHED_INITIAL_DELAY_SEC", "60")))
 
@@ -318,6 +320,32 @@ async def _fire_verdict_audit(db: Database) -> None:
     )
 
 
+async def _fire_fundability_score(db: Database) -> None:
+    """Score recent unscored ideas for monetization viability. Bulk run
+    so the auto-promote cadence always has fresh signal."""
+    from project_forge.engine.fundability import score_pending_ideas
+
+    result = await score_pending_ideas(db, limit=50)
+    logger.info("Fundability cycle scored %d ideas", result.get("scored", 0))
+
+
+async def _fire_auto_promote(db: Database) -> None:
+    """Pick top-fundability money-bot idea, file a GH issue, flip to
+    'approved'. The money-flipper loop."""
+    from project_forge.cron.auto_promote_runner import run_auto_promote_cycle
+
+    result = await run_auto_promote_cycle(db)
+    if result.get("promoted"):
+        logger.info(
+            "Auto-promoted idea=%s name=%r issue=%s",
+            result.get("idea_id"),
+            result.get("name"),
+            result.get("issue_url"),
+        )
+    else:
+        logger.info("Auto-promote cycle: no candidate this round")
+
+
 async def _fire_feed_refresh(db: Database) -> None:
     """Refresh NVD / arXiv / IETF caches that feed prompt-seed material.
 
@@ -455,6 +483,28 @@ def default_cadences() -> list[Cadence]:
             # outer safety net.
             delay_query=None,
             tick_interval=FEED_REFRESH_INTERVAL.total_seconds(),
+            initial_delay=initial,
+        ),
+        Cadence(
+            # v0.14 — keeps fundability_score fresh for the auto-promote
+            # picker. Pure clock; the runner itself skips already-scored
+            # ideas so re-running is cheap.
+            name="fundability_score",
+            interval=FUNDABILITY_SCORE_INTERVAL,
+            runner=_fire_fundability_score,
+            delay_query=None,
+            tick_interval=FUNDABILITY_SCORE_INTERVAL.total_seconds(),
+            initial_delay=initial,
+        ),
+        Cadence(
+            # v0.14 — weekly money-flipper. Picks top fundability_score
+            # idea in money categories, files a GH issue, flips to
+            # 'approved'. Idempotent via auto_promoted_at stamp.
+            name="auto_promote",
+            interval=AUTO_PROMOTE_INTERVAL,
+            runner=_fire_auto_promote,
+            delay_query=None,
+            tick_interval=AUTO_PROMOTE_INTERVAL.total_seconds(),
             initial_delay=initial,
         ),
     ]

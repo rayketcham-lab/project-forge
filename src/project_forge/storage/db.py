@@ -220,6 +220,10 @@ class Database:
             # judges it (separate axis from feasibility).
             "ALTER TABLE ideas ADD COLUMN generation_mode TEXT",
             "ALTER TABLE ideas ADD COLUMN fundability_score REAL",
+            # v0.14 — auto-promote stamp so the money-flipper cadence
+            # is idempotent. NULL = never auto-promoted; non-NULL = the
+            # weekly picker should skip this idea.
+            "ALTER TABLE ideas ADD COLUMN auto_promoted_at TEXT",
         ):
             try:
                 await self._db.execute(stmt)
@@ -281,13 +285,14 @@ class Database:
 
     async def save_idea(self, idea: Idea) -> Idea:
         content_hash = getattr(idea, "content_hash", None)
+        auto_ts = getattr(idea, "auto_promoted_at", None)
         await self.db.execute(
             """INSERT OR REPLACE INTO ideas
             (id, name, tagline, description, category, market_analysis,
              feasibility_score, mvp_scope, tech_stack, generated_at, status,
              github_issue_url, project_repo_url, content_hash, source_url,
-             generation_mode, fundability_score)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             generation_mode, fundability_score, auto_promoted_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 idea.id,
                 idea.name,
@@ -306,6 +311,7 @@ class Database:
                 idea.source_url,
                 getattr(idea, "generation_mode", None),
                 getattr(idea, "fundability_score", None),
+                auto_ts.isoformat() if auto_ts is not None else None,
             ),
         )
         await self.db.commit()
@@ -1334,6 +1340,17 @@ class Database:
             ),
             fundability_score=(
                 row["fundability_score"] if "fundability_score" in keys else None
+            ),
+            auto_promoted_at=(
+                datetime.fromisoformat(row["auto_promoted_at"]).replace(tzinfo=UTC)
+                if "auto_promoted_at" in keys
+                and row["auto_promoted_at"]
+                and "+" not in row["auto_promoted_at"]
+                else (
+                    datetime.fromisoformat(row["auto_promoted_at"])
+                    if "auto_promoted_at" in keys and row["auto_promoted_at"]
+                    else None
+                )
             ),
         )
 

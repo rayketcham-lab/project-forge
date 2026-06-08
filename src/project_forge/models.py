@@ -60,6 +60,10 @@ class Idea(BaseModel):
     # this idea is. Distinct from feasibility (can we build it). Range
     # 0.0–1.0, None for ideas predating the scorer.
     fundability_score: float | None = None
+    # v0.14 — the auto-promote loop flips status to 'approved' and stamps
+    # this timestamp + the issue URL so the picker can skip already-promoted
+    # ideas idempotently.
+    auto_promoted_at: datetime | None = None
 
 
 class Resource(BaseModel):
