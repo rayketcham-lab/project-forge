@@ -52,6 +52,14 @@ class Idea(BaseModel):
     project_repo_url: str | None = None
     content_hash: str | None = None
     source_url: str | None = None
+    # v0.13 — which `llm_generator` mode produced this idea (or None for
+    # template-generated ones). Used by `pick_least_used_mode` so the
+    # rotation hits under-represented modes first.
+    generation_mode: str | None = None
+    # v0.13 fundability scoring — how monetizable does the engine think
+    # this idea is. Distinct from feasibility (can we build it). Range
+    # 0.0–1.0, None for ideas predating the scorer.
+    fundability_score: float | None = None
 
 
 class Resource(BaseModel):

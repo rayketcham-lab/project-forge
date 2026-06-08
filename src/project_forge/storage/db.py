@@ -215,6 +215,11 @@ class Database:
             # retroactive siphon is fully reversible and visible in the UI.
             "ALTER TABLE ideas ADD COLUMN archived_reason TEXT",
             "ALTER TABLE ideas ADD COLUMN archived_at TEXT",
+            # v0.13 — which llm_generator mode produced this idea (null for
+            # template-only generations) and how monetizable the engine
+            # judges it (separate axis from feasibility).
+            "ALTER TABLE ideas ADD COLUMN generation_mode TEXT",
+            "ALTER TABLE ideas ADD COLUMN fundability_score REAL",
         ):
             try:
                 await self._db.execute(stmt)
@@ -280,8 +285,9 @@ class Database:
             """INSERT OR REPLACE INTO ideas
             (id, name, tagline, description, category, market_analysis,
              feasibility_score, mvp_scope, tech_stack, generated_at, status,
-             github_issue_url, project_repo_url, content_hash, source_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             github_issue_url, project_repo_url, content_hash, source_url,
+             generation_mode, fundability_score)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 idea.id,
                 idea.name,
@@ -298,6 +304,8 @@ class Database:
                 idea.project_repo_url,
                 content_hash,
                 idea.source_url,
+                getattr(idea, "generation_mode", None),
+                getattr(idea, "fundability_score", None),
             ),
         )
         await self.db.commit()
@@ -1321,6 +1329,12 @@ class Database:
             github_issue_url=row["github_issue_url"],
             project_repo_url=row["project_repo_url"],
             source_url=row["source_url"] if "source_url" in keys else None,
+            generation_mode=(
+                row["generation_mode"] if "generation_mode" in keys else None
+            ),
+            fundability_score=(
+                row["fundability_score"] if "fundability_score" in keys else None
+            ),
         )
 
     # === RESOURCE CRUD ===
