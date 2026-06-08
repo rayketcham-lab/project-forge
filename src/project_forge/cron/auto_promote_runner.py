@@ -150,13 +150,28 @@ def build_issue_body(idea: Idea) -> str:
 
 
 def _create_promotion_issue(idea: Idea) -> str:
-    """Create the GitHub issue. Raises RuntimeError on gh failure."""
-    from project_forge.scaffold.github import create_issue
+    """Create the GitHub issue. Raises RuntimeError on gh failure.
+
+    Self-bootstraps the required labels so a fresh repo doesn't fail
+    the first cycle. `create_label` is no-op when the label already
+    exists, so this is cheap on every run.
+    """
+    from project_forge.scaffold.github import create_issue, create_label
+
+    repo = _promote_repo()
+    # Bootstrap labels (idempotent; fails-soft).
+    try:
+        create_label(repo, "auto-promoted", "0e8a16",
+                     "Auto-promoted by the money-flipper cadence")
+        create_label(repo, "money-bot", "fbca04",
+                     "Money-making bot or monetization-focused project")
+    except Exception:
+        logger.warning("auto-promote: label bootstrap had a hiccup; continuing")
 
     title = f"[Money-Flipper] {idea.name}"
     body = build_issue_body(idea)
     return create_issue(
-        _promote_repo(),
+        repo,
         title,
         body,
         labels=["auto-promoted", "money-bot"],
