@@ -54,7 +54,12 @@
                         <span class="fundability-badge fundability-{{ ((idea.fundability_score or 0) * 10) | int }}">
                             {{ "%.2f"|format(idea.fundability_score or 0) }}
                         </span>
-                        {% if idea.auto_promoted_at %}
+                        {# Show "✓ promoted" ONLY while the promotion is still live
+                           (status='approved' AND auto_promoted_at). Once the operator
+                           closes the GH issue, the issue-sync cadence flips the idea
+                           to 'contributed' or 'archived' and we show that real status
+                           instead — was the v0.14c stale-badge bug. #}
+                        {% if idea.auto_promoted_at and idea.status == 'approved' %}
                             <span class="status-pill status-promoted">&#10003; promoted</span>
                         {% else %}
                             <span class="status-pill status-{{ idea.status }}">{{ idea.status }}</span>

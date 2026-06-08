@@ -1582,16 +1582,16 @@ function initWizard() {
 
     function showTooltipFor(card) {
         var data = ideaFromCard(card);
-        if (\!data.id) return;
+        if (!data.id) return;
         var tooltip = getTooltip();
         renderTooltipBody(tooltip, data);
         positionTooltip(tooltip, card);
         // Lazy fetch the full description if it's missing.
-        if (\!data.description) {
+        if (!data.description) {
             fetch('/api/ideas/' + encodeURIComponent(data.id))
                 .then(function(r) { return r.ok ? r.json() : null; })
                 .then(function(payload) {
-                    if (\!payload || tooltip.style.display === 'none') return;
+                    if (!payload || tooltip.style.display === 'none') return;
                     var combined = Object.assign({}, payload.idea || {}, data);
                     if (payload.idea && payload.idea.description) {
                         combined.description = payload.idea.description;
@@ -1647,7 +1647,7 @@ function initWizard() {
     }
 
     function closeModal() {
-        if (\!modalEl) return;
+        if (!modalEl) return;
         modalEl.style.display = 'none';
         document.body.style.overflow = '';
         var body = modalEl.querySelector('.idea-modal-body');
@@ -1671,7 +1671,7 @@ function initWizard() {
 
         fetch('/api/ideas/' + encodeURIComponent(ideaId))
             .then(function(r) {
-                if (\!r.ok) throw new Error('HTTP ' + r.status);
+                if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.json();
             })
             .then(function(payload) { renderModalBody(body, payload); })
@@ -1720,7 +1720,7 @@ function initWizard() {
 
         // Sections
         function section(title, content) {
-            if (\!content) return;
+            if (!content) return;
             var h = document.createElement('h3');
             h.className = 'idea-modal-section-title';
             h.textContent = title;
@@ -1788,13 +1788,13 @@ function initWizard() {
     // ----- reject -----
 
     function doReject(ideaId, onDone) {
-        if (\!ideaId) return;
+        if (!ideaId) return;
         var headers = (typeof getAuthHeaders === 'function') ? getAuthHeaders() : {};
         fetch('/ideas/' + encodeURIComponent(ideaId) + '/reject', {
             method: 'POST', headers: headers
         })
             .then(function(r) {
-                if (\!r.ok) throw new Error('HTTP ' + r.status);
+                if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.json();
             })
             .then(function() { if (onDone) onDone(); })
@@ -1821,7 +1821,7 @@ function initWizard() {
 
     document.addEventListener('mouseover', function(ev) {
         var card = ev.target && ev.target.closest && ev.target.closest('[data-idea-id]');
-        if (\!card) return;
+        if (!card) return;
         if (ev.target.closest('.idea-reject-btn, .idea-tooltip, .idea-modal')) return;
         if (tooltipTimer) clearTimeout(tooltipTimer);
         tooltipTimer = setTimeout(function() { showTooltipFor(card); }, 220);
@@ -1829,7 +1829,7 @@ function initWizard() {
 
     document.addEventListener('mouseout', function(ev) {
         var card = ev.target && ev.target.closest && ev.target.closest('[data-idea-id]');
-        if (\!card) return;
+        if (!card) return;
         var related = ev.relatedTarget;
         if (related && (card.contains(related) || (tooltipEl && tooltipEl.contains(related)))) return;
         hideTooltip();
@@ -1851,7 +1851,7 @@ function initWizard() {
         // Card click opens modal (but let real <a href> elements pass through if they
         // explicitly opt in via data-modal-skip).
         var card = ev.target && ev.target.closest && ev.target.closest('[data-idea-id]');
-        if (\!card) return;
+        if (!card) return;
         if (ev.target.closest('a, button, .moneybot-issue')) return;
         if (card.dataset.modalSkip === '1') return;
         ev.preventDefault();
