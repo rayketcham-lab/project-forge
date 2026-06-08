@@ -593,6 +593,25 @@ class Database:
         row = await cursor.fetchone()
         total_denials = row[0] if row else 0
 
+        # v0.14 money-bot tile signals.
+        money_cats = (
+            "automation-income", "creator-tools", "consumer-app", "productivity",
+        )
+        placeholders = ",".join("?" * len(money_cats))
+        cursor = await self.db.execute(
+            f"SELECT COUNT(*) FROM ideas WHERE category IN ({placeholders}) "  # noqa: S608
+            f"AND status NOT IN ('archived', 'rejected')",
+            money_cats,
+        )
+        row = await cursor.fetchone()
+        money_bot_count = row[0] if row else 0
+
+        cursor = await self.db.execute(
+            "SELECT COUNT(*) FROM ideas WHERE auto_promoted_at IS NOT NULL",
+        )
+        row = await cursor.fetchone()
+        auto_promoted_count = row[0] if row else 0
+
         return {
             # total_ideas kept for backward compat (existing tests / integrations).
             # Dashboard prefers total_active for the headline tile.
@@ -609,6 +628,8 @@ class Database:
             "total_challenges": challenge_count,
             "total_rounds": total_rounds,
             "total_denials": total_denials,
+            "money_bot_count": money_bot_count,
+            "auto_promoted_count": auto_promoted_count,
         }
 
     # === CHALLENGES ===

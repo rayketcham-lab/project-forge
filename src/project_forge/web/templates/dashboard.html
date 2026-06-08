@@ -78,6 +78,13 @@
                 <div class="stat-number">{{ stats.ideas_by_status.get('contributed', 0) }}</div>
                 <div class="stat-label">Contributed</div>
             </a>
+            <a href="/money-bots" class="stat-card stat-yellow" title="Top monetizable ideas (sorted by fundability score) across money-friendly categories. Auto-promoted weekly to GitHub issues.">
+                <div class="stat-number">{{ stats.money_bot_count }}</div>
+                <div class="stat-label">Money Bots</div>
+                {% if stats.auto_promoted_count %}
+                <div class="stat-subtitle">{{ stats.auto_promoted_count }} auto-promoted</div>
+                {% endif %}
+            </a>
             <div class="stat-card stat-orange" title="Average feasibility score across ACTIVE ideas only (archived rows excluded). Each idea is scored 0.0-1.0 by the AI engine based on how achievable the MVP is, market need, and technical clarity.">
                 <div class="stat-number">{{ stats.avg_feasibility_active }}</div>
                 <div class="stat-label">Avg Score</div>

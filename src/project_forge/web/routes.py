@@ -200,6 +200,84 @@ async def explore(
     )
 
 
+_MONEY_CATEGORIES = (
+    "automation-income", "creator-tools", "consumer-app", "productivity",
+)
+
+
+@router.get("/money-bots", response_class=HTMLResponse)
+async def money_bots(
+    request: Request,
+    category: str | None = None,
+    limit: int = Query(default=30, ge=1, le=100),
+):
+    """Top monetizable ideas across money-friendly categories, sorted by
+    fundability_score DESC. Optionally filter by a specific category."""
+    cats = (category,) if category in _MONEY_CATEGORIES else _MONEY_CATEGORIES
+    placeholders = ",".join("?" * len(cats))
+    cur = await db.db.execute(
+        f"SELECT id FROM ideas "
+        f"WHERE category IN ({placeholders}) "  # noqa: S608
+        f"AND status NOT IN ('archived', 'rejected') "
+        f"AND fundability_score IS NOT NULL "
+        f"ORDER BY fundability_score DESC, generated_at DESC LIMIT ?",
+        (*cats, limit),
+    )
+    rows = await cur.fetchall()
+    ideas = []
+    for r in rows:
+        idea = await db.get_idea(r["id"])
+        if idea is not None:
+            ideas.append(idea)
+    # Total in scope (no fundability_score filter — show the headline).
+    cur = await db.db.execute(
+        f"SELECT COUNT(*) FROM ideas WHERE category IN ({placeholders}) "  # noqa: S608
+        f"AND status NOT IN ('archived', 'rejected')",
+        cats,
+    )
+    total = (await cur.fetchone())[0]
+    return templates.TemplateResponse(
+        request,
+        "money_bots.html",
+        {
+            "ideas": ideas,
+            "total": total,
+            "categories": list(_MONEY_CATEGORIES),
+            "category_filter": category if category in _MONEY_CATEGORIES else None,
+        },
+    )
+
+
+@router.get("/api/money-bots/top")
+async def api_money_bots_top(limit: int = Query(default=10, ge=1, le=100)):
+    """JSON: top-N money-bot ideas across money categories by fundability_score."""
+    placeholders = ",".join("?" * len(_MONEY_CATEGORIES))
+    cur = await db.db.execute(
+        f"SELECT id, name, tagline, category, fundability_score, "
+        f"generation_mode, status, github_issue_url, auto_promoted_at "
+        f"FROM ideas WHERE category IN ({placeholders}) "  # noqa: S608
+        f"AND status NOT IN ('archived', 'rejected') "
+        f"AND fundability_score IS NOT NULL "
+        f"ORDER BY fundability_score DESC, generated_at DESC LIMIT ?",
+        (*_MONEY_CATEGORIES, limit),
+    )
+    rows = await cur.fetchall()
+    return [
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "tagline": r["tagline"],
+            "category": r["category"],
+            "fundability_score": r["fundability_score"],
+            "generation_mode": r["generation_mode"],
+            "status": r["status"],
+            "github_issue_url": r["github_issue_url"],
+            "auto_promoted_at": r["auto_promoted_at"],
+        }
+        for r in rows
+    ]
+
+
 @router.get("/ideas", response_class=HTMLResponse)
 async def ideas_list(
     request: Request,

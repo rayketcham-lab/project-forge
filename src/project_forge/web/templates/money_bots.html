@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Money Bots - Project Forge{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div class="container">
+        <h1>💸 Top Money-Bots</h1>
+        <p class="page-subtitle">
+            {{ total }} monetizable ideas across {{ categories|length }} categories,
+            sorted by fundability score. Every Monday the engine auto-promotes
+            the top idea into a GitHub issue with the full MVP spec.
+        </p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+
+        <div class="filters-bar">
+            <div class="filter-row">
+                <span class="filter-row-label">Category</span>
+                <div class="filter-chips">
+                    <a href="/money-bots"
+                       class="chip {% if not category_filter %}chip-active{% endif %}">All</a>
+                    {% for cat in categories %}
+                    <a href="/money-bots?category={{ cat }}"
+                       class="chip {% if category_filter == cat %}chip-active{% endif %}">
+                        {{ cat }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        {% if ideas %}
+        <table class="money-bot-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Fundability</th>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Mode</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for idea in ideas %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>
+                        <span class="fundability-badge fundability-{{ ((idea.fundability_score or 0) * 10) | int }}">
+                            {{ "%.2f"|format(idea.fundability_score or 0) }}
+                        </span>
+                    </td>
+                    <td>
+                        <a href="/ideas/{{ idea.id }}" class="money-bot-name">{{ idea.name }}</a>
+                        <div class="money-bot-tagline">{{ idea.tagline }}</div>
+                    </td>
+                    <td><code>{{ idea.category.value }}</code></td>
+                    <td>
+                        {% if idea.generation_mode %}
+                        <span class="mode-badge mode-{{ idea.generation_mode }}">{{ idea.generation_mode }}</span>
+                        {% else %}
+                        <span class="mode-badge mode-template">template</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if idea.auto_promoted_at %}
+                        <span class="status-badge status-promoted">✓ promoted</span>
+                        {% if idea.github_issue_url %}
+                        <br><a href="{{ idea.github_issue_url }}" target="_blank" rel="noopener" class="issue-link">issue ↗</a>
+                        {% endif %}
+                        {% else %}
+                        <span class="status-badge status-{{ idea.status }}">{{ idea.status }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <p>No scored money-bot ideas yet. The fundability scorer runs daily.</p>
+        </div>
+        {% endif %}
+
+    </div>
+</section>
+
+<style>
+.money-bot-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--color-bg-card, #fff);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.money-bot-table th, .money-bot-table td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--color-border, #eee);
+    vertical-align: top;
+}
+.money-bot-table th {
+    background: var(--color-bg-subtle, #f8f8f8);
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.money-bot-name {
+    font-weight: 600;
+    text-decoration: none;
+    color: inherit;
+}
+.money-bot-name:hover {
+    text-decoration: underline;
+}
+.money-bot-tagline {
+    font-size: 0.85rem;
+    color: var(--color-text-muted, #666);
+    margin-top: 0.2rem;
+}
+.fundability-badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: white;
+    background: #999;
+    min-width: 3rem;
+    text-align: center;
+}
+.fundability-badge.fundability-9, .fundability-badge.fundability-10 { background: #0a8a3f; }
+.fundability-badge.fundability-7, .fundability-badge.fundability-8 { background: #2da94f; }
+.fundability-badge.fundability-6 { background: #a8b400; }
+.fundability-badge.fundability-5 { background: #d9a400; }
+.fundability-badge.fundability-3, .fundability-badge.fundability-4 { background: #d97020; }
+.fundability-badge.fundability-0, .fundability-badge.fundability-1, .fundability-badge.fundability-2 { background: #888; }
+.mode-badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    background: #eef;
+    color: #336;
+}
+.mode-badge.mode-novel { background: #d4f3d4; color: #064; }
+.mode-badge.mode-inversion { background: #ffe6cc; color: #843; }
+.mode-badge.mode-bundle { background: #d4d4ff; color: #336; }
+.mode-badge.mode-microservice { background: #ffd9e0; color: #803; }
+.mode-badge.mode-adversarial { background: #ffd0d0; color: #800; }
+.mode-badge.mode-template { background: #ddd; color: #555; }
+.status-badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    background: #eee;
+    color: #333;
+}
+.status-badge.status-promoted { background: #0e8a16; color: white; }
+.status-badge.status-approved { background: #006eff; color: white; }
+.status-badge.status-new { background: #f0f0f0; color: #444; }
+.issue-link {
+    font-size: 0.8rem;
+    color: #0366d6;
+    text-decoration: none;
+}
+.issue-link:hover { text-decoration: underline; }
+.stat-card.stat-yellow {
+    background: linear-gradient(135deg, #fff3a3 0%, #ffcf3c 100%);
+    color: #3a2a00;
+}
+</style>
+{% endblock %}
