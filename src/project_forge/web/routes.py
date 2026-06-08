@@ -261,10 +261,50 @@ async def approve_idea(idea_id: str, request: Request):
             raise HTTPException(status_code=502, detail="GitHub issue creation failed. Check server logs.") from exc
         await db.update_idea_urls(idea_id, github_issue_url=issue_url)
         await db.update_idea_status(idea_id, "approved")
-        return {"status": "approved", "id": idea_id, "issue_url": issue_url}
+        check_verdict = await _run_approval_check(idea)
+        return {"status": "approved", "id": idea_id, "issue_url": issue_url, "check": check_verdict}
 
     await db.update_idea_status(idea_id, "approved")
-    return {"status": "approved", "id": idea_id}
+    check_verdict = await _run_approval_check(idea)
+    return {"status": "approved", "id": idea_id, "check": check_verdict}
+
+
+async def _run_approval_check(idea) -> str:
+    """Run the think-tank sanity check on an approved idea, persist the
+    result, and return the top-level verdict. Non-blocking: any check
+    failure is logged but does NOT revert the approval — the dashboard
+    surfaces the warning so a human can act on it."""
+    from project_forge.engine.approval_check import save_approval_check, validate_idea
+
+    try:
+        result = validate_idea(idea)
+        await save_approval_check(db, idea.id, result)
+        if result.verdict != "pass":
+            logger.warning(
+                "Approval check for %s verdict=%s: %s",
+                idea.id,
+                result.verdict,
+                "; ".join(
+                    f"{c['name']}={c['status']}"
+                    for c in result.checks
+                    if c["status"] != "pass"
+                ),
+            )
+        return result.verdict
+    except Exception:
+        logger.exception("approval check for %s failed", idea.id)
+        return "error"
+
+
+@router.get("/api/ideas/{idea_id}/approval-check")
+async def api_get_approval_check(idea_id: str):
+    """Return the latest persisted approval-check result for an idea."""
+    from project_forge.engine.approval_check import get_approval_check
+
+    check = await get_approval_check(db, idea_id)
+    if check is None:
+        raise HTTPException(status_code=404, detail="No approval check recorded")
+    return check
 
 
 @router.post("/ideas/{idea_id}/reject")
