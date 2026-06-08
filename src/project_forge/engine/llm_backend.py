@@ -161,23 +161,40 @@ def _has_claude_cli() -> bool:
     return _claude_cli_path() is not None
 
 
-def resolve_backend(*, force: str | None = None) -> LLMBackend | None:
+def resolve_backend(
+    *,
+    force: str | None = None,
+    model_override: str | None = None,
+) -> LLMBackend | None:
     """Pick the best available LLM backend.
+
+    `model_override` lets callers pick a different model for cheap, batchy
+    work (e.g. Haiku 4.5 for semantic dedup verification) without changing
+    the global default Sonnet model. Falls back to `FORGE_LLM_MODEL` env,
+    then `DEFAULT_MODEL`.
 
     Returns None when nothing is available — callers must handle this and
     fall back to deterministic heuristics.
     """
     forced = force or os.environ.get("FORGE_LLM_BACKEND")
-    model = os.environ.get("FORGE_LLM_MODEL", DEFAULT_MODEL)
+    model = model_override or os.environ.get("FORGE_LLM_MODEL", DEFAULT_MODEL)
 
     # Settings is a pydantic instance — read the api_key off it (also picks
     # up FORGE_ANTHROPIC_API_KEY via the env_prefix).
     from project_forge.config import settings
 
-    api_key = (
-        settings.anthropic_api_key
-        or os.environ.get("ANTHROPIC_API_KEY", "")
-    )
+    # For Haiku-specific work, prefer a dedicated Haiku key so the user can
+    # plumb a cheap key without giving project-forge their Sonnet/Opus key.
+    if model_override == "haiku":
+        api_key = os.environ.get("FORGE_HAIKU_API_KEY", "") or (
+            settings.anthropic_api_key
+            or os.environ.get("ANTHROPIC_API_KEY", "")
+        )
+    else:
+        api_key = (
+            settings.anthropic_api_key
+            or os.environ.get("ANTHROPIC_API_KEY", "")
+        )
 
     if forced in ("static", "none"):
         return None
@@ -194,9 +211,25 @@ def resolve_backend(*, force: str | None = None) -> LLMBackend | None:
     return None
 
 
+def resolve_cheap_backend() -> LLMBackend | None:
+    """Backend for high-volume, cheap, batchy work (dedup verification,
+    cluster naming). Prefers Haiku 4.5 — ~$0.001 per call at typical
+    prompt sizes, fast enough to slot into hot paths.
+
+    Falls through to `resolve_backend()` (i.e. whatever the default
+    reasoning model is) when Haiku-via-API isn't available, so callers
+    don't need to deal with None twice.
+    """
+    haiku = resolve_backend(model_override="haiku")
+    if haiku is not None:
+        return haiku
+    return resolve_backend()
+
+
 __all__ = [
     "AnthropicAPIBackend",
     "ClaudeCodeBackend",
     "LLMBackend",
     "resolve_backend",
+    "resolve_cheap_backend",
 ]

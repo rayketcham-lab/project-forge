@@ -233,26 +233,25 @@ class TestGoingForwardThreshold:
         assert after_c.status == "archived"
 
     @pytest.mark.asyncio
-    async def test_06_threshold_catches_what_07_missed(self, db):
-        """A pair with 0.65 token Jaccard would pass at 0.7 but fail at 0.6.
+    async def test_threshold_catches_near_paraphrase(self, db, monkeypatch):
+        """At the tightened threshold of the day, a near-paraphrase pair
+        with high tagline overlap must be rejected.
 
-        Concrete: tagline_similarity is the existing engine.dedup function;
-        we lower the constant from 0.7 to 0.6 so should_accept rejects more.
-        """
-        from project_forge.engine.dedup import SIMILARITY_THRESHOLD, should_accept
+        Threshold history: 0.7 (initial) → 0.6 (#71) → 0.72 (v0.11.1 after
+        the gates choked generation). The assertion needs to express the
+        *intent* — 'this near-paraphrase pair is rejected' — not pin a
+        specific number. We monkeypatch the threshold here so the test
+        pins the contract, not the configuration."""
+        from project_forge.engine import dedup as _dedup
+        from project_forge.engine.dedup import should_accept
 
-        # The new threshold must be lower than the old default (≤ 0.65)
-        assert SIMILARITY_THRESHOLD <= 0.65, (
-            f"SIMILARITY_THRESHOLD is {SIMILARITY_THRESHOLD}; expected ≤ 0.65 "
-            f"after the going-forward tightening."
-        )
+        # Pin to a tight value for this test regardless of the running default.
+        monkeypatch.setattr(_dedup, "SIMILARITY_THRESHOLD", 0.6)
 
-        # Seed an existing idea, try to insert a near-paraphrase
         existing = _idea("Existing", "container image provenance verification scanner")
         await db.save_idea(existing)
         candidate = _idea("Candidate", "container image provenance verification engine")
         ok, reason = await should_accept(candidate, db)
-        # At 0.6 threshold this should be blocked
         assert ok is False, (
             f"Tighter threshold did not catch a near-paraphrase. reason={reason}"
         )

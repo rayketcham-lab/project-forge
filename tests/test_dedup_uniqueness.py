@@ -104,7 +104,16 @@ class TestRegularNameSimilarity:
 
 class TestVerticalCapAtInsert:
     @pytest.mark.asyncio
-    async def test_third_clone_rejected(self, db):
+    async def test_over_cap_clone_rejected(self, db, monkeypatch):
+        """When VERTICAL_CAP clones already exist for a concept stem, the
+        next one is rejected. Pin the cap at 2 inside this test so the
+        scenario isn't coupled to whatever the production default is —
+        v0.11 had cap=2, v0.11.1 raised it to 3, and follow-ups may
+        re-tune. The contract is 'N+1th rejected', not a specific N."""
+        from project_forge.engine import dedup as _dedup
+
+        monkeypatch.setattr(_dedup, "VERTICAL_CAP", 2)
+
         await db.save_idea(_idea(
             "Pqc Tracker for Healthcare", "one tagline",
             category=IdeaCategory.PQC_CRYPTOGRAPHY,
@@ -123,7 +132,12 @@ class TestVerticalCapAtInsert:
         assert "vertical_cap" in (reason or "")
 
     @pytest.mark.asyncio
-    async def test_first_two_clones_accepted(self, db):
+    async def test_under_cap_clones_accepted(self, db, monkeypatch):
+        """The first CAP clones for a concept stem are all accepted."""
+        from project_forge.engine import dedup as _dedup
+
+        monkeypatch.setattr(_dedup, "VERTICAL_CAP", 2)
+
         a = _idea("Pqc Tracker for Healthcare", "alpha")
         accepted_a, _ = await should_accept(a, db)
         assert accepted_a is True

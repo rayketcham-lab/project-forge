@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os as _os
 import re
 from typing import TYPE_CHECKING
 
@@ -25,13 +26,28 @@ logger = logging.getLogger(__name__)
 # Tightened 0.7 → 0.6 in #71 — retroactive siphon revealed many pairs at
 # 0.6-0.7 that are clearly paraphrases. Going-forward, reject them at
 # INSERT time so the historical fat-trim doesn't have to repeat.
-SIMILARITY_THRESHOLD = 0.6
+#
+# Loosened 0.6 → 0.72 after the v0.11 gates choked generation to ~1
+# idea/day (and zero supers for 14 days). The combination of three new
+# gates layered on top of this one made the aggregate filter near-100%.
+# Tune via FORGE_TAGLINE_THRESHOLD / FORGE_NAME_JACCARD_THRESHOLD /
+# FORGE_VERTICAL_CAP / FORGE_SUPER_OVERLAP_MIN — all env-overridable.
+SIMILARITY_THRESHOLD = float(_os.environ.get("FORGE_TAGLINE_THRESHOLD", "0.72"))
 
 # Additional INSERT-time gates (added after the May 2026 corpus inspection
 # showed the corpus regrowing dupes the moment generation resumed).
-NAME_JACCARD_THRESHOLD = 0.55  # token-Jaccard on names within a category
-VERTICAL_CAP = 2  # max active ideas per stripped "X for {vertical}" concept
-SUPER_COMPONENT_OVERLAP_MIN = 3  # shared atoms before two supers are dups
+NAME_JACCARD_THRESHOLD = float(_os.environ.get("FORGE_NAME_JACCARD_THRESHOLD", "0.70"))
+VERTICAL_CAP = int(_os.environ.get("FORGE_VERTICAL_CAP", "3"))
+SUPER_COMPONENT_OVERLAP_MIN = int(_os.environ.get("FORGE_SUPER_OVERLAP_MIN", "4"))
+
+# Borderline band — when a heuristic score lands in
+# [threshold - BAND, threshold), ask the cheap LLM whether the two ideas
+# are actually the same concept before rejecting. Heuristic rejections at
+# >= threshold + BAND are taken at face value (clearly a dupe); accepts
+# at < threshold - BAND skip the LLM call entirely (clearly distinct).
+# Set FORGE_SEMANTIC_DEDUP=0 to disable the LLM tie-breaker globally.
+SEMANTIC_DEDUP_BAND = float(_os.environ.get("FORGE_SEMANTIC_DEDUP_BAND", "0.10"))
+SEMANTIC_DEDUP_ENABLED = _os.environ.get("FORGE_SEMANTIC_DEDUP", "1") not in ("0", "false", "")
 
 # Matches the trailing "for <vertical>" suffix (one to four words) so we can
 # strip it and detect the concept stem ("Pqc Tracker for Healthcare" → "Pqc
@@ -75,6 +91,45 @@ def _extract_super_components(description: str) -> set[str]:
         if n:
             out.add(n)
     return out
+
+
+def semantic_dedup_check(
+    cand_name: str,
+    cand_tagline: str,
+    existing_name: str,
+    existing_tagline: str,
+) -> bool | None:
+    """Ask the cheap LLM (Haiku preferred) whether two idea snippets are the
+    same concept. Returns True if same, False if distinct, None when no
+    backend is reachable so callers can fall back to the heuristic verdict.
+
+    Cost is roughly one Haiku call (~$0.001) per borderline pair; the
+    band-gate in `should_accept` keeps this off the hot path.
+    """
+    if not SEMANTIC_DEDUP_ENABLED:
+        return None
+
+    # Late import to avoid a startup-time cycle.
+    from project_forge.engine.llm_backend import resolve_cheap_backend
+
+    backend = resolve_cheap_backend()
+    if backend is None:
+        return None
+
+    prompt = (
+        "Two project-idea snippets follow. Tell me whether they describe "
+        "the same underlying concept (just renamed or reskinned), or "
+        "genuinely distinct projects. Reply ONLY with the single word "
+        "SAME or DIFFERENT.\n\n"
+        f"A) {cand_name} — {cand_tagline}\n"
+        f"B) {existing_name} — {existing_tagline}\n"
+    )
+    raw = (backend.call(prompt) or "").strip().upper()
+    if raw.startswith("SAME"):
+        return True
+    if raw.startswith("DIFFERENT") or raw.startswith("DIFF"):
+        return False
+    return None
 
 
 def _normalize(text: str) -> str:
@@ -192,10 +247,47 @@ async def should_accept(idea: Idea, db: Database) -> tuple[bool, str | None]:
             # Same vertical family — already passed the cap.
             continue
         score = tagline_similarity(idea.tagline, existing_tagline)
-        if score >= SIMILARITY_THRESHOLD:
-            return False, f"duplicate:tagline_similarity:{score:.2f} (similar to {existing_id})"
         n_score = _name_token_jaccard(idea.name, existing_name)
-        if n_score >= NAME_JACCARD_THRESHOLD:
+
+        # Hard-reject zone: heuristic is decisive enough on its own.
+        if score >= SIMILARITY_THRESHOLD + SEMANTIC_DEDUP_BAND:
+            return False, f"duplicate:tagline_similarity:{score:.2f} (similar to {existing_id})"
+        if n_score >= NAME_JACCARD_THRESHOLD + SEMANTIC_DEDUP_BAND:
+            return False, f"duplicate:name_similarity:{n_score:.2f} (similar to {existing_id})"
+
+        # Borderline zone: heuristic says reject but a cheap-LLM second
+        # opinion catches lexical-near-but-conceptually-different pairs
+        # (and vice versa for clever rewrites that game token overlap).
+        borderline_tag = (
+            SIMILARITY_THRESHOLD - SEMANTIC_DEDUP_BAND
+            <= score < SIMILARITY_THRESHOLD + SEMANTIC_DEDUP_BAND
+        )
+        borderline_name = (
+            NAME_JACCARD_THRESHOLD - SEMANTIC_DEDUP_BAND
+            <= n_score < NAME_JACCARD_THRESHOLD + SEMANTIC_DEDUP_BAND
+        )
+        # Above the heuristic threshold → ordinarily reject; under threshold → keep.
+        heuristic_reject_tag = score >= SIMILARITY_THRESHOLD
+        heuristic_reject_name = n_score >= NAME_JACCARD_THRESHOLD
+
+        if borderline_tag or borderline_name:
+            verdict = semantic_dedup_check(
+                idea.name, idea.tagline, existing_name, existing_tagline,
+            )
+            if verdict is True:
+                return False, (
+                    f"duplicate:semantic_dedup tag={score:.2f} name={n_score:.2f} "
+                    f"(LLM-confirmed same as {existing_id})"
+                )
+            if verdict is False:
+                # LLM overrules a borderline reject → continue checking
+                # remaining rows.
+                continue
+            # verdict is None → no backend reachable; fall back to heuristic.
+
+        if heuristic_reject_tag:
+            return False, f"duplicate:tagline_similarity:{score:.2f} (similar to {existing_id})"
+        if heuristic_reject_name:
             return False, f"duplicate:name_similarity:{n_score:.2f} (similar to {existing_id})"
 
     return True, None
