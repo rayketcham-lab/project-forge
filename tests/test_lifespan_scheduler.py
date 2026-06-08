@@ -156,6 +156,39 @@ class TestIntrospectTick:
             await lifespan_scheduler.introspect_tick(db, interval=timedelta(hours=24))
 
 
+class TestEnvParsingSafety:
+    """Fix #77 — INITIAL_DELAY parsing must warn-and-fallback on a bad value
+    instead of crashing uvicorn at import time."""
+
+    def test_bad_initial_delay_value_falls_back(self, monkeypatch):
+        from project_forge.web.lifespan_scheduler import _seconds_from_env
+
+        monkeypatch.setenv("FORGE_TEST_BAD", "fast")
+        result = _seconds_from_env("FORGE_TEST_BAD", 60.0)
+        assert result == timedelta(seconds=60)
+
+    def test_empty_initial_delay_value_falls_back(self, monkeypatch):
+        from project_forge.web.lifespan_scheduler import _seconds_from_env
+
+        monkeypatch.setenv("FORGE_TEST_BAD", "")
+        result = _seconds_from_env("FORGE_TEST_BAD", 60.0)
+        assert result == timedelta(seconds=60)
+
+    def test_valid_numeric_initial_delay_honoured(self, monkeypatch):
+        from project_forge.web.lifespan_scheduler import _seconds_from_env
+
+        monkeypatch.setenv("FORGE_TEST_GOOD", "15.5")
+        result = _seconds_from_env("FORGE_TEST_GOOD", 60.0)
+        assert result == timedelta(seconds=15.5)
+
+    def test_unset_env_uses_default(self, monkeypatch):
+        from project_forge.web.lifespan_scheduler import _seconds_from_env
+
+        monkeypatch.delenv("FORGE_TEST_UNSET", raising=False)
+        result = _seconds_from_env("FORGE_TEST_UNSET", 42.0)
+        assert result == timedelta(seconds=42)
+
+
 class TestSchedulerLifecycle:
     """The scheduler task starts and cancels cleanly."""
 

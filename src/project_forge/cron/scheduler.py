@@ -259,6 +259,13 @@ def scaffold_project(idea: Idea) -> str | None:
 async def run_full_cycle(db: Database, generator: IdeaGenerator) -> Idea | None:
     """Run a complete generation cycle: generate -> route -> issue -> maybe scaffold."""
     idea = await generate_and_store(db, generator)
+    # Fix #72 — generate_and_store explicitly returns None on four paths
+    # (quality review fail, dedup gate, router discard, router contribute).
+    # Without this guard the downstream `idea.name` / `idea.id` calls raise
+    # AttributeError, which gets swallowed by the outer try/except and looks
+    # like a generation failure rather than a deliberate filter.
+    if idea is None:
+        return None
 
     # Create GitHub issue
     try:

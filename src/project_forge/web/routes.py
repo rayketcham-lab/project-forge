@@ -618,6 +618,7 @@ async def run_round_comparisons(round_id: str):
 @router.post("/ideas/{idea_id}/scaffold")
 async def scaffold_idea(
     idea_id: str,
+    request: Request,
     owner: str = Query(default=None),
     visibility: str = Query(default="public"),
 ):
@@ -629,6 +630,12 @@ async def scaffold_idea(
     from project_forge.config import settings
     from project_forge.scaffold.builder import build_scaffold_spec, render_scaffold
     from project_forge.scaffold.github import create_issue, create_repo, push_initial_commit
+
+    # Fix #76 — scaffold spawns a real GitHub repo + push, much more
+    # expensive than any other write path. Same rate-limit shape as
+    # /approve, /promote, /report.
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"scaffold:{client_ip}")
 
     logger = logging.getLogger(__name__)
     idea = await db.get_idea(idea_id)
@@ -1110,8 +1117,13 @@ async def ingest_idea_from_url(request_body: UrlIngestRequest):
 
 
 @router.post("/api/ideas/from-url")
-async def ingest_url(request_body: UrlIngestRequest):
+async def ingest_url(request_body: UrlIngestRequest, request: Request):
     """Generate a project idea from a URL."""
+    # Fix #76 — LLM-backed ingest endpoints were uncapped, far more expensive
+    # than the other rate-limited paths (full Claude round-trip per call).
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"ingest:{client_ip}")
+
     idea = await ingest_idea_from_url(request_body)
     _, accepted, reason = await filter_and_save(idea, db)
     if not accepted:
@@ -1127,9 +1139,13 @@ async def generate_idea_from_text(text: str, category_hint: str | None = None):
 
 
 @router.post("/api/ideas/from-text")
-async def ingest_text(request_body: TextIngestRequest):
+async def ingest_text(request_body: TextIngestRequest, request: Request):
     """Expand a free-form text fragment into a project idea via the LLM
     backend (or heuristic fallback when no backend is available)."""
+    # Fix #76 — see ingest_url above.
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"ingest:{client_ip}")
+
     idea = await generate_idea_from_text(
         text=request_body.text, category_hint=request_body.category,
     )

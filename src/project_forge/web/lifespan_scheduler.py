@@ -59,7 +59,23 @@ FEED_REFRESH_INTERVAL = _interval_from_env("FORGE_FEED_REFRESH_INTERVAL_HOURS", 
 FUNDABILITY_SCORE_INTERVAL = _interval_from_env("FORGE_FUNDABILITY_INTERVAL_HOURS", 24.0)
 AUTO_PROMOTE_INTERVAL = _interval_from_env("FORGE_AUTO_PROMOTE_INTERVAL_HOURS", 168.0)
 
-INITIAL_DELAY = timedelta(seconds=float(os.environ.get("FORGE_SCHED_INITIAL_DELAY_SEC", "60")))
+def _seconds_from_env(var: str, default_seconds: float) -> timedelta:
+    """Same warn-and-fallback pattern as `_interval_from_env`, but the
+    unit is seconds. Fix #77 — a bare `float(os.environ.get(...))`
+    raised ValueError at import time on any non-numeric value
+    (e.g. "fast", "1m"), crashing uvicorn before FastAPI could register
+    routes."""
+    raw = os.environ.get(var)
+    if raw is None:
+        return timedelta(seconds=default_seconds)
+    try:
+        return timedelta(seconds=float(raw))
+    except ValueError:
+        logger.warning("Invalid %s=%r; using default %ss", var, raw, default_seconds)
+        return timedelta(seconds=default_seconds)
+
+
+INITIAL_DELAY = _seconds_from_env("FORGE_SCHED_INITIAL_DELAY_SEC", 60.0)
 
 
 # --------------------------------------------------------------------------- #
