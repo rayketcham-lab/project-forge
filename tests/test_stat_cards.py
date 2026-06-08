@@ -38,13 +38,14 @@ class TestStatCardLinks:
 
     @pytest.mark.asyncio
     async def test_total_ideas_links_to_explore(self, client):
-        """Total Ideas card should link to /explore."""
+        """The active-ideas stat card (formerly 'Total Ideas' pre-rework) links to /explore."""
         resp = await client.get("/")
         assert resp.status_code == 200
-        # The stat card containing "Total Ideas" should be wrapped in or contain a link to /explore
         assert 'href="/explore"' in resp.text
-        # Specifically the total ideas stat should link somewhere
-        assert "Total Ideas" in resp.text
+        # The 'honest stats + density pass' dashboard rework (4d43339) renamed
+        # the card from 'Total Ideas' to 'Active Ideas' so total/archived split
+        # is explicit on the card itself.
+        assert "Active Ideas" in resp.text
 
     @pytest.mark.asyncio
     async def test_approved_links_to_explore_approved(self, client):

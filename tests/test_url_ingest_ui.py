@@ -35,9 +35,13 @@ class TestDashboardUrlIngestSection:
 
     @pytest.mark.asyncio
     async def test_dashboard_has_url_section_heading(self, client):
+        """The URL ingest pane is the default of the ingest tab strip.
+        The 'Add Idea from URL' heading was replaced by a tabbed UI
+        ('From URL' / 'Quick Text' / '5-Phase Wizard') in commit fc4ccb9
+        when the 5-phase wizard shipped — the tab label is the new heading."""
         resp = await client.get("/")
         html = resp.text
-        assert "Add Idea from URL" in html
+        assert "From URL" in html
 
     @pytest.mark.asyncio
     async def test_dashboard_has_category_select(self, client):

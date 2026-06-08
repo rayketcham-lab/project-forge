@@ -391,7 +391,10 @@ class TestMissingFromTesterReport:
         ):
             mock_settings.anthropic_api_key = "fake-key"
             mock_settings.anthropic_model = "claude-sonnet-4-20250514"
-            result = asyncio.get_event_loop().run_until_complete(run_self_improve_cycle())
+            # `asyncio.get_event_loop()` no longer auto-creates a loop in
+            # MainThread on Python 3.12 (RuntimeError). `asyncio.run` is the
+            # right entry point here — the test itself is synchronous.
+            result = asyncio.run(run_self_improve_cycle())
 
         assert result["results"][0]["status"] == "error"
         mock_close.assert_not_called()
@@ -446,7 +449,7 @@ class TestMissingFromTesterReport:
         ):
             mock_settings.anthropic_api_key = "fake-key"
             mock_settings.anthropic_model = "claude-sonnet-4-20250514"
-            result = asyncio.get_event_loop().run_until_complete(run_self_improve_cycle())
+            result = asyncio.run(run_self_improve_cycle())
 
         assert result["processed"] == 2
         assert result["results"][0]["status"] == "success"
