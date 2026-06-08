@@ -248,6 +248,57 @@ async def money_bots(
     )
 
 
+@router.post("/api/promote/{idea_id}")
+async def api_promote(idea_id: str):
+    """Manually promote a single idea — files a GitHub issue with the full
+    MVP spec, flips status to 'approved', stamps auto_promoted_at.
+
+    Replaces the v0.14 auto_promote cadence (removed because uvicorn
+    reloads re-fired it). Always human-initiated now: nothing autonomous
+    creates GitHub issues anymore.
+
+    Idempotent: re-promoting an already-promoted idea returns the existing
+    issue URL without creating a new one.
+    """
+    from project_forge.cron.auto_promote_runner import (
+        _create_promotion_issue,
+        build_issue_body,  # noqa: F401  — kept for tests / introspection
+    )
+    from datetime import UTC as _UTC
+    from datetime import datetime as _dt
+
+    idea = await db.get_idea(idea_id)
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+    if idea.auto_promoted_at is not None:
+        return {
+            "promoted": False,
+            "already_promoted": True,
+            "idea_id": idea.id,
+            "issue_url": idea.github_issue_url,
+        }
+
+    try:
+        issue_url = _create_promotion_issue(idea)
+    except Exception as exc:
+        logger.exception("manual promote: issue creation failed for %s", idea_id)
+        raise HTTPException(
+            status_code=502, detail=f"GitHub issue creation failed: {exc}",
+        ) from exc
+
+    idea.status = "approved"
+    idea.github_issue_url = issue_url
+    idea.auto_promoted_at = _dt.now(_UTC)
+    await db.save_idea(idea)
+    return {
+        "promoted": True,
+        "idea_id": idea.id,
+        "name": idea.name,
+        "issue_url": issue_url,
+        "fundability_score": idea.fundability_score,
+    }
+
+
 @router.post("/api/churn")
 async def api_churn(request: Request):
     """On-demand idea generation. Fires the LLM-first generator once

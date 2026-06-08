@@ -187,9 +187,17 @@ class Database:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._db = await aiosqlite.connect(self.db_path)
         self._db.row_factory = aiosqlite.Row
-        # Hardening: WAL mode + busy_timeout for concurrent safety
+        # Hardening: WAL mode + generous busy_timeout for concurrent safety.
+        # Bumped from 5s to 30s after the v0.14 churn endpoint started hitting
+        # "database is locked" 500s under contention with the auto_promote and
+        # fundability cadences that hold writer transactions for a few seconds
+        # while running their LLM calls. Cheap to wait; the alternative is the
+        # browser seeing 500s on a Churn click.
         await self._db.execute("PRAGMA journal_mode = WAL")
-        await self._db.execute("PRAGMA busy_timeout = 5000")
+        await self._db.execute("PRAGMA busy_timeout = 30000")
+        # synchronous=NORMAL is the standard WAL pairing — durable on commit
+        # but skips the fsync after every page write that FULL imposes.
+        await self._db.execute("PRAGMA synchronous = NORMAL")
         await self._db.executescript(SCHEMA)
         # Migration discipline: CREATE TABLE IF NOT EXISTS does NOTHING when
         # the table already exists, so adding a column to the SCHEMA literal

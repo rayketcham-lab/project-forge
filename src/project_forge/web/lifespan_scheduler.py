@@ -496,17 +496,14 @@ def default_cadences() -> list[Cadence]:
             tick_interval=FUNDABILITY_SCORE_INTERVAL.total_seconds(),
             initial_delay=initial,
         ),
-        Cadence(
-            # v0.14 — weekly money-flipper. Picks top fundability_score
-            # idea in money categories, files a GH issue, flips to
-            # 'approved'. Idempotent via auto_promoted_at stamp.
-            name="auto_promote",
-            interval=AUTO_PROMOTE_INTERVAL,
-            runner=_fire_auto_promote,
-            delay_query=None,
-            tick_interval=AUTO_PROMOTE_INTERVAL.total_seconds(),
-            initial_delay=initial,
-        ),
+        # REMOVED v0.14b — auto_promote cadence: the user explicitly
+        # rejected autonomous promotion. Every uvicorn auto-reload was
+        # restarting the supervisor and re-firing the 60s-initial-delay
+        # cadence, producing unintended promotions (issues #79 and #80
+        # on 2026-06-08). The runner code at cron.auto_promote_runner
+        # stays — `/api/promote/{idea_id}` invokes it on a human click.
+        # See ROADMAP.md: anything autonomous that touches GitHub state
+        # gets a human gate.
     ]
 
 

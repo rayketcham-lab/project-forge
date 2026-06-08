@@ -41,21 +41,23 @@
         {% if ideas %}
         <div class="moneybot-grid">
             {% for idea in ideas %}
-            <a href="/ideas/{{ idea.id }}" class="moneybot-card">
-                <div class="moneybot-card-head">
-                    <span class="fundability-badge fundability-{{ ((idea.fundability_score or 0) * 10) | int }}">
-                        {{ "%.2f"|format(idea.fundability_score or 0) }}
-                    </span>
-                    {% if idea.auto_promoted_at %}
-                        <span class="status-pill status-promoted">&#10003; promoted</span>
-                    {% else %}
-                        <span class="status-pill status-{{ idea.status }}">{{ idea.status }}</span>
-                    {% endif %}
-                </div>
-                <div class="moneybot-card-body">
-                    <div class="moneybot-name">{{ idea.name }}</div>
-                    <div class="moneybot-tagline">{{ idea.tagline }}</div>
-                </div>
+            <div class="moneybot-card" data-idea-id="{{ idea.id }}">
+                <a href="/ideas/{{ idea.id }}" class="moneybot-card-link">
+                    <div class="moneybot-card-head">
+                        <span class="fundability-badge fundability-{{ ((idea.fundability_score or 0) * 10) | int }}">
+                            {{ "%.2f"|format(idea.fundability_score or 0) }}
+                        </span>
+                        {% if idea.auto_promoted_at %}
+                            <span class="status-pill status-promoted">&#10003; promoted</span>
+                        {% else %}
+                            <span class="status-pill status-{{ idea.status }}">{{ idea.status }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="moneybot-card-body">
+                        <div class="moneybot-name">{{ idea.name }}</div>
+                        <div class="moneybot-tagline">{{ idea.tagline }}</div>
+                    </div>
+                </a>
                 <div class="moneybot-card-foot">
                     <code class="cat-tag">{{ idea.category.value }}</code>
                     {% if idea.generation_mode %}
@@ -64,10 +66,12 @@
                         <span class="mode-pill mode-template">template</span>
                     {% endif %}
                     {% if idea.github_issue_url %}
-                        <span class="moneybot-issue" data-url="{{ idea.github_issue_url }}">issue &#8599;</span>
+                        <a href="{{ idea.github_issue_url }}" target="_blank" rel="noopener" class="moneybot-issue">issue &#8599;</a>
+                    {% else %}
+                        <button class="promote-btn" data-idea-id="{{ idea.id }}" type="button" title="File a GitHub issue with the full MVP spec for this idea">Promote &#10142;</button>
                     {% endif %}
                 </div>
-            </a>
+            </div>
             {% endfor %}
         </div>
         {% else %}
@@ -142,14 +146,46 @@
         }
     });
 
-    // Open GitHub issue when the "issue ↗" badge is clicked, without
-    // hijacking the card link itself.
-    document.querySelectorAll('.moneybot-issue').forEach(function(el) {
-        el.addEventListener('click', function(ev) {
+    // === Per-card Promote → GitHub issue (human-initiated) ===
+    document.querySelectorAll('.promote-btn').forEach(function(btn) {
+        btn.addEventListener('click', async function(ev) {
             ev.preventDefault();
             ev.stopPropagation();
-            const url = el.getAttribute('data-url');
-            if (url) window.open(url, '_blank', 'noopener');
+            const ideaId = btn.getAttribute('data-idea-id');
+            if (!ideaId) return;
+            if (!confirm('File a GitHub issue with the full MVP spec for this idea?')) {
+                return;
+            }
+            btn.disabled = true;
+            const prevLabel = btn.textContent;
+            btn.textContent = 'promoting...';
+            try {
+                const headers = Object.assign(
+                    {'Content-Type': 'application/json'},
+                    (typeof getAuthHeaders === 'function' ? getAuthHeaders() : {})
+                );
+                const resp = await fetch('/api/promote/' + encodeURIComponent(ideaId), {
+                    method: 'POST',
+                    headers: headers,
+                });
+                if (!resp.ok) {
+                    throw new Error('HTTP ' + resp.status);
+                }
+                const data = await resp.json();
+                if (data.issue_url) {
+                    btn.textContent = '✓ promoted — reloading';
+                    setTimeout(function() { window.location.reload(); }, 800);
+                } else {
+                    btn.textContent = 'no issue created';
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                btn.textContent = 'failed: ' + e.message;
+                setTimeout(function() {
+                    btn.textContent = prevLabel;
+                    btn.disabled = false;
+                }, 2500);
+            }
         });
     });
 })();
