@@ -248,6 +248,66 @@ async def money_bots(
     )
 
 
+@router.post("/api/churn")
+async def api_churn(request: Request):
+    """On-demand idea generation. Fires the LLM-first generator once
+    for the given (or auto-picked) money category, runs dedup, returns
+    the new idea (or a reason if it couldn't land).
+
+    Powers the Churn Now button on /money-bots. Cheap — ~1 Haiku call
+    + ~1 fundability call (~$0.003 total)."""
+    from project_forge.engine.dedup import filter_and_save
+    from project_forge.engine.fundability import score_fundability
+    from project_forge.engine.llm_generator import (
+        GENERATION_MODES,
+        generate_idea_llm,
+        pick_least_used_mode,
+    )
+    import random as _random
+
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+
+    cat_str = (payload.get("category") or "").strip()
+    if cat_str in _MONEY_CATEGORIES:
+        category = IdeaCategory(cat_str)
+    else:
+        category = IdeaCategory(_random.choice(_MONEY_CATEGORIES))
+
+    mode = payload.get("mode") or await pick_least_used_mode(db, category)
+    if mode not in GENERATION_MODES:
+        mode = "novel"
+
+    result = await generate_idea_llm(db, category, mode=mode)
+    if result is None:
+        return {
+            "idea": None,
+            "message": "LLM backend returned no parseable idea; try again.",
+        }
+
+    result.idea.fundability_score = await score_fundability(result.idea)
+    _saved, ok, reason = await filter_and_save(result.idea, db)
+    if not ok:
+        return {
+            "idea": None,
+            "message": f"dedup rejected: {reason}",
+            "rejected_name": result.idea.name,
+        }
+    return {
+        "idea": {
+            "id": result.idea.id,
+            "name": result.idea.name,
+            "tagline": result.idea.tagline,
+            "category": result.idea.category.value,
+            "fundability_score": result.idea.fundability_score,
+            "generation_mode": result.mode,
+            "persona": result.persona,
+        },
+    }
+
+
 @router.get("/api/money-bots/top")
 async def api_money_bots_top(limit: int = Query(default=10, ge=1, le=100)):
     """JSON: top-N money-bot ideas across money categories by fundability_score."""

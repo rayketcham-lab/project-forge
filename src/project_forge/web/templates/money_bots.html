@@ -4,12 +4,19 @@
 {% block content %}
 <section class="page-header">
     <div class="container">
-        <h1>💸 Top Money-Bots</h1>
+        <h1>&#128176; Top Money-Bots</h1>
         <p class="page-subtitle">
             {{ total }} monetizable ideas across {{ categories|length }} categories,
-            sorted by fundability score. Every Monday the engine auto-promotes
-            the top idea into a GitHub issue with the full MVP spec.
+            sorted by fundability score. Every Monday the engine auto-promotes the
+            highest-scoring idea into a GitHub issue with the full MVP spec.
         </p>
+        <div class="churn-row">
+            <button id="churn-btn" class="btn btn-primary btn-churn" type="button">
+                <span class="churn-icon">&#9889;</span>
+                <span class="churn-label">Churn Now</span>
+            </button>
+            <div id="churn-status" class="churn-status"></div>
+        </div>
     </div>
 </section>
 
@@ -20,8 +27,7 @@
             <div class="filter-row">
                 <span class="filter-row-label">Category</span>
                 <div class="filter-chips">
-                    <a href="/money-bots"
-                       class="chip {% if not category_filter %}chip-active{% endif %}">All</a>
+                    <a href="/money-bots" class="chip {% if not category_filter %}chip-active{% endif %}">All</a>
                     {% for cat in categories %}
                     <a href="/money-bots?category={{ cat }}"
                        class="chip {% if category_filter == cat %}chip-active{% endif %}">
@@ -33,147 +39,119 @@
         </div>
 
         {% if ideas %}
-        <table class="money-bot-table">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Fundability</th>
-                    <th>Name</th>
-                    <th>Category</th>
-                    <th>Mode</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for idea in ideas %}
-                <tr>
-                    <td>{{ loop.index }}</td>
-                    <td>
-                        <span class="fundability-badge fundability-{{ ((idea.fundability_score or 0) * 10) | int }}">
-                            {{ "%.2f"|format(idea.fundability_score or 0) }}
-                        </span>
-                    </td>
-                    <td>
-                        <a href="/ideas/{{ idea.id }}" class="money-bot-name">{{ idea.name }}</a>
-                        <div class="money-bot-tagline">{{ idea.tagline }}</div>
-                    </td>
-                    <td><code>{{ idea.category.value }}</code></td>
-                    <td>
-                        {% if idea.generation_mode %}
-                        <span class="mode-badge mode-{{ idea.generation_mode }}">{{ idea.generation_mode }}</span>
-                        {% else %}
-                        <span class="mode-badge mode-template">template</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if idea.auto_promoted_at %}
-                        <span class="status-badge status-promoted">✓ promoted</span>
-                        {% if idea.github_issue_url %}
-                        <br><a href="{{ idea.github_issue_url }}" target="_blank" rel="noopener" class="issue-link">issue ↗</a>
-                        {% endif %}
-                        {% else %}
-                        <span class="status-badge status-{{ idea.status }}">{{ idea.status }}</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="moneybot-grid">
+            {% for idea in ideas %}
+            <a href="/ideas/{{ idea.id }}" class="moneybot-card">
+                <div class="moneybot-card-head">
+                    <span class="fundability-badge fundability-{{ ((idea.fundability_score or 0) * 10) | int }}">
+                        {{ "%.2f"|format(idea.fundability_score or 0) }}
+                    </span>
+                    {% if idea.auto_promoted_at %}
+                        <span class="status-pill status-promoted">&#10003; promoted</span>
+                    {% else %}
+                        <span class="status-pill status-{{ idea.status }}">{{ idea.status }}</span>
+                    {% endif %}
+                </div>
+                <div class="moneybot-card-body">
+                    <div class="moneybot-name">{{ idea.name }}</div>
+                    <div class="moneybot-tagline">{{ idea.tagline }}</div>
+                </div>
+                <div class="moneybot-card-foot">
+                    <code class="cat-tag">{{ idea.category.value }}</code>
+                    {% if idea.generation_mode %}
+                        <span class="mode-pill mode-{{ idea.generation_mode }}">{{ idea.generation_mode }}</span>
+                    {% else %}
+                        <span class="mode-pill mode-template">template</span>
+                    {% endif %}
+                    {% if idea.github_issue_url %}
+                        <span class="moneybot-issue" data-url="{{ idea.github_issue_url }}">issue &#8599;</span>
+                    {% endif %}
+                </div>
+            </a>
+            {% endfor %}
+        </div>
         {% else %}
         <div class="empty-state">
-            <p>No scored money-bot ideas yet. The fundability scorer runs daily.</p>
+            <p>No scored money-bot ideas yet. The fundability scorer runs daily &mdash; or hit <strong>Churn Now</strong> above.</p>
         </div>
         {% endif %}
 
     </div>
 </section>
 
-<style>
-.money-bot-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: var(--color-bg-card, #fff);
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-}
-.money-bot-table th, .money-bot-table td {
-    padding: 0.75rem 1rem;
-    text-align: left;
-    border-bottom: 1px solid var(--color-border, #eee);
-    vertical-align: top;
-}
-.money-bot-table th {
-    background: var(--color-bg-subtle, #f8f8f8);
-    font-weight: 600;
-    font-size: 0.85rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-.money-bot-name {
-    font-weight: 600;
-    text-decoration: none;
-    color: inherit;
-}
-.money-bot-name:hover {
-    text-decoration: underline;
-}
-.money-bot-tagline {
-    font-size: 0.85rem;
-    color: var(--color-text-muted, #666);
-    margin-top: 0.2rem;
-}
-.fundability-badge {
-    display: inline-block;
-    padding: 0.2rem 0.6rem;
-    border-radius: 999px;
-    font-weight: 700;
-    font-size: 0.9rem;
-    color: white;
-    background: #999;
-    min-width: 3rem;
-    text-align: center;
-}
-.fundability-badge.fundability-9, .fundability-badge.fundability-10 { background: #0a8a3f; }
-.fundability-badge.fundability-7, .fundability-badge.fundability-8 { background: #2da94f; }
-.fundability-badge.fundability-6 { background: #a8b400; }
-.fundability-badge.fundability-5 { background: #d9a400; }
-.fundability-badge.fundability-3, .fundability-badge.fundability-4 { background: #d97020; }
-.fundability-badge.fundability-0, .fundability-badge.fundability-1, .fundability-badge.fundability-2 { background: #888; }
-.mode-badge {
-    display: inline-block;
-    padding: 0.15rem 0.5rem;
-    border-radius: 4px;
-    font-size: 0.8rem;
-    background: #eef;
-    color: #336;
-}
-.mode-badge.mode-novel { background: #d4f3d4; color: #064; }
-.mode-badge.mode-inversion { background: #ffe6cc; color: #843; }
-.mode-badge.mode-bundle { background: #d4d4ff; color: #336; }
-.mode-badge.mode-microservice { background: #ffd9e0; color: #803; }
-.mode-badge.mode-adversarial { background: #ffd0d0; color: #800; }
-.mode-badge.mode-template { background: #ddd; color: #555; }
-.status-badge {
-    display: inline-block;
-    padding: 0.15rem 0.5rem;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    background: #eee;
-    color: #333;
-}
-.status-badge.status-promoted { background: #0e8a16; color: white; }
-.status-badge.status-approved { background: #006eff; color: white; }
-.status-badge.status-new { background: #f0f0f0; color: #444; }
-.issue-link {
-    font-size: 0.8rem;
-    color: #0366d6;
-    text-decoration: none;
-}
-.issue-link:hover { text-decoration: underline; }
-.stat-card.stat-yellow {
-    background: linear-gradient(135deg, #fff3a3 0%, #ffcf3c 100%);
-    color: #3a2a00;
-}
-</style>
+<script>
+(function() {
+    const btn = document.getElementById('churn-btn');
+    const status = document.getElementById('churn-status');
+    if (!btn) return;
+
+    function renderSuccess(idea) {
+        // Build the success line with DOM nodes only — LLM output is
+        // never injected via innerHTML to avoid XSS.
+        status.textContent = '';
+        const check = document.createElement('span');
+        check.textContent = '✓ ';
+        status.appendChild(check);
+        const strong = document.createElement('strong');
+        strong.textContent = idea.name;
+        status.appendChild(strong);
+        const meta = document.createElement('span');
+        const fund = (typeof idea.fundability_score === 'number'
+                      ? idea.fundability_score
+                      : 0).toFixed(2);
+        meta.textContent = ' — fund ' + fund + ' · mode ';
+        status.appendChild(meta);
+        const code = document.createElement('code');
+        code.textContent = idea.generation_mode || 'template';
+        status.appendChild(code);
+        status.className = 'churn-status churn-status-success';
+    }
+
+    btn.addEventListener('click', async function() {
+        btn.disabled = true;
+        btn.classList.add('is-loading');
+        status.textContent = 'asking the engine...';
+        status.className = 'churn-status churn-status-loading';
+        try {
+            const headers = Object.assign(
+                {'Content-Type': 'application/json'},
+                (typeof getAuthHeaders === 'function' ? getAuthHeaders() : {})
+            );
+            const resp = await fetch('/api/churn', {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({ category: '{{ category_filter or "" }}' })
+            });
+            if (!resp.ok) {
+                throw new Error('HTTP ' + resp.status);
+            }
+            const data = await resp.json();
+            if (data.idea) {
+                renderSuccess(data.idea);
+                setTimeout(function() { window.location.reload(); }, 1500);
+            } else {
+                status.textContent = data.message || 'no idea produced (backend returned empty)';
+                status.className = 'churn-status churn-status-error';
+            }
+        } catch (e) {
+            status.textContent = 'failed: ' + e.message;
+            status.className = 'churn-status churn-status-error';
+        } finally {
+            btn.disabled = false;
+            btn.classList.remove('is-loading');
+        }
+    });
+
+    // Open GitHub issue when the "issue ↗" badge is clicked, without
+    // hijacking the card link itself.
+    document.querySelectorAll('.moneybot-issue').forEach(function(el) {
+        el.addEventListener('click', function(ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            const url = el.getAttribute('data-url');
+            if (url) window.open(url, '_blank', 'noopener');
+        });
+    });
+})();
+</script>
 {% endblock %}

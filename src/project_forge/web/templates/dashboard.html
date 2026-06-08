@@ -100,6 +100,7 @@
             <button class="tab-btn active" data-tab="ideas">Ideas</button>
             <button class="tab-btn" data-tab="super-ideas">Super Ideas</button>
             <button class="tab-btn" data-tab="add-idea">Add Idea</button>
+            <button class="tab-btn" data-tab="coming-soon">More to Come</button>
         </div>
 
         <div id="tab-ideas" class="tab-panel active">
@@ -251,6 +252,56 @@
                 <div id="wizard-error" class="url-result" style="display:none"></div>
             </div>
             </div>  {# /ingest-pane-wizard #}
+        </div>
+
+        <div id="tab-coming-soon" class="tab-panel">
+            <div class="coming-soon-intro">
+                <h2>Roadmap &mdash; what's next for the engine</h2>
+                <p>v0.14 just shipped the money-flipper loop (weekly auto-promote of the
+                   top fundability_score idea to a GitHub issue). The full v0.15+ plan
+                   lives in <a href="https://github.com/rayketcham-lab/project-forge/blob/main/ROADMAP.md"
+                   target="_blank" rel="noopener"><code>ROADMAP.md</code></a> &mdash;
+                   the next three highest-leverage builds:</p>
+            </div>
+            <div class="coming-soon-grid">
+                <div class="coming-soon-card">
+                    <div class="coming-soon-tag">v0.15 &middot; M effort</div>
+                    <h3>Revenue tracking via Stripe webhook</h3>
+                    <p>Build this <em>first</em>. Every money-oriented feature
+                       &mdash; persona weighting, fundability A/B, category mix
+                       tuning &mdash; is theater without ground-truth revenue
+                       flowing back to the idea row. A
+                       <code>/api/revenue/stripe-webhook</code> endpoint plus
+                       <code>revenue_events</code> + <code>idea_outcomes</code>
+                       tables converts the engine from "guesser" to "learner".</p>
+                </div>
+                <div class="coming-soon-card">
+                    <div class="coming-soon-tag">v0.15 &middot; S effort</div>
+                    <h3>Edge-finder pre-pass</h3>
+                    <p>Cheapest defense against the "drumming the same drum"
+                       failure mode. Before each <code>expand</code> run, Haiku
+                       reads the last 30 days of category output plus current
+                       trends and emits 3&ndash;5 "fresh angles" injected as
+                       anti-tropes into the generator prompt. Big quality lift,
+                       almost zero cost.</p>
+                </div>
+                <div class="coming-soon-card">
+                    <div class="coming-soon-tag">v0.16 &middot; L effort</div>
+                    <h3>Auto-scaffold the auto-promoted idea</h3>
+                    <p>Close the loop end-to-end. Wire the existing scaffold
+                       pipeline to the auto-promote cadence: generate a starter
+                       MVP repo, smoke tests, and an opening PR. Goes after the
+                       revenue feedback and edge-finder so the quality floor and
+                       learning signal are in place before code starts shipping.</p>
+                </div>
+            </div>
+            <p class="coming-soon-footer">
+                See <a href="https://github.com/rayketcham-lab/project-forge/blob/main/ROADMAP.md"
+                       target="_blank" rel="noopener">ROADMAP.md</a> for all 20
+                proposals across the
+                <em>close-the-loop &middot; idea-quality &middot; fresh-input
+                &middot; owner-autonomy &middot; durability</em> themes.
+            </p>
         </div>
     </div>
 </section>
