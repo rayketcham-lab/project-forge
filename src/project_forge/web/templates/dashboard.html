@@ -110,7 +110,13 @@
             </div>
             <div class="card-grid">
                 {% for idea in top_ideas %}
-                <a href="/ideas/{{ idea.id }}" class="idea-card">
+                <div class="idea-card" data-idea-id="{{ idea.id }}"
+                     data-idea-name="{{ idea.name }}"
+                     data-idea-tagline="{{ idea.tagline }}"
+                     data-feasibility-score="{{ idea.feasibility_score }}"
+                     data-fundability-score="{{ idea.fundability_score or '' }}"
+                     data-generation-mode="{{ idea.generation_mode or '' }}">
+                    <button class="idea-reject-btn" type="button" title="Reject this idea">&times;</button>
                     <div class="card-badge">
                         <span class="badge badge-{{ idea.category.value }}">{{ idea.category.value }}</span>
                         <span class="score-pill">{{ "%.0f" | format(idea.feasibility_score * 100) }}%</span>
@@ -127,7 +133,7 @@
                             {% endfor %}
                         </div>
                     </div>
-                </a>
+                </div>
                 {% endfor %}
             </div>
         </div>
@@ -139,7 +145,12 @@
             </div>
             <div class="card-grid">
                 {% for idea in super_ideas if idea.status not in ('contributed', 'implemented', 'archived', 'rejected') %}
-                <a href="/ideas/{{ idea.id }}" class="idea-card">
+                <div class="idea-card" data-idea-id="{{ idea.id }}"
+                     data-idea-name="{{ idea.name }}"
+                     data-idea-tagline="{{ idea.tagline }}"
+                     data-feasibility-score="{{ idea.feasibility_score }}"
+                     data-generation-mode="{{ idea.generation_mode or '' }}">
+                    <button class="idea-reject-btn" type="button" title="Reject this idea">&times;</button>
                     <div class="card-badge">
                         <span class="badge badge-{{ idea.category.value }}">{{ idea.category.value }}</span>
                         <span class="score-pill">{{ "%.0f" | format(idea.feasibility_score * 100) }}%</span>
@@ -156,7 +167,7 @@
                             {% endfor %}
                         </div>
                     </div>
-                </a>
+                </div>
                 {% else %}
                 <p class="empty-state">No open super ideas — all have been contributed or are in progress.</p>
                 {% endfor %}

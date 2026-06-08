@@ -813,6 +813,35 @@ async def check_idea_repo(idea_id: str) -> dict:
         return {"exists": False, "repo": repo}
 
 
+@router.get("/api/ideas/{idea_id}")
+async def api_idea_detail(idea_id: str):
+    """JSON representation of one idea, plus the bits the in-window detail
+    modal needs (recent challenges, related-by-category list). Replaces
+    the page navigation to /ideas/{id} so the dashboard can stay on one
+    page — see the modal in app.js (handleIdeaCardClick)."""
+    idea = await db.get_idea(idea_id)
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+    challenges = await db.list_challenges(idea_id)
+    related = await db.list_ideas(category=idea.category, limit=5)
+    related = [r for r in related if r.id != idea.id][:4]
+    return {
+        "idea": idea.model_dump(mode="json"),
+        "challenges": [c.model_dump(mode="json") for c in challenges],
+        "related": [
+            {
+                "id": r.id,
+                "name": r.name,
+                "tagline": r.tagline,
+                "fundability_score": r.fundability_score,
+                "feasibility_score": r.feasibility_score,
+                "generation_mode": r.generation_mode,
+            }
+            for r in related
+        ],
+    }
+
+
 @router.delete("/api/ideas/{idea_id}")
 async def delete_idea(idea_id: str) -> dict:
     """Hard-delete an idea from the database.

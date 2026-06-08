@@ -1472,3 +1472,389 @@ function initWizard() {
             }
         });
     }
+
+
+
+// ========================================================================
+// === IDEA-CARD UX: hover tooltip + in-window modal + per-card reject ===
+// User ask 2026-06-08: "add a reject on all project ideas so I can quickly
+// dismiss it...hover tooltip...replace page navigation with in-window
+// popup". Vanilla JS, no third-party deps, uses the existing dashboard
+// token from getAuthHeaders().
+// ========================================================================
+(function() {
+    'use strict';
+
+    // ----- shared elements (lazy-created) -----
+    var tooltipEl = null;
+    var modalEl = null;
+    var tooltipTimer = null;
+
+    function getTooltip() {
+        if (tooltipEl) return tooltipEl;
+        tooltipEl = document.createElement('div');
+        tooltipEl.id = 'idea-tooltip';
+        tooltipEl.className = 'idea-tooltip';
+        tooltipEl.style.display = 'none';
+        document.body.appendChild(tooltipEl);
+        return tooltipEl;
+    }
+
+    function clearChildren(node) {
+        while (node.firstChild) node.removeChild(node.firstChild);
+    }
+
+    function renderTooltipBody(tooltip, idea) {
+        clearChildren(tooltip);
+        var title = document.createElement('div');
+        title.className = 'idea-tooltip-title';
+        title.textContent = idea.name || '';
+        tooltip.appendChild(title);
+
+        if (idea.tagline) {
+            var tag = document.createElement('div');
+            tag.className = 'idea-tooltip-tagline';
+            tag.textContent = idea.tagline;
+            tooltip.appendChild(tag);
+        }
+
+        var meta = document.createElement('div');
+        meta.className = 'idea-tooltip-meta';
+        var feas = (typeof idea.feasibility_score === 'number')
+            ? 'feasibility ' + idea.feasibility_score.toFixed(2) : '';
+        var fund = (typeof idea.fundability_score === 'number')
+            ? 'fundability ' + idea.fundability_score.toFixed(2) : '';
+        var mode = idea.generation_mode ? 'mode ' + idea.generation_mode : '';
+        meta.textContent = [feas, fund, mode].filter(Boolean).join(' · ');
+        if (meta.textContent) tooltip.appendChild(meta);
+
+        if (idea.description) {
+            var desc = document.createElement('div');
+            desc.className = 'idea-tooltip-desc';
+            desc.textContent = idea.description.length > 280
+                ? idea.description.slice(0, 280) + '…' : idea.description;
+            tooltip.appendChild(desc);
+        }
+
+        var hint = document.createElement('div');
+        hint.className = 'idea-tooltip-hint';
+        hint.textContent = 'Click for full detail · Reject ↳';
+        tooltip.appendChild(hint);
+    }
+
+    function positionTooltip(tooltip, target) {
+        var rect = target.getBoundingClientRect();
+        tooltip.style.display = 'block';
+        var topY = rect.bottom + 6 + window.scrollY;
+        var leftX = rect.left + window.scrollX;
+        // Flip up if the tooltip would run off the bottom.
+        if (topY + tooltip.offsetHeight > window.scrollY + window.innerHeight - 12) {
+            topY = rect.top + window.scrollY - tooltip.offsetHeight - 6;
+        }
+        // Clamp horizontally.
+        var maxLeft = window.innerWidth - tooltip.offsetWidth - 12 + window.scrollX;
+        if (leftX > maxLeft) leftX = maxLeft;
+        if (leftX < 8 + window.scrollX) leftX = 8 + window.scrollX;
+        tooltip.style.left = leftX + 'px';
+        tooltip.style.top = topY + 'px';
+    }
+
+    function hideTooltip() {
+        if (tooltipTimer) { clearTimeout(tooltipTimer); tooltipTimer = null; }
+        if (tooltipEl) tooltipEl.style.display = 'none';
+    }
+
+    // Read on-page idea data first (so hover is instant); fall back to /api fetch.
+    function ideaFromCard(card) {
+        var data = {};
+        data.id = card.dataset.ideaId;
+        data.name = card.dataset.ideaName
+            || (card.querySelector('.idea-card-title, .moneybot-name, .super-idea-name') || {}).textContent || '';
+        data.tagline = card.dataset.ideaTagline
+            || (card.querySelector('.idea-card-tagline, .moneybot-tagline') || {}).textContent || '';
+        var fund = card.dataset.fundabilityScore;
+        if (fund) data.fundability_score = parseFloat(fund);
+        var feas = card.dataset.feasibilityScore;
+        if (feas) data.feasibility_score = parseFloat(feas);
+        data.generation_mode = card.dataset.generationMode || '';
+        return data;
+    }
+
+    function showTooltipFor(card) {
+        var data = ideaFromCard(card);
+        if (\!data.id) return;
+        var tooltip = getTooltip();
+        renderTooltipBody(tooltip, data);
+        positionTooltip(tooltip, card);
+        // Lazy fetch the full description if it's missing.
+        if (\!data.description) {
+            fetch('/api/ideas/' + encodeURIComponent(data.id))
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(payload) {
+                    if (\!payload || tooltip.style.display === 'none') return;
+                    var combined = Object.assign({}, payload.idea || {}, data);
+                    if (payload.idea && payload.idea.description) {
+                        combined.description = payload.idea.description;
+                    }
+                    renderTooltipBody(tooltip, combined);
+                    positionTooltip(tooltip, card);
+                })
+                .catch(function() { /* tooltip works fine without fetch */ });
+        }
+    }
+
+    // ----- modal -----
+
+    function getModal() {
+        if (modalEl) return modalEl;
+        modalEl = document.createElement('div');
+        modalEl.id = 'idea-modal';
+        modalEl.className = 'idea-modal';
+        modalEl.style.display = 'none';
+        modalEl.innerHTML = ''; // DOM-only; we attach via createElement below.
+
+        var backdrop = document.createElement('div');
+        backdrop.className = 'idea-modal-backdrop';
+        backdrop.addEventListener('click', closeModal);
+        modalEl.appendChild(backdrop);
+
+        var panel = document.createElement('div');
+        panel.className = 'idea-modal-panel';
+        panel.setAttribute('role', 'dialog');
+        panel.setAttribute('aria-modal', 'true');
+        modalEl.appendChild(panel);
+
+        var closeBtn = document.createElement('button');
+        closeBtn.className = 'idea-modal-close';
+        closeBtn.type = 'button';
+        closeBtn.setAttribute('aria-label', 'Close');
+        closeBtn.textContent = '×';
+        closeBtn.addEventListener('click', closeModal);
+        panel.appendChild(closeBtn);
+
+        var body = document.createElement('div');
+        body.className = 'idea-modal-body';
+        panel.appendChild(body);
+
+        document.body.appendChild(modalEl);
+
+        // ESC closes.
+        document.addEventListener('keydown', function(ev) {
+            if (ev.key === 'Escape' && modalEl.style.display === 'block') closeModal();
+        });
+
+        return modalEl;
+    }
+
+    function closeModal() {
+        if (\!modalEl) return;
+        modalEl.style.display = 'none';
+        document.body.style.overflow = '';
+        var body = modalEl.querySelector('.idea-modal-body');
+        if (body) clearChildren(body);
+    }
+
+    function openModalForIdea(ideaId) {
+        hideTooltip();
+        var modal = getModal();
+        var body = modal.querySelector('.idea-modal-body');
+        clearChildren(body);
+
+        // Loading state.
+        var loading = document.createElement('div');
+        loading.className = 'idea-modal-loading';
+        loading.textContent = 'Loading…';
+        body.appendChild(loading);
+
+        modal.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+
+        fetch('/api/ideas/' + encodeURIComponent(ideaId))
+            .then(function(r) {
+                if (\!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function(payload) { renderModalBody(body, payload); })
+            .catch(function(e) {
+                clearChildren(body);
+                var err = document.createElement('p');
+                err.className = 'idea-modal-error';
+                err.textContent = 'Could not load: ' + e.message;
+                body.appendChild(err);
+            });
+    }
+
+    function renderModalBody(body, payload) {
+        clearChildren(body);
+        var idea = payload.idea || {};
+        var head = document.createElement('div');
+        head.className = 'idea-modal-head';
+
+        var name = document.createElement('h2');
+        name.textContent = idea.name || '(no name)';
+        head.appendChild(name);
+
+        var tag = document.createElement('p');
+        tag.className = 'idea-modal-tagline';
+        tag.textContent = idea.tagline || '';
+        head.appendChild(tag);
+
+        // Pills row
+        var pills = document.createElement('div');
+        pills.className = 'idea-modal-pills';
+        function pill(label, value, cls) {
+            if (value === null || typeof value === 'undefined' || value === '') return;
+            var p = document.createElement('span');
+            p.className = 'pill ' + (cls || '');
+            p.textContent = label + ' ' + value;
+            pills.appendChild(p);
+        }
+        pill('feasibility', (typeof idea.feasibility_score === 'number') ? idea.feasibility_score.toFixed(2) : null, 'pill-feasibility');
+        pill('fundability', (typeof idea.fundability_score === 'number') ? idea.fundability_score.toFixed(2) : null, 'pill-fundability');
+        if (idea.category) pill('category', idea.category, 'pill-cat');
+        if (idea.generation_mode) pill('mode', idea.generation_mode, 'pill-mode');
+        if (idea.status) pill('status', idea.status, 'pill-status pill-status-' + idea.status);
+        head.appendChild(pills);
+
+        body.appendChild(head);
+
+        // Sections
+        function section(title, content) {
+            if (\!content) return;
+            var h = document.createElement('h3');
+            h.className = 'idea-modal-section-title';
+            h.textContent = title;
+            body.appendChild(h);
+            var p = document.createElement('p');
+            p.className = 'idea-modal-section-body';
+            p.textContent = content;
+            body.appendChild(p);
+        }
+        section('Description', idea.description);
+        section('Market', idea.market_analysis);
+        section('MVP Scope', idea.mvp_scope);
+
+        if (Array.isArray(idea.tech_stack) && idea.tech_stack.length) {
+            var hT = document.createElement('h3');
+            hT.className = 'idea-modal-section-title';
+            hT.textContent = 'Tech Stack';
+            body.appendChild(hT);
+            var techRow = document.createElement('div');
+            techRow.className = 'idea-modal-tech-row';
+            idea.tech_stack.forEach(function(t) {
+                var chip = document.createElement('code');
+                chip.className = 'tech-chip';
+                chip.textContent = t;
+                techRow.appendChild(chip);
+            });
+            body.appendChild(techRow);
+        }
+
+        // Actions row
+        var actions = document.createElement('div');
+        actions.className = 'idea-modal-actions';
+        if (idea.github_issue_url) {
+            var ghLink = document.createElement('a');
+            ghLink.href = idea.github_issue_url;
+            ghLink.target = '_blank';
+            ghLink.rel = 'noopener';
+            ghLink.className = 'btn btn-outline btn-sm';
+            ghLink.textContent = 'GitHub issue ↗';
+            actions.appendChild(ghLink);
+        }
+        // Open full page (fallback for users who really want the standalone view)
+        var detailLink = document.createElement('a');
+        detailLink.href = '/ideas/' + encodeURIComponent(idea.id);
+        detailLink.className = 'btn btn-outline btn-sm';
+        detailLink.textContent = 'Full page ↗';
+        actions.appendChild(detailLink);
+
+        if (idea.status === 'new') {
+            var rejectBtn = document.createElement('button');
+            rejectBtn.type = 'button';
+            rejectBtn.className = 'btn btn-danger btn-sm';
+            rejectBtn.textContent = 'Reject';
+            rejectBtn.addEventListener('click', function() {
+                doReject(idea.id, function() {
+                    closeModal();
+                    removeCardFromDom(idea.id);
+                });
+            });
+            actions.appendChild(rejectBtn);
+        }
+        body.appendChild(actions);
+    }
+
+    // ----- reject -----
+
+    function doReject(ideaId, onDone) {
+        if (\!ideaId) return;
+        var headers = (typeof getAuthHeaders === 'function') ? getAuthHeaders() : {};
+        fetch('/ideas/' + encodeURIComponent(ideaId) + '/reject', {
+            method: 'POST', headers: headers
+        })
+            .then(function(r) {
+                if (\!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function() { if (onDone) onDone(); })
+            .catch(function(e) {
+                alert('Reject failed: ' + e.message);
+            });
+    }
+
+    function removeCardFromDom(ideaId) {
+        var sel = '[data-idea-id="' + CSS.escape(ideaId) + '"]';
+        document.querySelectorAll(sel).forEach(function(el) {
+            // Find the closest card-like container (idea-card, moneybot-card, super-idea-card).
+            var card = el.closest('.idea-card, .moneybot-card, .super-idea-card');
+            if (card && card.parentNode) card.parentNode.removeChild(card);
+            else if (el.parentNode) el.parentNode.removeChild(el);
+        });
+    }
+
+    // ----- delegated handlers -----
+
+    function findCardEl(t) {
+        return t.closest('[data-idea-id]');
+    }
+
+    document.addEventListener('mouseover', function(ev) {
+        var card = ev.target && ev.target.closest && ev.target.closest('[data-idea-id]');
+        if (\!card) return;
+        if (ev.target.closest('.idea-reject-btn, .idea-tooltip, .idea-modal')) return;
+        if (tooltipTimer) clearTimeout(tooltipTimer);
+        tooltipTimer = setTimeout(function() { showTooltipFor(card); }, 220);
+    });
+
+    document.addEventListener('mouseout', function(ev) {
+        var card = ev.target && ev.target.closest && ev.target.closest('[data-idea-id]');
+        if (\!card) return;
+        var related = ev.relatedTarget;
+        if (related && (card.contains(related) || (tooltipEl && tooltipEl.contains(related)))) return;
+        hideTooltip();
+    });
+
+    document.addEventListener('click', function(ev) {
+        // Reject button.
+        var rejectBtn = ev.target.closest && ev.target.closest('.idea-reject-btn');
+        if (rejectBtn) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            var rcard = findCardEl(rejectBtn);
+            var rid = rcard && rcard.dataset.ideaId;
+            if (rid && confirm('Reject this idea?')) {
+                doReject(rid, function() { removeCardFromDom(rid); });
+            }
+            return;
+        }
+        // Card click opens modal (but let real <a href> elements pass through if they
+        // explicitly opt in via data-modal-skip).
+        var card = ev.target && ev.target.closest && ev.target.closest('[data-idea-id]');
+        if (\!card) return;
+        if (ev.target.closest('a, button, .moneybot-issue')) return;
+        if (card.dataset.modalSkip === '1') return;
+        ev.preventDefault();
+        openModalForIdea(card.dataset.ideaId);
+    });
+})();

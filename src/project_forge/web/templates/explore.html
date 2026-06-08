@@ -62,7 +62,13 @@
         {% if ideas %}
         <div class="card-grid">
             {% for idea in ideas %}
-            <div class="idea-card" data-href="/ideas/{{ idea.id }}" data-idea-id="{{ idea.id }}" data-idea-status="{{ idea.status }}">
+            <div class="idea-card" data-idea-id="{{ idea.id }}"
+                 data-idea-name="{{ idea.name }}"
+                 data-idea-tagline="{{ idea.tagline }}"
+                 data-feasibility-score="{{ idea.feasibility_score }}"
+                 data-fundability-score="{{ idea.fundability_score or '' }}"
+                 data-generation-mode="{{ idea.generation_mode or '' }}"
+                 data-idea-status="{{ idea.status }}">
                 <div class="card-badge">
                     <span class="badge badge-{{ idea.category.value }}">{{ idea.category.value }}</span>
                     <span class="score-pill">{{ "%.0f" | format(idea.feasibility_score * 100) }}%</span>

@@ -2,6 +2,7 @@
 {% block title %}Money Bots - Project Forge{% endblock %}
 
 {% block content %}
+<div id="money-bots-root" data-category-filter="{{ category_filter or '' }}"></div>
 <section class="page-header">
     <div class="container">
         <h1>&#128176; Top Money-Bots</h1>
@@ -41,8 +42,14 @@
         {% if ideas %}
         <div class="moneybot-grid">
             {% for idea in ideas %}
-            <div class="moneybot-card" data-idea-id="{{ idea.id }}">
-                <a href="/ideas/{{ idea.id }}" class="moneybot-card-link">
+            <div class="moneybot-card" data-idea-id="{{ idea.id }}"
+                 data-idea-name="{{ idea.name }}"
+                 data-idea-tagline="{{ idea.tagline }}"
+                 data-fundability-score="{{ idea.fundability_score or '' }}"
+                 data-feasibility-score="{{ idea.feasibility_score }}"
+                 data-generation-mode="{{ idea.generation_mode or '' }}">
+                <button class="idea-reject-btn" type="button" title="Reject this idea">&times;</button>
+                <div class="moneybot-card-body-wrap">
                     <div class="moneybot-card-head">
                         <span class="fundability-badge fundability-{{ ((idea.fundability_score or 0) * 10) | int }}">
                             {{ "%.2f"|format(idea.fundability_score or 0) }}
@@ -57,7 +64,7 @@
                         <div class="moneybot-name">{{ idea.name }}</div>
                         <div class="moneybot-tagline">{{ idea.tagline }}</div>
                     </div>
-                </a>
+                </div>
                 <div class="moneybot-card-foot">
                     <code class="cat-tag">{{ idea.category.value }}</code>
                     {% if idea.generation_mode %}
@@ -83,111 +90,5 @@
     </div>
 </section>
 
-<script>
-(function() {
-    const btn = document.getElementById('churn-btn');
-    const status = document.getElementById('churn-status');
-    if (!btn) return;
-
-    function renderSuccess(idea) {
-        // Build the success line with DOM nodes only — LLM output is
-        // never injected via innerHTML to avoid XSS.
-        status.textContent = '';
-        const check = document.createElement('span');
-        check.textContent = '✓ ';
-        status.appendChild(check);
-        const strong = document.createElement('strong');
-        strong.textContent = idea.name;
-        status.appendChild(strong);
-        const meta = document.createElement('span');
-        const fund = (typeof idea.fundability_score === 'number'
-                      ? idea.fundability_score
-                      : 0).toFixed(2);
-        meta.textContent = ' — fund ' + fund + ' · mode ';
-        status.appendChild(meta);
-        const code = document.createElement('code');
-        code.textContent = idea.generation_mode || 'template';
-        status.appendChild(code);
-        status.className = 'churn-status churn-status-success';
-    }
-
-    btn.addEventListener('click', async function() {
-        btn.disabled = true;
-        btn.classList.add('is-loading');
-        status.textContent = 'asking the engine...';
-        status.className = 'churn-status churn-status-loading';
-        try {
-            const headers = Object.assign(
-                {'Content-Type': 'application/json'},
-                (typeof getAuthHeaders === 'function' ? getAuthHeaders() : {})
-            );
-            const resp = await fetch('/api/churn', {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify({ category: '{{ category_filter or "" }}' })
-            });
-            if (!resp.ok) {
-                throw new Error('HTTP ' + resp.status);
-            }
-            const data = await resp.json();
-            if (data.idea) {
-                renderSuccess(data.idea);
-                setTimeout(function() { window.location.reload(); }, 1500);
-            } else {
-                status.textContent = data.message || 'no idea produced (backend returned empty)';
-                status.className = 'churn-status churn-status-error';
-            }
-        } catch (e) {
-            status.textContent = 'failed: ' + e.message;
-            status.className = 'churn-status churn-status-error';
-        } finally {
-            btn.disabled = false;
-            btn.classList.remove('is-loading');
-        }
-    });
-
-    // === Per-card Promote → GitHub issue (human-initiated) ===
-    document.querySelectorAll('.promote-btn').forEach(function(btn) {
-        btn.addEventListener('click', async function(ev) {
-            ev.preventDefault();
-            ev.stopPropagation();
-            const ideaId = btn.getAttribute('data-idea-id');
-            if (!ideaId) return;
-            if (!confirm('File a GitHub issue with the full MVP spec for this idea?')) {
-                return;
-            }
-            btn.disabled = true;
-            const prevLabel = btn.textContent;
-            btn.textContent = 'promoting...';
-            try {
-                const headers = Object.assign(
-                    {'Content-Type': 'application/json'},
-                    (typeof getAuthHeaders === 'function' ? getAuthHeaders() : {})
-                );
-                const resp = await fetch('/api/promote/' + encodeURIComponent(ideaId), {
-                    method: 'POST',
-                    headers: headers,
-                });
-                if (!resp.ok) {
-                    throw new Error('HTTP ' + resp.status);
-                }
-                const data = await resp.json();
-                if (data.issue_url) {
-                    btn.textContent = '✓ promoted — reloading';
-                    setTimeout(function() { window.location.reload(); }, 800);
-                } else {
-                    btn.textContent = 'no issue created';
-                    btn.disabled = false;
-                }
-            } catch (e) {
-                btn.textContent = 'failed: ' + e.message;
-                setTimeout(function() {
-                    btn.textContent = prevLabel;
-                    btn.disabled = false;
-                }, 2500);
-            }
-        });
-    });
-})();
-</script>
+<script src="/static/money_bots.js?v=1"></script>
 {% endblock %}
