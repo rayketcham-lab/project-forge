@@ -57,14 +57,20 @@ async def test_cards_have_check_repo_button(client):
 
 
 @pytest.mark.asyncio
-async def test_card_is_div_with_data_href(client):
-    """Cards must use div+data-href, not <a> wrapper, so action buttons are valid HTML."""
+async def test_card_is_div_not_anchor_wrapper(client):
+    """Cards must use a `<div class="idea-card" data-idea-id>` so action
+    buttons render as valid HTML AND the v0.14c in-window modal handler
+    can intercept the click (an <a href> wrapper would force a page
+    navigation before the modal opened). The `data-href` attribute was
+    removed in v0.14c — the modal opens via the data-idea-id document-
+    level click delegate now."""
     idea = _make_idea(name="Div Card Idea")
     await db.save_idea(idea)
     resp = await client.get("/explore")
     assert resp.status_code == 200
-    assert 'data-href="/ideas/' in resp.text
-    # Must not have old pattern <a href="..." class="idea-card">
+    # The card uses div+data-idea-id (the modal entry point).
+    assert 'data-idea-id=' in resp.text
+    # And NOT the old anchor wrapper, which would hijack the click.
     assert '<a href="/ideas/' not in resp.text
 
 

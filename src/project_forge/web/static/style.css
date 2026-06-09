@@ -64,30 +64,75 @@ a:hover { color: var(--accent); }
     white-space: nowrap;
 }
 .brand-icon { font-size: 1.3rem; }
-.nav-links { display: flex; gap: 0.25rem; }
+.nav-links {
+    display: flex;
+    gap: 0.15rem;
+    align-items: center;
+    height: 100%;
+}
+/* Every nav item shares the same base. Accent items override ONLY the
+   subtle theme dot (::before) and the active underline color (::after).
+   No loud gradients, no clashing yellow/purple bg fills — the original
+   nav looked like ass per the v0.15 nav-rework. */
 .nav-link {
-    padding: 0.5rem 0.9rem;
-    border-radius: var(--radius-sm);
+    position: relative;
+    padding: 0 0.85rem;
+    height: 60px;
+    display: inline-flex;
+    align-items: center;
     color: var(--text-dim) !important;
-    font-size: 0.9rem;
+    font-size: 0.88rem;
     font-weight: 500;
-    transition: all 0.15s;
+    transition: color 0.12s, background 0.12s;
+    text-decoration: none !important;
+    white-space: nowrap;
 }
-.nav-link:hover { color: var(--text) !important; background: var(--surface); }
-.nav-link.active { color: var(--accent-light) !important; background: rgba(99,102,241,0.1); }
-.nav-link-money {
-    color: #d9a400 !important;
-    font-weight: 600;
+.nav-link:hover {
+    color: var(--text) !important;
+    background: var(--surface);
 }
-.nav-link-money:hover {
-    color: #ffcf3c !important;
-    background: rgba(255, 207, 60, 0.08);
+.nav-link.active {
+    color: var(--text) !important;
 }
-.nav-link-money.active {
-    color: #1a1a1a !important;
-    background: linear-gradient(135deg, #fff3a3 0%, #ffcf3c 100%);
+.nav-link.active::after {
+    content: '';
+    position: absolute;
+    left: 0.85rem;
+    right: 0.85rem;
+    bottom: 0;
+    height: 2px;
+    background: var(--accent-light);
+    border-radius: 2px 2px 0 0;
 }
-.nav-link-muted { opacity: 0.6; font-size: 0.85rem; }
+
+/* Accent variants: a small colored dot before the label, plus a matching
+   underline color when active. Inactive state is essentially identical to
+   plain nav links — the dot is the only visual difference. */
+.nav-link-money,
+.nav-link-frontier {
+    padding-left: 1.45rem;
+}
+.nav-link-money::before,
+.nav-link-frontier::before {
+    content: '';
+    position: absolute;
+    left: 0.85rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+.nav-link-money::before {
+    background: #f7c64a;
+    box-shadow: 0 0 6px rgba(247, 198, 74, 0.35);
+}
+.nav-link-frontier::before {
+    background: var(--purple);
+    box-shadow: 0 0 6px rgba(167, 139, 250, 0.35);
+}
+.nav-link-money.active::after { background: #f7c64a; }
+.nav-link-frontier.active::after { background: var(--purple); }
 .nav-search { margin-left: auto; }
 .search-input {
     background: var(--surface);
@@ -1465,24 +1510,16 @@ body.picker-mode, body.picker-mode * { cursor: crosshair !important; }
     color: #fff;
 }
 
-/* === CLAUDE LAB ACCENT (frontier purple) === */
-.nav-link-frontier {
-    color: var(--purple) \!important;
-    font-weight: 600;
-}
-.nav-link-frontier:hover {
-    color: #c4b5fd \!important;
-    background: rgba(167, 139, 250, 0.08);
-}
-.nav-link-frontier.active {
-    color: #fff \!important;
-    background: linear-gradient(135deg, var(--purple) 0%, var(--accent) 100%);
-}
+/* The earlier "nav-link-frontier" rules + their loud gradient backgrounds
+   were superseded by the dot+underline pattern at the top of this file
+   (search for ".nav-link-money, .nav-link-frontier"). Only the Churn-Now
+   button accent for the Claude Lab page lives here now. */
 .btn-churn-frontier {
-    background: linear-gradient(135deg, var(--purple) 0%, var(--accent) 100%);
-    border-color: rgba(167, 139, 250, 0.4);
-    color: #fff \!important;
+    background: var(--surface);
+    border: 1px solid var(--purple);
+    color: var(--purple) !important;
 }
 .btn-churn-frontier:hover:not([disabled]) {
-    box-shadow: 0 4px 14px rgba(167, 139, 250, 0.28);
+    background: rgba(167, 139, 250, 0.12);
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.18);
 }

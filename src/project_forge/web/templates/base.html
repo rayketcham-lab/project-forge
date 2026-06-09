@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Project Forge{% endblock %}</title>
     <meta name="forge-token" content="{{ dashboard_token }}">
-    <link rel="stylesheet" href="/static/style.css?v=15">
+    <link rel="stylesheet" href="/static/style.css?v=16">
 </head>
 <body>
     <nav class="navbar">
@@ -13,30 +13,18 @@
             <a href="/" class="nav-brand">
                 <span class="brand-icon">&#9881;</span> Project Forge
             </a>
-            {# Active-state logic: query-string aware so /explore?status=approved
-               lights up "Approved" instead of generic "Explore". Each tab owns
-               its own match condition; "Explore" only lights on a plain /explore.
-            #}
-            {% set q = request.url.query or '' %}
-            {% set is_explore = request.url.path == '/explore' %}
-            {% set is_ideas_path = request.url.path == '/ideas' %}
-            {% set on_money_bots = request.url.path == '/money-bots' %}
-            {% set on_claude_lab = request.url.path == '/claude-lab' %}
-            {% set on_approved = is_explore and 'status=approved' in q %}
-            {% set on_contributed = is_explore and 'status=contributed' in q %}
-            {% set on_challenged = is_explore and 'challenged=1' in q %}
-            {% set on_filtered_explore = on_approved or on_contributed or on_challenged %}
-            {% set on_plain_explore = (is_explore and not on_filtered_explore) or is_ideas_path %}
+            {# Six clean nav items. Approved/Challenged filter chips moved
+               to the Explore page itself (cleaner separation: nav is
+               "page categories", chips are "page filters"). API moved
+               to the footer — nobody navigates to docs via the nav. #}
+            {% set is_explore = request.url.path == '/explore' or request.url.path == '/ideas' %}
             <div class="nav-links">
                 <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">Dashboard</a>
-                <a href="/explore" class="nav-link {% if on_plain_explore %}active{% endif %}">Explore</a>
-                <a href="/money-bots" class="nav-link nav-link-money {% if on_money_bots %}active{% endif %}">&#128176; Money Bots</a>
-                <a href="/claude-lab" class="nav-link nav-link-frontier {% if on_claude_lab %}active{% endif %}">&#129504; Claude Lab</a>
-                <a href="/explore?status=approved" class="nav-link {% if on_approved %}active{% endif %}">&#10003; Approved</a>
-                <a href="/explore?challenged=1" class="nav-link {% if on_challenged %}active{% endif %}">&#9876; Challenged</a>
+                <a href="/explore" class="nav-link {% if is_explore %}active{% endif %}">Explore</a>
+                <a href="/money-bots" class="nav-link nav-link-money {% if request.url.path == '/money-bots' %}active{% endif %}">Money Bots</a>
+                <a href="/claude-lab" class="nav-link nav-link-frontier {% if request.url.path == '/claude-lab' %}active{% endif %}">Claude Lab</a>
                 <a href="/projects" class="nav-link {% if request.url.path == '/projects' %}active{% endif %}">Projects</a>
                 <a href="/thinktank" class="nav-link {% if request.url.path == '/thinktank' %}active{% endif %}">Think Tank</a>
-                <a href="/docs" class="nav-link nav-link-muted">API</a>
             </div>
             <div class="nav-search">
                 <form action="/explore" method="get">
@@ -56,7 +44,7 @@
     </main>
     <footer class="footer">
         <div class="container">
-            <p>Project Forge v0.2.0 &mdash; Autonomous IT Think-Tank Engine</p>
+            <p>Project Forge v0.15 &mdash; autonomous, human-driven idea engine</p>
             <p class="footer-links">
                 <a href="https://github.com/rayketcham/project-forge" target="_blank">GitHub</a>
                 <span>&middot;</span>
