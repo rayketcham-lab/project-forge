@@ -59,6 +59,101 @@ logger = logging.getLogger(__name__)
 GENERATION_MODES = ["novel", "inversion", "bundle", "microservice", "adversarial"]
 
 
+# ARTIFACT TYPES — orthogonal to MODE. Mode is the *thinking lens*
+# (novel/inversion/bundle/…); artifact type is the *shape* of the
+# output. Default behaviour: a project-pitch. For Claude Lab categories
+# we rotate through 8 specific artifact shapes so Churn doesn't just
+# produce 50 variants of the same "project pitch" — it produces ideas
+# for skills, sub-agents, MCP servers, hooks, slash commands, workflows,
+# protocols, and raw capability extensions.
+ARTIFACT_TYPES = [
+    "skill",          # .claude/skills/ entry — single-purpose, focused
+    "sub-agent",      # .claude/agents/ entry — specialized agent w/ role
+    "mcp-server",     # MCP protocol server exposing N tools
+    "hook",           # Claude Code lifecycle hook (PreToolUse, etc.)
+    "slash-command",  # /command in a project for a repeated workflow
+    "workflow",       # composition of 2-4 sub-agents fanned for a task
+    "protocol",       # standard/spec proposal for inter-agent comms
+    "ability",        # raw capability extension — what the agent can NOW do
+]
+
+# Categories that get artifact-type variety. Everything else stays on
+# the default project-pitch shape (artifact_type = None).
+_ARTIFACT_ROTATION_CATEGORIES = {
+    IdeaCategory.CLAUDE_SKILLS_AGENTS,
+    IdeaCategory.AI_MARKETPLACE,
+}
+
+
+_ARTIFACT_PROMPTS: dict[str, str] = {
+    "skill": (
+        "Pitch this as a Claude Code SKILL (a `.claude/skills/{name}/` entry). "
+        "Skills are single-purpose, focused capabilities the model invokes when "
+        "the user's request matches. The pitch should specify: the trigger "
+        "phrase / pattern, the deterministic instructions in SKILL.md (~50-200 "
+        "lines), what files/tools the skill needs, and what the success signal "
+        "looks like. Resist scope creep — one skill, one job."
+    ),
+    "sub-agent": (
+        "Pitch this as a Claude SUB-AGENT (a `.claude/agents/{name}.md` entry "
+        "spawnable via the Agent tool). Sub-agents are specialised personas "
+        "with constrained tool access and a clear domain. The pitch should "
+        "specify: the role + persona, when the parent agent should fan it out, "
+        "which tools it gets (read-only? bash? edit?), and what artefact it "
+        "returns to the parent. Aim for fanned-out parallelism, not sequential "
+        "delegation."
+    ),
+    "mcp-server": (
+        "Pitch this as an MCP (Model Context Protocol) SERVER. MCP servers "
+        "expose a set of typed tools the agent can call. The pitch should "
+        "specify: the 3-6 tools exposed (name + JSON schema for inputs / "
+        "outputs), the transport (stdio / SSE), auth model, and what makes "
+        "this server worth spinning up vs. shelling out. Concrete schemas, "
+        "not vibes."
+    ),
+    "hook": (
+        "Pitch this as a Claude Code HOOK (PreToolUse, PostToolUse, "
+        "UserPromptSubmit, PreCompact, Stop, SessionStart, etc.). Hooks fire "
+        "deterministically at lifecycle points. The pitch should specify: "
+        "which hook event fires it, what the hook script does in 5-30 lines, "
+        "what it blocks or allows, and the failure mode if it errors. Hooks "
+        "are guardrails or augmentations — name which."
+    ),
+    "slash-command": (
+        "Pitch this as a Claude Code SLASH COMMAND (a `.claude/commands/{name}.md` "
+        "entry). Slash commands are user-invokable workflows for a repeated "
+        "task in a specific project. The pitch should specify: the command "
+        "name (`/foo`), the arguments it takes, what tools / sub-agents it "
+        "drives, and the final output the user sees. Compare to existing "
+        "commands so the niche is clear."
+    ),
+    "workflow": (
+        "Pitch this as an AGENT WORKFLOW — a composition of 2-4 sub-agents "
+        "or skills fanned out (parallel) or chained (sequential) for a "
+        "multi-step task. The pitch should specify: the entry trigger, the "
+        "agent graph (which agents run when, what data flows between them), "
+        "the supervisor's role, and the verifiable output. Diagram the graph "
+        "in text. Workflows must be reproducible, not stochastic."
+    ),
+    "protocol": (
+        "Pitch this as a PROTOCOL / SPEC PROPOSAL for the agent ecosystem. "
+        "Protocols are how agents, marketplaces, or tools talk to each other "
+        "at scale. The pitch should specify: the problem the protocol solves, "
+        "the message shape (JSON / wire format), versioning + extensibility "
+        "rules, and reference implementations needed for adoption. Be explicit "
+        "about who has to adopt it for it to work."
+    ),
+    "ability": (
+        "Pitch this as a raw ABILITY EXTENSION — what the agent can NOW do "
+        "that it couldn't before. Not a project, not a tool — a capability "
+        "primitive. The pitch should specify: the gap in current capability, "
+        "the minimum primitive (one function? one model? one dataset?) that "
+        "closes the gap, what becomes possible downstream once this primitive "
+        "exists, and the cheapest experiment that proves the primitive works."
+    ),
+}
+
+
 _MODE_PROMPTS: dict[str, str] = {
     "novel": (
         "Pitch a fresh project idea that solves a SPECIFIC problem this "
@@ -186,6 +281,10 @@ class LLMGenerationResult:
     persona: str
     backend: str
     raw_response: str
+    # v0.15a — which artifact shape this draw produced. None for the
+    # default project-pitch shape, one of ARTIFACT_TYPES for the
+    # Claude Lab categories.
+    artifact_type: str | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -208,6 +307,24 @@ async def pick_least_used_mode(db: Database, category: IdeaCategory) -> str:
     rows = await cur.fetchall()
     counts = {r["generation_mode"]: int(r["c"]) for r in rows}
     return min(GENERATION_MODES, key=lambda m: (counts.get(m, 0), GENERATION_MODES.index(m)))
+
+
+async def pick_least_used_artifact(db: Database, category: IdeaCategory) -> str:
+    """Pick the ARTIFACT_TYPES entry with the fewest active ideas in this
+    category. Same rotation discipline as pick_least_used_mode — over time
+    every artifact shape gets equal airtime.
+    """
+    cur = await db.db.execute(
+        "SELECT artifact_type, COUNT(*) c FROM ideas "
+        "WHERE category = ? "
+        "AND status NOT IN ('archived', 'rejected') "
+        "AND artifact_type IS NOT NULL "
+        "GROUP BY artifact_type",
+        (category.value,),
+    )
+    rows = await cur.fetchall()
+    counts = {r["artifact_type"]: int(r["c"]) for r in rows}
+    return min(ARTIFACT_TYPES, key=lambda a: (counts.get(a, 0), ARTIFACT_TYPES.index(a)))
 
 
 # --------------------------------------------------------------------------- #
@@ -279,12 +396,30 @@ def _build_prompt(
     mode: str,
     persona: str,
     avoid_list: list[str],
+    artifact_type: str | None = None,
 ) -> str:
     avoid_block = "\n".join(avoid_list) if avoid_list else "(none yet)"
+
+    # Two prompt frames: the project-pitch (default — every category before
+    # v0.15a used this) and the artifact-shape pitch (Claude Lab categories).
+    if artifact_type is None:
+        artifact_block = ""
+        headline = f"You are pitching a project idea in the {category.value} category."
+    else:
+        artifact_block = (
+            f"## Artifact type: {artifact_type}\n{_ARTIFACT_PROMPTS[artifact_type]}\n\n"
+        )
+        headline = (
+            f"You are pitching a {artifact_type.upper()} for the "
+            f"{category.value} category — not a generic project, this "
+            f"specific artifact shape."
+        )
+
     return (
-        f"You are pitching a project idea in the {category.value} category.\n\n"
+        f"{headline}\n\n"
         f"## Persona\n{persona}\n\n"
         f"## Generation mode: {mode}\n{_MODE_PROMPTS[mode]}\n\n"
+        f"{artifact_block}"
         f"## Do NOT produce anything resembling these recent ideas\n"
         f"(no renames, no verb-tense variants, no 'X for {{vertical}}' clones):\n"
         f"{avoid_block}\n\n"
@@ -313,7 +448,10 @@ def _parse_idea_payload(raw: str) -> dict[str, Any] | None:
 
 
 def _build_idea_from_payload(
-    payload: dict[str, Any], category: IdeaCategory, mode: str,
+    payload: dict[str, Any],
+    category: IdeaCategory,
+    mode: str,
+    artifact_type: str | None = None,
 ) -> Idea | None:
     try:
         score = float(payload.get("feasibility_score", 0.7))
@@ -334,6 +472,7 @@ def _build_idea_from_payload(
             mvp_scope=payload["mvp_scope"].strip(),
             tech_stack=[str(t)[:40] for t in tech][:8],
             generation_mode=mode,
+            artifact_type=artifact_type,
         )
     except Exception:  # pydantic validation errors etc.
         logger.exception("llm_generator: failed to build Idea from payload")
@@ -350,18 +489,33 @@ async def generate_idea_llm(
     category: IdeaCategory,
     *,
     mode: str | None = None,
+    artifact_type: str | None = None,
     backend: LLMBackend | None = None,
 ) -> LLMGenerationResult | None:
     """One LLM-first generation. Returns None when no backend reaches or the
-    response fails parsing — caller falls back to the template path."""
+    response fails parsing — caller falls back to the template path.
+
+    `artifact_type` is None for the default project-pitch shape. For the
+    Claude Lab categories (CLAUDE_SKILLS_AGENTS, AI_MARKETPLACE) we rotate
+    through 8 artifact shapes (skill / sub-agent / mcp-server / hook /
+    slash-command / workflow / protocol / ability) — pick happens here if
+    the caller doesn't specify.
+    """
     backend = backend if backend is not None else resolve_cheap_backend()
     if backend is None:
         return None
 
     mode = mode if mode in GENERATION_MODES else await pick_least_used_mode(db, category)
+
+    # Artifact rotation: only Claude Lab categories cycle through types.
+    if artifact_type is not None and artifact_type not in ARTIFACT_TYPES:
+        artifact_type = None
+    if artifact_type is None and category in _ARTIFACT_ROTATION_CATEGORIES:
+        artifact_type = await pick_least_used_artifact(db, category)
+
     persona = _pick_persona(category)
     avoid = await _recent_idea_lines(db, category)
-    prompt = _build_prompt(category, mode, persona, avoid)
+    prompt = _build_prompt(category, mode, persona, avoid, artifact_type=artifact_type)
 
     raw = backend.call(prompt) or ""
     if not raw.strip():
@@ -373,7 +527,7 @@ async def generate_idea_llm(
         logger.info("llm_generator: payload parse failed (mode=%s)", mode)
         return None
 
-    idea = _build_idea_from_payload(payload, category, mode)
+    idea = _build_idea_from_payload(payload, category, mode, artifact_type=artifact_type)
     if idea is None:
         return None
 
@@ -383,4 +537,5 @@ async def generate_idea_llm(
         persona=persona,
         backend=backend.name,
         raw_response=raw,
+        artifact_type=artifact_type,
     )

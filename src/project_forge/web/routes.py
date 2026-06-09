@@ -500,6 +500,7 @@ async def api_churn(request: Request):
             "fundability_score": result.idea.fundability_score,
             "ambition_score": result.idea.ambition_score,
             "generation_mode": result.mode,
+            "artifact_type": result.artifact_type,
             "persona": result.persona,
         },
     }

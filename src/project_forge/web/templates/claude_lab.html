@@ -67,6 +67,9 @@
                 </div>
                 <div class="moneybot-card-foot">
                     <code class="cat-tag">{{ idea.category.value }}</code>
+                    {% if idea.artifact_type %}
+                        <span class="artifact-pill artifact-{{ idea.artifact_type }}">{{ idea.artifact_type }}</span>
+                    {% endif %}
                     {% if idea.generation_mode %}
                         <span class="mode-pill mode-{{ idea.generation_mode }}">{{ idea.generation_mode }}</span>
                     {% else %}

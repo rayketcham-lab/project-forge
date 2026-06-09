@@ -249,6 +249,10 @@ class Database:
             # for the Claude-ecosystem categories. 0.0 = derivative,
             # 1.0 = paradigm-shift potential. Sorted DESC on /claude-lab.
             "ALTER TABLE ideas ADD COLUMN ambition_score REAL",
+            # v0.15a — which SHAPE of artifact this idea pitches. Only the
+            # Claude Lab categories rotate through 8 types; everything else
+            # stays NULL (= default project-pitch shape).
+            "ALTER TABLE ideas ADD COLUMN artifact_type TEXT",
         ):
             try:
                 await self._db.execute(stmt)
@@ -317,8 +321,9 @@ class Database:
                 (id, name, tagline, description, category, market_analysis,
                  feasibility_score, mvp_scope, tech_stack, generated_at, status,
                  github_issue_url, project_repo_url, content_hash, source_url,
-                 generation_mode, fundability_score, auto_promoted_at, ambition_score)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 generation_mode, fundability_score, auto_promoted_at, ambition_score,
+                artifact_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     idea.id,
                     idea.name,
@@ -339,6 +344,7 @@ class Database:
                     getattr(idea, "fundability_score", None),
                     auto_ts.isoformat() if auto_ts is not None else None,
                     getattr(idea, "ambition_score", None),
+                    getattr(idea, "artifact_type", None),
                 ),
             )
             await self.db.commit()
@@ -1405,6 +1411,9 @@ class Database:
             ),
             ambition_score=(
                 row["ambition_score"] if "ambition_score" in keys else None
+            ),
+            artifact_type=(
+                row["artifact_type"] if "artifact_type" in keys else None
             ),
         )
 

@@ -1523,3 +1523,26 @@ body.picker-mode, body.picker-mode * { cursor: crosshair !important; }
     background: rgba(167, 139, 250, 0.12);
     box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.18);
 }
+
+/* === ARTIFACT TYPE PILLS (Claude Lab v0.15a) === */
+/* Each artifact type gets a distinct color so the grid reads as
+   "what shape is this" at a glance. Reuses .mode-pill base styling
+   from earlier in this file. */
+.artifact-pill {
+    display: inline-block;
+    padding: 0.13rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    background: var(--bg-alt);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+}
+.artifact-pill.artifact-skill         { color: var(--green); border-color: rgba(34,197,94,0.3); }
+.artifact-pill.artifact-sub-agent     { color: var(--accent-light); border-color: rgba(129,140,248,0.3); }
+.artifact-pill.artifact-mcp-server    { color: var(--cyan); border-color: rgba(6,182,212,0.35); }
+.artifact-pill.artifact-hook          { color: var(--orange); border-color: rgba(245,158,11,0.3); }
+.artifact-pill.artifact-slash-command { color: var(--pink); border-color: rgba(236,72,153,0.3); }
+.artifact-pill.artifact-workflow      { color: var(--purple); border-color: rgba(167,139,250,0.35); }
+.artifact-pill.artifact-protocol      { color: #fbbf24; border-color: rgba(251,191,36,0.3); }
+.artifact-pill.artifact-ability       { color: var(--red); border-color: rgba(239,68,68,0.35); }

@@ -74,6 +74,13 @@ class Idea(BaseModel):
     # asks "does it push Claude's capability ceiling". Used to sort the
     # /claude-lab page.
     ambition_score: float | None = None
+    # v0.15a — which SHAPE of artifact this idea pitches: skill /
+    # sub-agent / mcp-server / hook / slash-command / workflow /
+    # protocol / ability. None = the default project-pitch shape
+    # (everything pre-v0.15a). Only Claude Lab categories rotate
+    # through these; money-bot and IT/security categories keep the
+    # project-pitch shape.
+    artifact_type: str | None = None
 
 
 class Resource(BaseModel):

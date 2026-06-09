@@ -212,17 +212,35 @@ def resolve_backend(
 
 
 def resolve_cheap_backend() -> LLMBackend | None:
-    """Backend for high-volume, cheap, batchy work (dedup verification,
-    cluster naming). Prefers Haiku 4.5 — ~$0.001 per call at typical
-    prompt sizes, fast enough to slot into hot paths.
+    """Backend for high-volume, batchy work (dedup verification, cluster
+    naming, tie-break scoring).
 
-    Falls through to `resolve_backend()` (i.e. whatever the default
-    reasoning model is) when Haiku-via-API isn't available, so callers
-    don't need to deal with None twice.
+    Model selection differs by path because the cost model differs:
+
+      - API path (FORGE_HAIKU_API_KEY or ANTHROPIC_API_KEY set):
+        prefer Haiku 4.5. ~$0.001/call, fast. The cost discipline
+        matters because every API call shows up on a bill.
+
+      - Claude Code CLI path (no API key, running on the user's Pro
+        Max subscription): the 'cheap' name is misleading — there is
+        no per-call cost — so we use the strongest available model.
+        Default `FORGE_CLI_MODEL` is `opus`; override via env.
+
+    Falls through to `resolve_backend()` if nothing usable resolves.
     """
-    haiku = resolve_backend(model_override="haiku")
-    if haiku is not None:
-        return haiku
+    # API path: Haiku is the right call because cost is real per token.
+    haiku_via_api = resolve_backend(model_override="haiku")
+    if haiku_via_api is not None and isinstance(haiku_via_api, AnthropicAPIBackend):
+        return haiku_via_api
+
+    # CLI path: no per-call cost on Pro Max. Use the most capable model
+    # the user has access to. Default Opus; FORGE_CLI_MODEL overrides
+    # ("sonnet" / "haiku" / etc.) for users who want a different tradeoff.
+    forced = os.environ.get("FORGE_LLM_BACKEND", "")
+    if forced != "api" and _has_claude_cli():
+        cli_model = os.environ.get("FORGE_CLI_MODEL", "opus")
+        return ClaudeCodeBackend(model=cli_model)
+
     return resolve_backend()
 
 

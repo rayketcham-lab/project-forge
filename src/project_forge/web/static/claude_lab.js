@@ -21,11 +21,23 @@
         var ambition = (typeof idea.ambition_score === 'number') ? idea.ambition_score : null;
         var meta = document.createElement('span');
         var ambitionText = (ambition === null) ? '' : (' — ambition ' + ambition.toFixed(2));
-        meta.textContent = ambitionText + ' · mode ';
+        meta.textContent = ambitionText;
         statusEl.appendChild(meta);
-        var code = document.createElement('code');
-        code.textContent = idea.generation_mode || 'template';
-        statusEl.appendChild(code);
+        // Artifact type badge — what shape did Churn produce
+        if (idea.artifact_type) {
+            var sep1 = document.createElement('span');
+            sep1.textContent = ' · ';
+            statusEl.appendChild(sep1);
+            var artifact = document.createElement('code');
+            artifact.textContent = idea.artifact_type;
+            statusEl.appendChild(artifact);
+        }
+        var sep2 = document.createElement('span');
+        sep2.textContent = ' · mode ';
+        statusEl.appendChild(sep2);
+        var modeCode = document.createElement('code');
+        modeCode.textContent = idea.generation_mode || 'template';
+        statusEl.appendChild(modeCode);
         statusEl.className = 'churn-status churn-status-success';
     }
 
