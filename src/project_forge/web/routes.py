@@ -204,6 +204,83 @@ _MONEY_CATEGORIES = (
     "automation-income", "creator-tools", "consumer-app", "productivity",
 )
 
+_CLAUDE_LAB_CATEGORIES = (
+    "claude-skills-agents", "ai-marketplace",
+)
+
+
+@router.get("/claude-lab", response_class=HTMLResponse)
+async def claude_lab(
+    request: Request,
+    category: str | None = None,
+    limit: int = Query(default=30, ge=1, le=100),
+):
+    """Frontier-AI ideas across the Claude / agent ecosystem, sorted by
+    ambition_score DESC. Mirrors /money-bots but for the
+    'how do we extend Claude' question instead of 'how do we monetize'."""
+    cats = (category,) if category in _CLAUDE_LAB_CATEGORIES else _CLAUDE_LAB_CATEGORIES
+    placeholders = ",".join("?" * len(cats))
+    cur = await db.db.execute(
+        f"SELECT id FROM ideas "
+        f"WHERE category IN ({placeholders}) "  # noqa: S608
+        f"AND status NOT IN ('archived', 'rejected') "
+        f"AND ambition_score IS NOT NULL "
+        f"ORDER BY ambition_score DESC, generated_at DESC LIMIT ?",
+        (*cats, limit),
+    )
+    rows = await cur.fetchall()
+    ideas = []
+    for r in rows:
+        idea = await db.get_idea(r["id"])
+        if idea is not None:
+            ideas.append(idea)
+    cur = await db.db.execute(
+        f"SELECT COUNT(*) FROM ideas WHERE category IN ({placeholders}) "  # noqa: S608
+        f"AND status NOT IN ('archived', 'rejected')",
+        cats,
+    )
+    total = (await cur.fetchone())[0]
+    return templates.TemplateResponse(
+        request,
+        "claude_lab.html",
+        {
+            "ideas": ideas,
+            "total": total,
+            "categories": list(_CLAUDE_LAB_CATEGORIES),
+            "category_filter": category if category in _CLAUDE_LAB_CATEGORIES else None,
+        },
+    )
+
+
+@router.get("/api/claude-lab/top")
+async def api_claude_lab_top(limit: int = Query(default=10, ge=1, le=100)):
+    """JSON: top-N ambition_score-ranked ideas across the Claude / agent
+    ecosystem categories."""
+    placeholders = ",".join("?" * len(_CLAUDE_LAB_CATEGORIES))
+    cur = await db.db.execute(
+        f"SELECT id, name, tagline, category, ambition_score, "
+        f"fundability_score, generation_mode, status "
+        f"FROM ideas WHERE category IN ({placeholders}) "  # noqa: S608
+        f"AND status NOT IN ('archived', 'rejected') "
+        f"AND ambition_score IS NOT NULL "
+        f"ORDER BY ambition_score DESC, generated_at DESC LIMIT ?",
+        (*_CLAUDE_LAB_CATEGORIES, limit),
+    )
+    rows = await cur.fetchall()
+    return [
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "tagline": r["tagline"],
+            "category": r["category"],
+            "ambition_score": r["ambition_score"],
+            "fundability_score": r["fundability_score"],
+            "generation_mode": r["generation_mode"],
+            "status": r["status"],
+        }
+        for r in rows
+    ]
+
 
 @router.get("/money-bots", response_class=HTMLResponse)
 async def money_bots(
@@ -354,11 +431,16 @@ async def api_backend_info():
 @router.post("/api/churn")
 async def api_churn(request: Request):
     """On-demand idea generation. Fires the LLM-first generator once
-    for the given (or auto-picked) money category, runs dedup, returns
-    the new idea (or a reason if it couldn't land).
+    for the given (or auto-picked) category, runs dedup + scoring,
+    returns the new idea (or a reason if it couldn't land).
 
-    Powers the Churn Now button on /money-bots. Cheap — ~1 Haiku call
-    + ~1 fundability call (~$0.003 total)."""
+    Powers the Churn Now button on /money-bots AND /claude-lab. The
+    `lab` param picks which family scores apply:
+      lab=money  (default) → fundability scored, money categories
+      lab=claude            → ambition scored, claude-lab categories
+
+    Cheap — ~1 generation Haiku call + ~1 scoring call (~$0.003 total)."""
+    from project_forge.engine.ambition import score_ambition
     from project_forge.engine.dedup import filter_and_save
     from project_forge.engine.fundability import score_fundability
     from project_forge.engine.llm_generator import (
@@ -373,11 +455,17 @@ async def api_churn(request: Request):
     except Exception:
         payload = {}
 
+    lab = (payload.get("lab") or "money").strip().lower()
+    if lab == "claude":
+        allowed = _CLAUDE_LAB_CATEGORIES
+    else:
+        allowed = _MONEY_CATEGORIES
+
     cat_str = (payload.get("category") or "").strip()
-    if cat_str in _MONEY_CATEGORIES:
+    if cat_str in allowed:
         category = IdeaCategory(cat_str)
     else:
-        category = IdeaCategory(_random.choice(_MONEY_CATEGORIES))
+        category = IdeaCategory(_random.choice(allowed))
 
     mode = payload.get("mode") or await pick_least_used_mode(db, category)
     if mode not in GENERATION_MODES:
@@ -390,7 +478,12 @@ async def api_churn(request: Request):
             "message": "LLM backend returned no parseable idea; try again.",
         }
 
-    result.idea.fundability_score = await score_fundability(result.idea)
+    # Score for the right axis. Both are cheap; score whichever the page wants.
+    if lab == "claude":
+        result.idea.ambition_score = await score_ambition(result.idea)
+    else:
+        result.idea.fundability_score = await score_fundability(result.idea)
+
     _saved, ok, reason = await filter_and_save(result.idea, db)
     if not ok:
         return {
@@ -405,6 +498,7 @@ async def api_churn(request: Request):
             "tagline": result.idea.tagline,
             "category": result.idea.category.value,
             "fundability_score": result.idea.fundability_score,
+            "ambition_score": result.idea.ambition_score,
             "generation_mode": result.mode,
             "persona": result.persona,
         },

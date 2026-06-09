@@ -1,8 +1,15 @@
 # Project Forge
 
-![Version](https://img.shields.io/badge/version-0.14c-blue) ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/rayketcham-lab/project-forge/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-1280+-passing?color=brightgreen)
+![Version](https://img.shields.io/badge/version-0.15-blue) ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/rayketcham-lab/project-forge/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-1290+-passing?color=brightgreen)
 
-An autonomous project idea generator. It runs an in-process scheduler inside the FastAPI app, calls an LLM (or falls back to deterministic heuristics), scores ideas for both feasibility and **fundability**, deduplicates aggressively, and stores everything in SQLite. A web dashboard lets a human review, approve, and — with a single click — promote the top money-bot idea into a real GitHub issue with a full MVP spec. **Promotion is human-gated**: the engine ranks and surfaces, you approve.
+An autonomous project idea generator. It runs an in-process scheduler inside the FastAPI app, calls an LLM (or falls back to deterministic heuristics), scores ideas on **three orthogonal axes** — feasibility (can we build it), **fundability** (can we sell it), and **ambition** (does it push Claude / agent capability) — deduplicates aggressively, and stores everything in SQLite. A web dashboard lets a human review, approve, and — with a single click — promote ideas into GitHub issues with full MVP specs. **Promotion is human-gated**: the engine ranks and surfaces, you approve.
+
+Two themed surfaces frame the corpus:
+
+- 💰 **/money-bots** — top ideas in money-friendly categories (automation-income, creator-tools, consumer-app, productivity), sorted by `fundability_score`. Money is the goal.
+- 🧠 **/claude-lab** (v0.15) — top ideas in the Claude / agent ecosystem categories (claude-skills-agents, ai-marketplace), sorted by `ambition_score`. Frontier capability is the goal — new skills, sub-agents, MCP servers, marketplaces, attribution systems. Push Claude into the 35th century.
+
+Each page has its own **Churn Now** button that fires the LLM-first generator on demand against the right category family and the right scoring axis.
 
 > Operating philosophy: **autonomous, human-driven**. The engine generates, scores, dedups, sweeps, and audits itself on a schedule. Anything that touches external state (GitHub issues, repos) is one click away — never autonomous. The v0.14 weekly auto-promote cadence was removed in v0.14b after a uvicorn-reload bug fired it three times. Today, the Money Bots page exposes a Promote ➤ button per card; nothing else can flip an idea to `approved` without an operator.
 
@@ -25,6 +32,7 @@ This is a personal project that's been running for several months. It's open-sou
 | **Generate** | Two paths. The **LLM-first generator** (`engine/llm_generator.py`, v0.13+) asks Haiku 4.5 for a whole idea using one of 5 generation modes (novel / inversion / bundle / microservice / adversarial), a category-specific persona, and anti-similarity injection (the 30 most-recent active names — "do NOT produce anything like these"). The **template generator** (`auto_scan.generate_local_idea`) is the deterministic fallback when no backend is reachable. Optional saturation summary, portfolio context, and external feed items (NVD CVEs / arXiv / IETF drafts) are mixed into every prompt. |
 | **Score (feasibility)** | A composite score (0.0–1.0) of three components, weighted: **novelty** (0.4), **specificity** (0.35), **scope realism** (0.25). See `engine/scorer.py`. |
 | **Score (fundability)** | v0.13. Two-stage: a heuristic looks at tech_stack payment hints (stripe, paddle, lemonsqueezy), paid-product keywords in description / mvp_scope, buyer signal in market_analysis, and a per-category bonus. Borderline scores in `[0.35, 0.70]` get a Haiku tie-break call (~$0.001) for a finer signal. See `engine/fundability.py`. |
+| **Score (ambition)** | v0.15. Same shape as fundability but rewards frontier-ness instead of monetizability. Heuristic looks at category bonus (CLAUDE_SKILLS_AGENTS, AI_MARKETPLACE), frontier-keyword density (mcp, sub-agent, attribution, registry, provenance, reproducibility, …), Anthropic / MCP stack signal, and description depth. Borderline `[0.40, 0.75]` gets a Haiku tie-break. See `engine/ambition.py`. |
 | **Dedup (INSERT-time gates, v0.11)** | Four layers, all fired before the idea is committed: SHA-256 content hash, tagline token-overlap (Jaccard ≥ 0.7), **name-token Jaccard** on vertical-stripped names, **super-component overlap** for super-ideas, and a **vertical-cap** that rejects an Nth clone in the same vertical family. Filtered ideas are written to a separate audit table with `filter_reason` and `similar_to_id` — they're a signal, not silently dropped. A Haiku semantic-dedup tie-breaker (v0.12) fires for borderline near-rejections. |
 | **Synthesize** | Cluster active ideas by category-pair theme. With an LLM (`FORGE_SUPER_REASONING=1`), ask it to name the unifying capability gap. Without one, slot-fill `{Keyword1} & {Keyword2} {Suffix}`. |
 | **Compare** | Token-overlap (Jaccard) between an idea and a GitHub repo's README + topics + description. Returns a verdict (new / enhance / duplicate). |
@@ -68,6 +76,7 @@ The dashboard is plain HTML + a small amount of vanilla JS. No build step. Every
 | `/` (Home) | Stats grid, top ideas, super ideas tab, "Add Idea" tab (URL ingest, one-shot text ingest, 5-phase wizard), category and industry browse cards, **Money Bots card** linking through to `/money-bots`. |
 | `/explore` | All ideas with two-axis filtering: industry vertical (inferred from text) + tech category. Status filter, challenged-only filter, full-text search, pagination. |
 | `/money-bots` | v0.14. Top monetizable ideas sorted by `fundability_score DESC` across the four money-friendly categories (`automation-income`, `creator-tools`, `consumer-app`, `productivity`). Per-category filter chips, total in-scope count, and a **Churn Now** button that fires the LLM-first generator on demand (~$0.003/click). |
+| `/claude-lab` | v0.15. Top frontier ideas sorted by `ambition_score DESC` across the two Claude-ecosystem categories (`claude-skills-agents`, `ai-marketplace`). Same shape as /money-bots but bound to a different category family and a different scoring axis. **Churn a Frontier Idea** button POSTs `/api/churn` with `lab=claude` so the right family + axis apply. |
 | `/ideas/{id}` | Detail view with description, score breakdown, related ideas, compare-to-repo, approve/reject/scaffold actions, challenge form, approval-check banner when something looks incoherent. |
 | `/projects` | List of scaffolded projects. |
 | `/thinktank` | Self-improvement pipeline: engine activity heartbeat, AI-proposed code patches (Decompose X / Add tests for X), GitHub roadmap. |
@@ -103,7 +112,8 @@ A subset of the routes exposed by `web/routes.py`. There are more — see the `@
 | `GET`  | `/api/ideas` | Paginated list |
 | `GET`  | `/api/ideas/{id}` | JSON detail + recent challenges + 4 related ideas. Powers the hover tooltip and in-window modal (v0.14c) |
 | `GET`  | `/api/money-bots/top` | Top monetizable ideas (v0.14) |
-| `POST` | `/api/churn` | On-demand idea generation for the money pipeline (v0.14) |
+| `GET`  | `/api/claude-lab/top` | Top frontier ideas sorted by ambition_score (v0.15) |
+| `POST` | `/api/churn` | On-demand idea generation. Body: `{ "category": "...", "lab": "money" \| "claude" }`. The `lab` field switches both the allowed category set and the scoring axis (fundability vs ambition). (v0.14 + v0.15) |
 | `POST` | `/api/promote/{id}` | Manual promote → GH issue (v0.14b — replaces the removed auto-promote cadence) |
 | `GET`  | `/api/backend-info` | Diagnostic: which LLM backend is in use + censored view of the API-key env vars seen by the running process |
 | `POST` | `/api/ideas/{id}/compare` | Compare to a repo |
@@ -183,6 +193,9 @@ src/project_forge/
     categories.py            CATEGORY_SEEDS dict (17 categories: 13 IT/security + 4 money)
     scorer.py                novelty + specificity + scope_realism → composite
     fundability.py           v0.13. Heuristic + Haiku tie-break in the [0.35, 0.70] band
+    ambition.py              v0.15. Frontier-bias score for the Claude / agent corpus.
+                             Heuristic (category + frontier keywords + Anthropic stack +
+                             description depth) + Haiku tie-break in [0.40, 0.75].
     dedup.py                 INSERT-time gates: content-hash + tagline + name-Jaccard + super-component + vertical-cap
     super_ideas.py           Clustering + slot-fill or LLM-reasoned naming
     super_reasoning.py       Cluster signature + LLM cluster naming
@@ -296,6 +309,9 @@ class Idea(BaseModel):
     generation_mode: str | None      # v0.13. Which of the 5 LLM-first modes
                                      # produced this idea (or None for template)
     fundability_score: float | None  # v0.13. 0.0-1.0 monetization-viability
+    ambition_score: float | None     # v0.15. 0.0-1.0 frontier-bias score —
+                                     # how far the idea pushes Claude / agent
+                                     # capability. Sorts /claude-lab DESC.
     auto_promoted_at: datetime | None # v0.14. Stamped when the money-flipper
                                      # picked this idea — idempotency guard
 ```
@@ -316,7 +332,12 @@ devops-tooling · automation · market-gap · self-improvement
 
 # v0.12 scope expansion — money-friendly
 automation-income · consumer-app · productivity · creator-tools
+
+# v0.15 scope expansion — Claude / agent frontier
+claude-skills-agents · ai-marketplace
 ```
+
+19 categories total. The `/money-bots` page reads from the four money-friendly ones; `/claude-lab` reads from the two Claude-ecosystem ones. The other 13 still flow through `/explore` and the dashboard top-ideas grid.
 
 Each entry has `description`, `seed_concepts` (list of strings), and `domains_to_cross` (list of unrelated domains for cross-pollination prompts). Replace the dict to retarget the engine at any portfolio.
 

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Claude Lab - Project Forge{% endblock %}
+
+{% block content %}
+<div id="claude-lab-root" data-category-filter="{{ category_filter or '' }}"></div>
+<section class="page-header">
+    <div class="container">
+        <h1>&#129504; Claude Lab</h1>
+        <p class="page-subtitle">
+            {{ total }} frontier-AI ideas across {{ categories|length }}
+            categories &mdash; new Claude skills, sub-agents, MCP servers,
+            and marketplace primitives, sorted by <strong>ambition</strong>.
+            Push Claude into the 35th century.
+        </p>
+        <div class="churn-row">
+            <button id="lab-churn-btn" class="btn btn-primary btn-churn btn-churn-frontier" type="button">
+                <span class="churn-icon">&#9889;</span>
+                <span class="churn-label">Churn a Frontier Idea</span>
+            </button>
+            <div id="lab-churn-status" class="churn-status"></div>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+
+        <div class="filters-bar">
+            <div class="filter-row">
+                <span class="filter-row-label">Category</span>
+                <div class="filter-chips">
+                    <a href="/claude-lab" class="chip {% if not category_filter %}chip-active{% endif %}">All</a>
+                    {% for cat in categories %}
+                    <a href="/claude-lab?category={{ cat }}"
+                       class="chip {% if category_filter == cat %}chip-active{% endif %}">
+                        {{ cat }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        {% if ideas %}
+        <div class="moneybot-grid">
+            {% for idea in ideas %}
+            <div class="moneybot-card" data-idea-id="{{ idea.id }}"
+                 data-idea-name="{{ idea.name }}"
+                 data-idea-tagline="{{ idea.tagline }}"
+                 data-fundability-score="{{ idea.fundability_score or '' }}"
+                 data-feasibility-score="{{ idea.feasibility_score }}"
+                 data-generation-mode="{{ idea.generation_mode or '' }}">
+                <button class="idea-reject-btn" type="button" title="Reject this idea">&times;</button>
+                <div class="moneybot-card-body-wrap">
+                    <div class="moneybot-card-head">
+                        {# Reuse the fundability-badge styling but bind to ambition.
+                           Same 0-10 tier coloring (green high → red low). #}
+                        <span class="fundability-badge fundability-{{ ((idea.ambition_score or 0) * 10) | int }}"
+                              title="Ambition score: 0.0 = derivative, 1.0 = paradigm shift">
+                            &#129504; {{ "%.2f"|format(idea.ambition_score or 0) }}
+                        </span>
+                        <span class="status-pill status-{{ idea.status }}">{{ idea.status }}</span>
+                    </div>
+                    <div class="moneybot-card-body">
+                        <div class="moneybot-name">{{ idea.name }}</div>
+                        <div class="moneybot-tagline">{{ idea.tagline }}</div>
+                    </div>
+                </div>
+                <div class="moneybot-card-foot">
+                    <code class="cat-tag">{{ idea.category.value }}</code>
+                    {% if idea.generation_mode %}
+                        <span class="mode-pill mode-{{ idea.generation_mode }}">{{ idea.generation_mode }}</span>
+                    {% else %}
+                        <span class="mode-pill mode-template">template</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No scored frontier ideas yet. Hit <strong>Churn a Frontier Idea</strong> above to seed the lab.</p>
+        </div>
+        {% endif %}
+
+    </div>
+</section>
+
+<script src="/static/claude_lab.js?v=1"></script>
+{% endblock %}

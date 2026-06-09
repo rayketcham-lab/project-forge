@@ -245,6 +245,10 @@ class Database:
             # is idempotent. NULL = never auto-promoted; non-NULL = the
             # weekly picker should skip this idea.
             "ALTER TABLE ideas ADD COLUMN auto_promoted_at TEXT",
+            # v0.15 — frontier scoring axis (parallel to fundability_score)
+            # for the Claude-ecosystem categories. 0.0 = derivative,
+            # 1.0 = paradigm-shift potential. Sorted DESC on /claude-lab.
+            "ALTER TABLE ideas ADD COLUMN ambition_score REAL",
         ):
             try:
                 await self._db.execute(stmt)
@@ -313,8 +317,8 @@ class Database:
                 (id, name, tagline, description, category, market_analysis,
                  feasibility_score, mvp_scope, tech_stack, generated_at, status,
                  github_issue_url, project_repo_url, content_hash, source_url,
-                 generation_mode, fundability_score, auto_promoted_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 generation_mode, fundability_score, auto_promoted_at, ambition_score)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     idea.id,
                     idea.name,
@@ -334,6 +338,7 @@ class Database:
                     getattr(idea, "generation_mode", None),
                     getattr(idea, "fundability_score", None),
                     auto_ts.isoformat() if auto_ts is not None else None,
+                    getattr(idea, "ambition_score", None),
                 ),
             )
             await self.db.commit()
@@ -1397,6 +1402,9 @@ class Database:
                     if "auto_promoted_at" in keys and row["auto_promoted_at"]
                     else None
                 )
+            ),
+            ambition_score=(
+                row["ambition_score"] if "ambition_score" in keys else None
             ),
         )
 

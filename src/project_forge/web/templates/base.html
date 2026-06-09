@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Project Forge{% endblock %}</title>
     <meta name="forge-token" content="{{ dashboard_token }}">
-    <link rel="stylesheet" href="/static/style.css?v=14">
+    <link rel="stylesheet" href="/static/style.css?v=15">
 </head>
 <body>
     <nav class="navbar">
@@ -21,6 +21,7 @@
             {% set is_explore = request.url.path == '/explore' %}
             {% set is_ideas_path = request.url.path == '/ideas' %}
             {% set on_money_bots = request.url.path == '/money-bots' %}
+            {% set on_claude_lab = request.url.path == '/claude-lab' %}
             {% set on_approved = is_explore and 'status=approved' in q %}
             {% set on_contributed = is_explore and 'status=contributed' in q %}
             {% set on_challenged = is_explore and 'challenged=1' in q %}
@@ -30,6 +31,7 @@
                 <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">Dashboard</a>
                 <a href="/explore" class="nav-link {% if on_plain_explore %}active{% endif %}">Explore</a>
                 <a href="/money-bots" class="nav-link nav-link-money {% if on_money_bots %}active{% endif %}">&#128176; Money Bots</a>
+                <a href="/claude-lab" class="nav-link nav-link-frontier {% if on_claude_lab %}active{% endif %}">&#129504; Claude Lab</a>
                 <a href="/explore?status=approved" class="nav-link {% if on_approved %}active{% endif %}">&#10003; Approved</a>
                 <a href="/explore?challenged=1" class="nav-link {% if on_challenged %}active{% endif %}">&#9876; Challenged</a>
                 <a href="/projects" class="nav-link {% if request.url.path == '/projects' %}active{% endif %}">Projects</a>

@@ -699,6 +699,88 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "creatives",
         ],
     },
+    IdeaCategory.CLAUDE_SKILLS_AGENTS: {
+        "description": (
+            "Frontier ideas for the Claude / agent ecosystem — new "
+            "skills, sub-agents, MCP servers, slash commands, "
+            "fanned-out work patterns. Concrete enough to ship as a "
+            ".claude/skills/ entry or an MCP plugin. Ambitious enough "
+            "that someone reading the pitch wants to drop everything "
+            "and build it."
+        ),
+        "seed_concepts": [
+            "sub-agent that watches your terminal output and auto-suggests next commands with reasoning",
+            "MCP server: live API contract diffing between staging and prod with breakage warnings",
+            "skill that turns a Slack incident thread into a reproducible runbook with verified commands",
+            "sub-agent: spec-driven test generator that runs the specs as living documentation",
+            "MCP server: Figma → component code with semantic diffs across design tokens",
+            "skill: detect circular dependency cascade risk in any imported file tree",
+            "fanned-out per-PR security reviewer that learns from accepted/rejected suggestions",
+            "agent: vacation-prep that triages your inbox into 'auto-reply', 'delegate', 'wait for me'",
+            "skill: convert a bug report into a failing test, then verify the regression",
+            "MCP server: SOC2 evidence collector via gh / cloudwatch / k8s in one query surface",
+            "agent that owns your dotfiles across hosts via git + ssh with conflict resolution",
+            "skill: turn a YouTube tutorial into a follow-along verified runbook with checkpoints",
+            "sub-agent for cookbook-style iterative ML experiments with auto-tuned hyperparameters",
+            "MCP server: read-only 'what's in production right now' oracle across services",
+            "agent: pair-programming partner that matches your style preferences from your git history",
+            "skill: refactor any function to use a different paradigm (FP / OOP / dataflow) with proof of equivalence",
+            "MCP server: time-aware project memory ('what was the codebase like 3 months ago for this question')",
+            "agent: weekly digest of model performance regressions across your eval suite",
+            "skill: turn a vague Slack message into a written PRD with acceptance criteria",
+            "sub-agent: 'second-brain compiler' — extracts decisions from your meeting transcripts into a queryable graph",
+            "MCP server: open-source dependency safety panel with provenance + maintenance status + license risk",
+            "agent: multi-language polyglot reviewer that catches cross-language API drift",
+        ],
+        "domains_to_cross": [
+            "Claude Code", "MCP", "agentic workflows", "terminal automation",
+            "engineering managers", "DevSecOps", "incident response",
+            "platform engineering", "data engineering", "ML research",
+            "product management", "design systems", "education",
+            "developer experience", "open source maintainers",
+        ],
+    },
+    IdeaCategory.AI_MARKETPLACE: {
+        "description": (
+            "Marketplace, discovery, and distribution concepts for the "
+            "AI / Claude ecosystem — agent registries, skill exchanges, "
+            "reputation systems, attribution chains. Not 'an app store' "
+            "(too small) — primitives for how agents and their authors "
+            "find each other and trade value at scale."
+        ),
+        "seed_concepts": [
+            "quality-of-life skill marketplace with peer review + version history + outcome tracking",
+            "skill leaderboard ranked by user-validated outcomes (not download count)",
+            "sub-agent rental: per-task pricing with verification of 'I used your agent and it worked'",
+            "agent-of-agents registry: composable agent graphs as a first-class primitive",
+            "prompt-library DAO where authors earn from successful invocations downstream",
+            "trust-score per agent based on real-world output evaluations + rollback rate",
+            "agent reproducibility ledger: every successful run logged with inputs + outputs + version",
+            "marketplace for fine-tuned LoRAs scoped to specific dev workflows",
+            "eval-as-marketplace: buy datasets that prove your agent works on a domain",
+            "agent A/B testing surface: deploy two agents and measure which the user prefers",
+            "spend caps + receipts for shared skills (so a team can budget across many)",
+            "skill auditing service that grades safety / hallucination rate / cost / latency",
+            "discovery layer for under-used skills (long-tail solving instead of head-only)",
+            "cross-vendor agent abstraction: 'I want X done' → marketplace finds the right agent regardless of model",
+            "private skill repos with org-level access + ABAC enforcement",
+            "skill bundling — 'I want my agent to know X + Y + Z' buys a curated bundle",
+            "agent insurance — if the agent breaks prod, the seller pays the bill (SLA marketplace)",
+            "usage-attribution chain: when 3 agents collaborate, all 3 authors get paid",
+            "skill recommendation engine: based on git history, here are 5 skills you'd benefit from",
+            "open data layer for agent learning: shared 'this worked / this didn't' corpus across teams",
+            "agent provenance + lineage explorer: trace back which dataset + model + prompt produced this output",
+            "negotiating-agent marketplace: agents that bid for tasks based on capability + cost + speed",
+        ],
+        "domains_to_cross": [
+            "platform companies", "VC scouts", "indie skill authors",
+            "engineering org leads", "compliance officers",
+            "AI researchers", "DevRel teams", "educators",
+            "agent-platform engineers", "marketplace designers",
+            "open-source communities", "regulated industries",
+            "long-tail buyers", "consumer AI", "developer tools",
+        ],
+    },
     IdeaCategory.CREATOR_TOOLS: {
         "description": (
             "Tools for creators making content — writing, audio, video, "

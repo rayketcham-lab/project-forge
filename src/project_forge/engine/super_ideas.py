@@ -472,6 +472,23 @@ DAILY_ROTATION = [
             "newsletters, social, design, education"
         ),
     },
+    # v0.15 — frontier / Claude-ecosystem slots. Push to 35th-century
+    # framing: ideas where someone reading the pitch wants to drop
+    # everything and build it.
+    {
+        "slot": 8,
+        "label": "Claude Frontier",
+        "seed_categories": {
+            IdeaCategory.CLAUDE_SKILLS_AGENTS,
+            IdeaCategory.AI_MARKETPLACE,
+        },
+        "perspective": (
+            "frontier ideas for the Claude / agent ecosystem — skills, "
+            "sub-agents, MCP servers, marketplaces, attribution, "
+            "discovery. Ambitious enough to redefine how agents and "
+            "their authors trade value"
+        ),
+    },
 ]
 
 

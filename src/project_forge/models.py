@@ -31,6 +31,12 @@ class IdeaCategory(StrEnum):
     CONSUMER_APP = "consumer-app"
     PRODUCTIVITY = "productivity"
     CREATOR_TOOLS = "creator-tools"
+    # v0.15 — frontier-AI / Claude-ecosystem space. Where money-bots ask
+    # "how do we make a dollar", these ask "how do we extend Claude's
+    # capability ceiling". Different goal, different personas, different
+    # scoring axis (ambition_score) — same generation pipeline.
+    CLAUDE_SKILLS_AGENTS = "claude-skills-agents"
+    AI_MARKETPLACE = "ai-marketplace"
 
 
 IdeaStatus = Literal["new", "approved", "scaffolded", "rejected", "archived", "contributed", "implemented"]
@@ -64,6 +70,10 @@ class Idea(BaseModel):
     # this timestamp + the issue URL so the picker can skip already-promoted
     # ideas idempotently.
     auto_promoted_at: datetime | None = None
+    # v0.15 — frontier scoring. fundability asks "can we sell it"; ambition
+    # asks "does it push Claude's capability ceiling". Used to sort the
+    # /claude-lab page.
+    ambition_score: float | None = None
 
 
 class Resource(BaseModel):

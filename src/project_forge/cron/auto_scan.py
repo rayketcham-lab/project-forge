@@ -117,6 +117,20 @@ TECH_STACKS = {
         ["typescript", "remotion", "react"],
         ["python", "celery", "yt-dlp", "ffmpeg"],
     ],
+    IdeaCategory.CLAUDE_SKILLS_AGENTS: [
+        ["python", "anthropic", "mcp", "asyncio"],
+        ["typescript", "@anthropic-ai/sdk", "@modelcontextprotocol/sdk"],
+        ["python", "anthropic", "click", "rich"],
+        ["typescript", "node", "@anthropic-ai/sdk", "zod"],
+        ["python", "fastapi", "anthropic", "tree-sitter"],
+    ],
+    IdeaCategory.AI_MARKETPLACE: [
+        ["typescript", "next.js", "supabase", "stripe"],
+        ["python", "fastapi", "postgres", "stripe"],
+        ["rust", "axum", "postgres", "anthropic-rs"],
+        ["typescript", "trpc", "next.js", "prisma"],
+        ["go", "gin", "postgres", "redis"],
+    ],
 }
 
 

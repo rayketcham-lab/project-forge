@@ -1464,3 +1464,25 @@ body.picker-mode, body.picker-mode * { cursor: crosshair !important; }
     background: var(--red);
     color: #fff;
 }
+
+/* === CLAUDE LAB ACCENT (frontier purple) === */
+.nav-link-frontier {
+    color: var(--purple) \!important;
+    font-weight: 600;
+}
+.nav-link-frontier:hover {
+    color: #c4b5fd \!important;
+    background: rgba(167, 139, 250, 0.08);
+}
+.nav-link-frontier.active {
+    color: #fff \!important;
+    background: linear-gradient(135deg, var(--purple) 0%, var(--accent) 100%);
+}
+.btn-churn-frontier {
+    background: linear-gradient(135deg, var(--purple) 0%, var(--accent) 100%);
+    border-color: rgba(167, 139, 250, 0.4);
+    color: #fff \!important;
+}
+.btn-churn-frontier:hover:not([disabled]) {
+    box-shadow: 0 4px 14px rgba(167, 139, 250, 0.28);
+}
