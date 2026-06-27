@@ -105,6 +105,12 @@ async def lifespan(app: FastAPI):
     await db.connect()
     logger.info("Database connected: %s", settings.db_path)
 
+    # v0.17 — load any persisted Scoreboard auto-tune nudges so the live
+    # scorers reflect them immediately (no-op when the table is empty).
+    from project_forge.engine.scoreboard import load_nudges
+
+    await load_nudges(db)
+
     # In-process scheduler — owns the cadences that used to live in
     # `/etc/systemd/system/project-forge-*.timer` units. Those are
     # unreachable from the sandboxed runtime, so the FastAPI lifespan
