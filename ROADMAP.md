@@ -1,16 +1,58 @@
-# Project Forge — Roadmap v0.15+
+# Project Forge — Roadmap
 
-**Status:** v0.14 shipped the money-flipper loop. Engine generates 17 categories × 5 modes × 10 personas via Haiku 4.5, scores fundability, auto-promotes the top money idea to a GitHub issue weekly. ~$2-3/mo. Scaffold pipeline exists but is not yet wired to auto-promote.
+**Status (v0.17).** Three themed generation boards — **Money Bots** (fundability), **Claude Lab** (ambition), **Sniper** (web-grounded competitive-displacement) — over 27 categories, plus a **`/labs`** hub of autonomous thinking/doing avenues (Scoreboard, Foundry, Pulse, Cartographer, Kill Board, Launchpad, Recruiter). LLM-first generation with deterministic fallback; in-process multi-cadence scheduler; ~$2–3/mo on the API path, ~$0 on a Claude subscription. CI green.
 
-**North star for v0.15+:** *Close the loop from idea → shipped MVP → measured revenue, without losing the variety that just got won back.*
+**North star.** *From "generates and scores ideas" → "builds, ships, and learns from real outcomes" — without losing the variety the LLM-first pivot won back.*
 
-The proposals below are grouped by theme and ordered roughly by leverage. Each entry has: pitch, implementation sketch, effort (S/M/L), and why it matters.
+---
+
+## ✅ Shipped (v0.15a → v0.17)
+
+A large slice of the original proposals below is now live — often under a different name. The detailed entries that shipped are marked **✅** in the appendix.
+
+| Original proposal | Shipped as |
+|-------------------|------------|
+| #1 Auto-scaffold the promoted idea | **Foundry** — scaffold plan + one-click (human-gated) repo create |
+| #3 Outcome-feedback → generation weights | **Scoreboard** auto-tune (gated, clamped per-category nudges) |
+| #4 Edge-finder pre-pass · #8 trend ingestion | **Pulse** — live HN front-page + GitHub-trending seeding |
+| #7 Build-estimate per idea | **Recruiter** — roles / person-weeks / cost band |
+| #9 LLM super-idea synthesis | super-ideas clustering + reasoning |
+| #10 Adversarial reviewer that kills duds | **Kill Board** — pre-mortem + survival ranking |
+| #20 Idea → landing page *(partial)* | **Launchpad** — go-to-market brief (not yet deployed) |
+| *(new direction, not in the original plan)* | **Sniper board** — competitive-displacement vs market-proven incumbents |
+| *(new)* | **Cartographer** — corpus white-space/saturation strategy memo |
+
+---
+
+## 🎯 Now — highest leverage, given what shipped
+
+1. **Real outcome data into the Scoreboard.** Today it learns only from OSS-challenger star counts. Wire **#2 (revenue/Stripe webhook)** and **#18 (inline 👍/👎 + reason)** so the auto-tune calibrates against ground truth, not a proxy. *The learning loop is only as good as its signal.*
+2. **Foundry → working code.** It scaffolds a skeleton; make it emit a minimal *working* MVP + smoke tests (**#1 finished**) so the owner grades code, not plans.
+3. **Receipts.** Per-cadence **cost attribution (#16)** + the **provenance panel (#17)** — trust in the autonomous boards comes from showing the work.
+
+## 🔭 Next
+
+- **Launchpad → a deployed landing page (#20).** Demand-validate before building.
+- **A/B fundability (#6) + persona-learning weights (#5).** Calibrate the scorers once outcome data exists.
+- **Notifications (#11) + weekly retro (#19).** The engine pings you instead of waiting to be checked.
+
+## 🌠 Later — durability & reach
+
+- **Model router + budget guard (#14)** — cost-resilience if model pricing shifts.
+- **Idea-quality regression suite (#15)** — a canary that catches prompt drift before auto-promote.
+- **Opt-in public marketplace (#13) / per-idea share links (#12)** — top-of-funnel.
+
+---
+
+## Appendix — full proposal detail
+
+The original, fully-sketched proposals (pitch / implementation / effort / why). Items marked **✅** have shipped (see the table above); the rest still inform the Now/Next/Later plan. Some implementation sketches predate the current architecture — treat them as intent, not spec.
 
 ---
 
 ## Theme 1 — Close the loop (idea → built → earning)
 
-### 1. Auto-scaffold the weekly auto-promoted idea
+### 1. ✅ Auto-scaffold the weekly auto-promoted idea — *shipped as Foundry*
 **Pitch.** Right now the Monday auto-promote stops at a GitHub issue. The single biggest leverage move is making the engine *build* the top idea — scaffold a real repo, push a starter MVP, open a PR with smoke tests — so the owner reviews working code instead of plans.
 
 **Sketch.**
@@ -39,7 +81,7 @@ The proposals below are grouped by theme and ordered roughly by leverage. Each e
 
 ---
 
-### 3. Outcome-feedback loop → generation weights
+### 3. ✅ Outcome-feedback loop → generation weights — *shipped as Scoreboard auto-tune*
 **Pitch.** Once revenue + status data exists, feed it back into the generator so categories, personas, and modes that produced earning ideas get oversampled, and dead categories get cooled off.
 
 **Sketch.**
@@ -55,7 +97,7 @@ The proposals below are grouped by theme and ordered roughly by leverage. Each e
 
 ## Theme 2 — Better ideas before they ship
 
-### 4. Edge-finder pre-pass
+### 4. ✅ Edge-finder pre-pass — *shipped as Pulse (live signal seeding)*
 **Pitch.** Most generated ideas die because they're obvious. A pre-pass that asks Haiku "what's a fresh angle nobody's tried in {category} this quarter?" before the main generator runs would dramatically raise novelty floor.
 
 **Sketch.**
@@ -97,7 +139,7 @@ The proposals below are grouped by theme and ordered roughly by leverage. Each e
 
 ---
 
-### 7. Build-estimate per idea
+### 7. ✅ Build-estimate per idea — *shipped as Recruiter*
 **Pitch.** Given an idea, ask Haiku "how many hours to a paying MVP and what's the riskiest unknown?" Show as a sortable column. Lets the owner (and the auto-promote logic) trade off fundability vs. time-to-money.
 
 **Sketch.**
@@ -113,7 +155,7 @@ The proposals below are grouped by theme and ordered roughly by leverage. Each e
 
 ## Theme 3 — Wider, fresher input
 
-### 8. Trend ingestion expansion
+### 8. ✅ Trend ingestion expansion — *partially shipped via Pulse (HN + GitHub); more sources still open*
 **Pitch.** Current feed-refresh is narrow. Add HackerNews top, ProductHunt, Reddit `/r/Entrepreneur` + `/r/SideProject`, Indie Hackers milestones. More signal → less stale ideation.
 
 **Sketch.**
@@ -128,7 +170,7 @@ The proposals below are grouped by theme and ordered roughly by leverage. Each e
 
 ---
 
-### 9. LLM-driven super-idea synthesis
+### 9. ✅ LLM-driven super-idea synthesis — *shipped (super-ideas)*
 **Pitch.** Current dedup clusters similar ideas. Synthesis goes further: Haiku reads N adjacent ideas and writes one *bridge* idea that combines their strongest elements. This is how breakthroughs actually emerge.
 
 **Sketch.**
@@ -143,7 +185,7 @@ The proposals below are grouped by theme and ordered roughly by leverage. Each e
 
 ---
 
-### 10. Adversarial reviewer that kills duds
+### 10. ✅ Adversarial reviewer that kills duds — *shipped as Kill Board*
 **Pitch.** A devil's-advocate Haiku pass that tries to *kill* every idea before it reaches auto-promote. "Why won't this make money? Who already does it? What's the cheapest substitute?" Surviving ideas are sturdier.
 
 **Sketch.**
@@ -291,7 +333,7 @@ The proposals below are grouped by theme and ordered roughly by leverage. Each e
 
 ---
 
-### 20. Idea-to-landing-page generator
+### 20. ◑ Idea-to-landing-page generator — *partial: Launchpad writes the brief; deploy step still open*
 **Pitch.** Given an auto-promoted idea, generate a single-page landing site (headline, three bullets, email-capture form, Stripe link) and deploy it under a forge subdomain. Validate demand *before* writing code.
 
 **Sketch.**
@@ -305,13 +347,20 @@ The proposals below are grouped by theme and ordered roughly by leverage. Each e
 
 ---
 
-## Suggested sequencing
+## How it actually sequenced (vs the original plan)
 
-A pragmatic v0.15 → v0.18 ladder:
+The original v0.15→v0.18 ladder below is kept for the record; reality took a different, faster route and front-loaded the quality/variety + autonomy work:
 
-- **v0.15 — Learn**: #2 (revenue webhook) + #18 (inline feedback) + #16 (cost attribution) + #15 (quality regression). All small/medium; sets up the data layer everything else needs.
-- **v0.16 — Sharpen**: #4 (edge-finder) + #10 (kill-review) + #5 (persona weights) + #7 (build estimate). Quality + variety lift before any auto-building.
-- **v0.17 — Ship**: #20 (landing page) → #1 (auto-scaffold). Demand-validate before building, then build.
-- **v0.18 — Compound**: #3 (outcome-feedback weights) + #6 (A/B scorer) + #9 (synthesis) + #14 (router). Now the engine is genuinely self-improving on the money axis.
+- **v0.13–0.14** — LLM-first pivot + the money-flipper loop (the variety win).
+- **v0.15 / v0.15a** — Claude Lab board, ambition axis, 8 artifact shapes, Opus on the CLI path.
+- **v0.16** — Sniper board (web-grounded competitive-displacement) + 27-category expansion.
+- **v0.17** — the `/labs` avenues: Scoreboard (#3), Foundry (#1), Pulse (#4/#8), Kill Board (#10), Recruiter (#7), Cartographer, Launchpad (#20 partial). CI fixed + green.
 
-Notifications (#11), provenance (#17), trend expansion (#8), share links (#12), marketplace (#13), retro (#19) slot in opportunistically.
+The live forward plan is the **Now / Next / Later** at the top of this doc. The original ladder, for reference:
+
+- **Learn**: #2 (revenue webhook) + #18 (inline feedback) + #16 (cost attribution) + #15 (quality regression) — the outcome-data layer the Scoreboard now needs.
+- **Sharpen**: #5 (persona weights) + #6 (A/B scorer) — calibrate the scorers once outcome data exists.
+- **Ship**: #20 (deploy the landing page) → finish #1 (Foundry emits working code).
+- **Compound**: #14 (model router) + durability (#15).
+
+Notifications (#11), provenance (#17), more trend sources (#8), share links (#12), marketplace (#13), retro (#19) slot in opportunistically.

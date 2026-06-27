@@ -2,6 +2,8 @@
 
 ![Version](https://img.shields.io/badge/version-0.17-blue) ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/rayketcham-lab/project-forge/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-1530+-passing?color=brightgreen) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
+**[Quickstart](#quick-start) · [Dashboard](#dashboard) · [Labs](#labs--autonomous-avenues-v017) · [Roadmap](#roadmap) · [Architecture](#architecture) · [Config](#configuration)**
+
 An autonomous project idea generator. It runs an in-process scheduler inside the FastAPI app, calls an LLM (or falls back to deterministic heuristics), scores ideas on **four orthogonal axes** — **feasibility** (can we build it), **fundability** (can we sell it), **ambition** (does it push the frontier), and **snipe** (can we wedge into a market-proven incumbent) — deduplicates aggressively, and stores everything in SQLite. A web dashboard lets a human review, approve, and — with a single click — promote ideas into GitHub issues with full MVP specs. **Promotion is human-gated**: the engine ranks and surfaces, you approve.
 
 Three themed surfaces frame the corpus, each with its own question and its own scoring axis:
@@ -14,7 +16,7 @@ Each page has its own **Churn Now** button that fires the generator on demand ag
 
 > Operating philosophy: **autonomous, human-driven**. The engine generates, scores, dedups, sweeps, and audits itself on a schedule. Anything that touches external state (GitHub issues, repos) is one click away — never autonomous. The v0.14 weekly auto-promote cadence was removed in v0.14b after a uvicorn-reload bug fired it three times. Today, the Money Bots and Claude Lab pages each expose a Promote ➤ button per card; nothing else can flip an idea to `approved` without an operator.
 
-This is a personal project that's been running for several months. It's open-sourced because some of the patterns (LLM backend abstraction, multi-stage dedup, persona-driven generation, multi-axis scoring, web-grounded competitive comps, in-process multi-cadence scheduling, artifact-shape rotation) might be useful to others. It is not a product — there's no support, no roadmap commitment, and no SLA.
+This is a personal project that's been running for several months. It's open-sourced because some of the patterns (LLM backend abstraction, multi-stage dedup, persona-driven generation, multi-axis scoring, web-grounded competitive comps, in-process multi-cadence scheduling, artifact-shape rotation) might be useful to others. It's not a product — no support, no SLA, no promises about your timeline. It *is* actively developed against a real [roadmap](#roadmap) ([ROADMAP.md](ROADMAP.md)) — read that as the direction of travel, not a contract.
 
 > [!NOTE]
 > **No API key required.** The LLM backend resolver picks the best path automatically:
@@ -518,6 +520,20 @@ ruff check src/ tests/
 ```
 
 CI runs the same on a self-hosted runner.
+
+---
+
+## Roadmap
+
+The north star: **from "generates and scores ideas" → "builds, ships, and learns from real outcomes"** — without losing the variety the LLM-first pivot won back. Full detail (with shipped-vs-planned mapping and per-item sketches) lives in **[ROADMAP.md](ROADMAP.md)**.
+
+| Horizon | Focus |
+|---------|-------|
+| **Now** | Real outcome data into the Scoreboard (revenue / inline 👍👎, not just OSS-challenger stars) · Foundry generates a *working* MVP + smoke tests, not just a skeleton · cost-per-cadence attribution + idea provenance receipts |
+| **Next** | Launchpad → a deployed landing page for demand validation · A/B fundability + persona-learning weights (calibrate the scorers once outcome data exists) · Slack/Discord notifications + a weekly engine-written retro |
+| **Later** | Model router + per-cadence budget guard (cost-resilience) · idea-quality regression suite (canary vs prompt drift) · opt-in public marketplace / per-idea share links |
+
+It's a personal project, so this is intent and direction — not a delivery commitment.
 
 ---
 
