@@ -50,6 +50,7 @@ async def test_api_categories(client):
     # 17+ categories after v0.12 scope expansion. Use >= so adding new
     # categories later doesn't break this test.
     from project_forge.models import IdeaCategory
+
     assert len(data) == len(IdeaCategory)
     for cat in data:
         assert "name" in cat

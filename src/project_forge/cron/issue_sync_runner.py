@@ -32,9 +32,7 @@ from project_forge.storage.db import Database
 logger = logging.getLogger(__name__)
 
 
-_ISSUE_URL_RE = re.compile(
-    r"^https?://github\.com/(?P<owner>[\w.\-]+)/(?P<repo>[\w.\-]+)/issues/(?P<n>\d+)/?$"
-)
+_ISSUE_URL_RE = re.compile(r"^https?://github\.com/(?P<owner>[\w.\-]+)/(?P<repo>[\w.\-]+)/issues/(?P<n>\d+)/?$")
 
 
 def parse_issue_ref(url: str | None) -> tuple[str, int] | None:
@@ -60,8 +58,14 @@ def fetch_issue_state(repo: str, issue_number: int) -> dict[str, Any] | None:
     try:
         out = subprocess.check_output(
             [
-                "gh", "issue", "view", str(issue_number), "-R", repo,
-                "--json", "state,stateReason",
+                "gh",
+                "issue",
+                "view",
+                str(issue_number),
+                "-R",
+                repo,
+                "--json",
+                "state,stateReason",
             ],
             text=True,
             timeout=15,
@@ -146,8 +150,7 @@ async def _archive(db: Database, idea_id: str, reason: str) -> None:
     """
     async with db._write_lock:
         await db.db.execute(
-            "UPDATE ideas SET status='archived', "
-            "archived_reason=?, archived_at=? WHERE id=?",
+            "UPDATE ideas SET status='archived', archived_reason=?, archived_at=? WHERE id=?",
             (reason, datetime.now(UTC).isoformat(), idea_id),
         )
         await db.db.commit()

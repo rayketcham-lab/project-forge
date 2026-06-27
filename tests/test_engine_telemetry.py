@@ -21,8 +21,9 @@ from project_forge.models import FilteredIdea, Idea, IdeaCategory
 from project_forge.storage.db import Database
 
 
-def _idea(name: str, *, category: IdeaCategory = IdeaCategory.SECURITY_TOOL,
-          score: float = 0.82, days_ago: int = 0) -> Idea:
+def _idea(
+    name: str, *, category: IdeaCategory = IdeaCategory.SECURITY_TOOL, score: float = 0.82, days_ago: int = 0
+) -> Idea:
     return Idea(
         name=name,
         tagline=f"tag for {name}",
@@ -36,9 +37,13 @@ def _idea(name: str, *, category: IdeaCategory = IdeaCategory.SECURITY_TOOL,
     )
 
 
-def _filtered(name: str, *, category: IdeaCategory = IdeaCategory.SECURITY_TOOL,
-              reason: str = "duplicate:tagline_similarity:0.85",
-              days_ago: int = 0) -> FilteredIdea:
+def _filtered(
+    name: str,
+    *,
+    category: IdeaCategory = IdeaCategory.SECURITY_TOOL,
+    reason: str = "duplicate:tagline_similarity:0.85",
+    days_ago: int = 0,
+) -> FilteredIdea:
     fi = FilteredIdea(
         idea_name=name,
         idea_tagline=f"tag for {name}",
@@ -108,8 +113,7 @@ class TestSaturationPerConcept:
         from project_forge.engine.telemetry import saturation_per_concept
 
         # "certificate" appears in 4 rejections, "quantum" in 2, "fuzzing" in 1
-        for n in ("Certificate Pinning A", "Certificate Validator B",
-                 "Certificate Monitor C", "Certificate Watcher D"):
+        for n in ("Certificate Pinning A", "Certificate Validator B", "Certificate Monitor C", "Certificate Watcher D"):
             await db.save_filtered_idea(_filtered(n))
         for n in ("Quantum Tool A", "Quantum Tool B"):
             await db.save_filtered_idea(_filtered(n))

@@ -33,8 +33,7 @@ def _idea(name: str, *, category: IdeaCategory = IdeaCategory.SECURITY_TOOL) -> 
     )
 
 
-def _filtered(name: str, *, category: IdeaCategory = IdeaCategory.SECURITY_TOOL,
-              days_ago: int = 1) -> FilteredIdea:
+def _filtered(name: str, *, category: IdeaCategory = IdeaCategory.SECURITY_TOOL, days_ago: int = 1) -> FilteredIdea:
     fi = FilteredIdea(
         idea_name=name,
         idea_tagline="t",
@@ -71,8 +70,11 @@ class TestBuildFilterSummary:
         from project_forge.engine.telemetry import build_filter_summary
 
         for name in (
-            "certificate alpha", "certificate beta", "certificate gamma",
-            "certificate delta", "certificate epsilon",
+            "certificate alpha",
+            "certificate beta",
+            "certificate gamma",
+            "certificate delta",
+            "certificate epsilon",
         ):
             await db.save_filtered_idea(_filtered(name))
         for name in ("detection one", "detection two"):
@@ -151,6 +153,7 @@ class TestIdeaGeneratorFilterSummaryForwarding:
             def create(self, **kwargs):  # noqa: ARG002
                 class _Resp:
                     content = [type("X", (), {"text": _FAKE_JSON})]
+
                 return _Resp()
 
         class _StubClient:
@@ -173,9 +176,11 @@ class TestIdeaGeneratorFilterSummaryForwarding:
             "high_filter_rate_categories": [("security-tool", 0.80)],
         }
 
-        asyncio.run(gen.generate(
-            category=IdeaCategory.SECURITY_TOOL,
-            filter_summary=summary,
-        ))
+        asyncio.run(
+            gen.generate(
+                category=IdeaCategory.SECURITY_TOOL,
+                filter_summary=summary,
+            )
+        )
 
         assert captured.get("filter_summary") == summary

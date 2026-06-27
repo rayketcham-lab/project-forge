@@ -132,34 +132,123 @@ VISION_TEMPLATES = [
 ]
 
 
-_NAME_STOP_WORDS = frozenset({
-    # Prepositions / articles
-    "a", "an", "the", "and", "or", "for", "with", "in", "of", "on", "to", "by",
-    "via", "from", "its", "this", "that", "into", "onto", "over",
-    # Generic tech nouns (too common to be distinctive)
-    "tool", "system", "platform", "suite", "engine", "hub",
-    "service", "solution", "manager", "tracker", "analyzer",
-    "monitor", "checker", "scanner", "detector", "reporter",
-    "generator", "builder", "advisor", "assistant", "helper",
-    "framework", "library", "module", "plugin", "agent",
-    # Generic adjectives / catch-alls
-    "automated", "automatic", "automation", "unified", "combined",
-    "integrated", "advanced", "smart", "intelligent", "secure",
-    "open", "source", "based", "simple", "single", "multi", "cross",
-    # Qualifiers that make nonsense names ("Well Known Defense Suite")
-    "well", "known", "common", "general", "basic", "native",
-    # OWASP / security jargon — appear in idea names but make bad super-names
-    "insecure", "direct", "object", "broken", "sensitive", "exposure",
-    "injection", "failure", "access", "control", "bypass",
-    "escalation", "privilege", "attack", "threat", "weakness",
-    # Generic action verbs in idea names
-    "using", "detect", "enable", "enforce", "prevent", "handle",
-    "improve", "extend", "support", "create", "update", "manage",
-    # Generic tool-type nouns (describe WHAT it is, not WHAT it's about)
-    "mapper", "parser", "proxy", "relay", "store", "queue", "cache",
-    # Super-idea marker word — must not contaminate keyword extraction
-    "super",
-})
+_NAME_STOP_WORDS = frozenset(
+    {
+        # Prepositions / articles
+        "a",
+        "an",
+        "the",
+        "and",
+        "or",
+        "for",
+        "with",
+        "in",
+        "of",
+        "on",
+        "to",
+        "by",
+        "via",
+        "from",
+        "its",
+        "this",
+        "that",
+        "into",
+        "onto",
+        "over",
+        # Generic tech nouns (too common to be distinctive)
+        "tool",
+        "system",
+        "platform",
+        "suite",
+        "engine",
+        "hub",
+        "service",
+        "solution",
+        "manager",
+        "tracker",
+        "analyzer",
+        "monitor",
+        "checker",
+        "scanner",
+        "detector",
+        "reporter",
+        "generator",
+        "builder",
+        "advisor",
+        "assistant",
+        "helper",
+        "framework",
+        "library",
+        "module",
+        "plugin",
+        "agent",
+        # Generic adjectives / catch-alls
+        "automated",
+        "automatic",
+        "automation",
+        "unified",
+        "combined",
+        "integrated",
+        "advanced",
+        "smart",
+        "intelligent",
+        "secure",
+        "open",
+        "source",
+        "based",
+        "simple",
+        "single",
+        "multi",
+        "cross",
+        # Qualifiers that make nonsense names ("Well Known Defense Suite")
+        "well",
+        "known",
+        "common",
+        "general",
+        "basic",
+        "native",
+        # OWASP / security jargon — appear in idea names but make bad super-names
+        "insecure",
+        "direct",
+        "object",
+        "broken",
+        "sensitive",
+        "exposure",
+        "injection",
+        "failure",
+        "access",
+        "control",
+        "bypass",
+        "escalation",
+        "privilege",
+        "attack",
+        "threat",
+        "weakness",
+        # Generic action verbs in idea names
+        "using",
+        "detect",
+        "enable",
+        "enforce",
+        "prevent",
+        "handle",
+        "improve",
+        "extend",
+        "support",
+        "create",
+        "update",
+        "manage",
+        # Generic tool-type nouns (describe WHAT it is, not WHAT it's about)
+        "mapper",
+        "parser",
+        "proxy",
+        "relay",
+        "store",
+        "queue",
+        "cache",
+        # Super-idea marker word — must not contaminate keyword extraction
+        "super",
+    }
+)
 
 _SYNTHESIS_SUFFIXES = [
     "Intelligence Center",
@@ -203,10 +292,12 @@ def _dynamic_cluster_name(ideas: list["Idea"], categories: frozenset) -> str:  #
 
     if len(keywords) >= 2:
         k1, k2 = keywords[0].title(), keywords[1].title()
-        return random.choice([
-            f"{k1} & {k2} {suffix}",
-            f"{k1} {k2} {suffix}",
-        ])
+        return random.choice(
+            [
+                f"{k1} & {k2} {suffix}",
+                f"{k1} {k2} {suffix}",
+            ]
+        )
     elif keywords:
         return f"{keywords[0].title()} {suffix}"
 
@@ -468,8 +559,7 @@ DAILY_ROTATION = [
             IdeaCategory.MARKET_GAP,
         },
         "perspective": (
-            "tools for creators making content — writing, audio, video, "
-            "newsletters, social, design, education"
+            "tools for creators making content — writing, audio, video, newsletters, social, design, education"
         ),
     },
     # v0.15 — frontier / Claude-ecosystem slots. Push to 35th-century
@@ -487,6 +577,39 @@ DAILY_ROTATION = [
             "sub-agents, MCP servers, marketplaces, attribution, "
             "discovery. Ambitious enough to redefine how agents and "
             "their authors trade value"
+        ),
+    },
+    # v0.16 — paid-product money slot + the rest of the agent-ecosystem.
+    {
+        "slot": 9,
+        "label": "Paid Products & Vertical SaaS",
+        "seed_categories": {
+            IdeaCategory.MICRO_SAAS,
+            IdeaCategory.VERTICAL_SAAS,
+            IdeaCategory.ECOMMERCE_TOOLS,
+            IdeaCategory.FINTECH_TOOLS,
+        },
+        "perspective": (
+            "fundable, shippable software with recurring revenue — focused "
+            "micro-SaaS, deep vertical software for underserved trades, "
+            "seller operations, and finance ops. One paying buyer, clear "
+            "Stripe button, no money-transmitter or financial-advice scope"
+        ),
+    },
+    {
+        "slot": 10,
+        "label": "Agent Platform & Safety",
+        "seed_categories": {
+            IdeaCategory.AGENT_INFRA,
+            IdeaCategory.CLAUDE_EVALS,
+            IdeaCategory.AGENT_SECURITY,
+            IdeaCategory.CONTEXT_MEMORY,
+        },
+        "perspective": (
+            "the layers that make agents production-grade — the runtime "
+            "that runs a fleet cheaply and durably, the evals that prove "
+            "they work, the security that treats them as an attack surface, "
+            "and the memory that gives them continuity"
         ),
     },
 ]
@@ -618,7 +741,7 @@ class SuperIdeaGenerator:
 
         ordered = sorted(
             clusters,
-            key=lambda c: (0 if c["categories"] & seed_cats else 1),
+            key=lambda c: 0 if c["categories"] & seed_cats else 1,
         )
 
         use_reasoning = bool(os.environ.get("FORGE_SUPER_REASONING"))
@@ -643,7 +766,9 @@ class SuperIdeaGenerator:
                     )
                     continue
             candidate = synthesize_super_idea(
-                cluster, use_reasoning=use_reasoning, llm_call=llm_call,
+                cluster,
+                use_reasoning=use_reasoning,
+                llm_call=llm_call,
             )
             # Quality gate: reject if tagline is the N-capability-synthesis fallback.
             if re.match(r"^\d+-capability synthesis:", candidate.tagline):
@@ -687,7 +812,9 @@ class SuperIdeaGenerator:
             if existing_super is not None:
                 logger.info(
                     "Skipping super idea %s: cluster signature %s already covered by %s",
-                    si.name, candidate_sig, existing_super.id,
+                    si.name,
+                    candidate_sig,
+                    existing_super.id,
                 )
                 return None
             # Reasoning path uses signature-only dedup — skip the legacy gates
@@ -715,7 +842,9 @@ class SuperIdeaGenerator:
             if _super_base_name(ex.name) == candidate_base:
                 logger.info(
                     "Skipping duplicate super idea: %s (base '%s' covered by %s)",
-                    si.name, candidate_base, ex.id,
+                    si.name,
+                    candidate_base,
+                    ex.id,
                 )
                 return None
             # Also check tagline primary concept for near-duplicate coverage

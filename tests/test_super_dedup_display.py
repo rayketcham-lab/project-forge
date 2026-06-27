@@ -62,9 +62,7 @@ class TestListSuperIdeasBaseName:
     async def test_same_base_name_different_suffix_returns_one(self, db):
         """Three variants of the same concept → only the best one shown."""
         await db.save_idea(_super("[SUPER] Threat Engine", score=0.90))
-        await db.save_idea(
-            _super("[SUPER] Threat Engine (Attack & Defense)", score=0.95)
-        )
+        await db.save_idea(_super("[SUPER] Threat Engine (Attack & Defense)", score=0.95))
         await db.save_idea(
             _super(
                 "[SUPER] Threat Engine (PQC & Crypto)",
@@ -97,9 +95,7 @@ class TestListSuperIdeasBaseName:
         # Save a higher-scored variant, then archive it
         high = _super("[SUPER] Threat Engine (Attack & Defense)", score=0.95)
         await db.save_idea(high)
-        await db.db.execute(
-            "UPDATE ideas SET status = 'archived' WHERE id = ?", (high.id,)
-        )
+        await db.db.execute("UPDATE ideas SET status = 'archived' WHERE id = ?", (high.id,))
         await db.db.commit()
 
         result = await db.list_super_ideas(limit=6)
@@ -112,9 +108,7 @@ class TestListSuperIdeasBaseName:
         """Limit should apply after base-name dedup, not before."""
         for i in range(5):
             await db.save_idea(_super(f"[SUPER] Project {i}", score=0.80 + i * 0.02))
-            await db.save_idea(
-                _super(f"[SUPER] Project {i} (Variant)", score=0.79 + i * 0.02)
-            )
+            await db.save_idea(_super(f"[SUPER] Project {i} (Variant)", score=0.79 + i * 0.02))
 
         result = await db.list_super_ideas(limit=3)
         assert len(result) == 3
@@ -193,9 +187,7 @@ class TestShouldAcceptSuperDedup:
     @pytest.mark.asyncio
     async def test_rejects_different_category_same_base(self, db):
         """Same base name but different category → still rejected."""
-        await db.save_idea(
-            _super("[SUPER] Threat Engine", category=IdeaCategory.SECURITY_TOOL)
-        )
+        await db.save_idea(_super("[SUPER] Threat Engine", category=IdeaCategory.SECURITY_TOOL))
 
         candidate = _super(
             "[SUPER] Threat Engine (Attack & Defense)",
@@ -276,39 +268,47 @@ class TestSuperBaseNameExtraction:
 
     def test_strips_parenthetical_suffix(self):
         from project_forge.engine.dedup import _super_base_name
+
         assert _super_base_name("[SUPER] Threat Engine (Attack & Defense)") == "threat engine"
 
     def test_strips_synthesis_suffix_operations_center(self):
         from project_forge.engine.dedup import _super_base_name
+
         assert _super_base_name("[SUPER] Well Known Operations Center") == "well known"
 
     def test_strips_synthesis_suffix_defense_suite(self):
         from project_forge.engine.dedup import _super_base_name
+
         assert _super_base_name("[SUPER] Well Known Defense Suite") == "well known"
 
     def test_normalizes_hyphen_to_space(self):
         from project_forge.engine.dedup import _super_base_name
+
         result = _super_base_name("[SUPER] Data-Cardinality Operations Center")
         assert result == "data cardinality"
         assert "-" not in result
 
     def test_strips_observatory_suffix(self):
         from project_forge.engine.dedup import _super_base_name
+
         assert _super_base_name("[SUPER] Certificate-Pinning Observatory") == "certificate pinning"
 
     def test_simple_name_unchanged(self):
         from project_forge.engine.dedup import _super_base_name
+
         result = _super_base_name("[SUPER] Threat Engine")
         assert result == "threat engine"
 
     def test_normalizes_ampersand_to_space(self):
         from project_forge.engine.dedup import _super_base_name
+
         result = _super_base_name("[SUPER] Multi & Control Defense Suite")
         assert result == "multi control"
         assert "&" not in result
 
     def test_ampersand_variant_equals_space_variant(self):
         from project_forge.engine.dedup import _super_base_name
+
         with_amp = _super_base_name("[SUPER] Certificate & Pinning Observatory")
         without_amp = _super_base_name("[SUPER] Certificate Pinning Observatory")
         assert with_amp == without_amp
@@ -378,9 +378,8 @@ class TestSuperIdeaNameNoHyphens:
             core = name.replace("[SUPER] ", "")
             # A hyphen between two title-cased words is the bad pattern
             import re
+
             if re.search(r"[A-Z][a-z]+-[A-Z][a-z]+", core):
                 hyphenated.append(name)
 
-        assert hyphenated == [], (
-            f"_dynamic_cluster_name produced hyphenated names: {hyphenated}"
-        )
+        assert hyphenated == [], f"_dynamic_cluster_name produced hyphenated names: {hyphenated}"

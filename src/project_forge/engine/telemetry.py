@@ -26,15 +26,29 @@ if TYPE_CHECKING:
 
 
 _TAGLINE_SIM_RE = re.compile(r"tagline_similarity:(\d+\.\d+)")
-_GENERIC_NOUNS = frozenset({
-    "tool", "tools", "platform", "system", "service", "engine",
-    "manager", "framework", "suite", "module", "library", "agent",
-    "app", "apps",
-})
+_GENERIC_NOUNS = frozenset(
+    {
+        "tool",
+        "tools",
+        "platform",
+        "system",
+        "service",
+        "engine",
+        "manager",
+        "framework",
+        "suite",
+        "module",
+        "library",
+        "agent",
+        "app",
+        "apps",
+    }
+)
 
 
 async def filter_rate_by_category(
-    db: Database, days: int = 7,
+    db: Database,
+    days: int = 7,
 ) -> dict[IdeaCategory, float]:
     """Return per-category filter rate over the last `days`.
 
@@ -44,15 +58,13 @@ async def filter_rate_by_category(
     cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
 
     cursor = await db.db.execute(
-        "SELECT idea_category, COUNT(*) FROM filtered_ideas "
-        "WHERE filtered_at >= ? GROUP BY idea_category",
+        "SELECT idea_category, COUNT(*) FROM filtered_ideas WHERE filtered_at >= ? GROUP BY idea_category",
         (cutoff,),
     )
     filtered_counts = {row[0]: row[1] for row in await cursor.fetchall()}
 
     cursor = await db.db.execute(
-        "SELECT category, COUNT(*) FROM ideas "
-        "WHERE generated_at >= ? GROUP BY category",
+        "SELECT category, COUNT(*) FROM ideas WHERE generated_at >= ? GROUP BY category",
         (cutoff,),
     )
     accepted_counts = {row[0]: row[1] for row in await cursor.fetchall()}
@@ -74,7 +86,9 @@ async def filter_rate_by_category(
 
 
 async def saturation_per_concept(
-    db: Database, days: int = 30, top_n: int = 10,
+    db: Database,
+    days: int = 30,
+    top_n: int = 10,
 ) -> list[tuple[str, int]]:
     """Return ranked list of saturated keywords from rejected idea names.
 
@@ -102,7 +116,8 @@ async def saturation_per_concept(
 
 
 async def novelty_trend(
-    db: Database, days: int = 30,
+    db: Database,
+    days: int = 30,
 ) -> list[tuple[str, float]]:
     """Return per-day average tagline-similarity score from rejections.
 
@@ -136,7 +151,8 @@ async def novelty_trend(
 
 
 async def diversity_lever_usage(
-    db: Database, days: int = 7,  # noqa: ARG001 — schema-stable interface
+    db: Database,
+    days: int = 7,  # noqa: ARG001 — schema-stable interface
 ) -> dict[str, float]:
     """Return diversity lever usage percentages.
 
@@ -177,7 +193,8 @@ async def build_filter_summary(
 
 
 async def coverage_gaps(
-    db: Database, threshold: int = 5,
+    db: Database,
+    threshold: int = 5,
 ) -> list[IdeaCategory]:
     """Return categories with active idea count below threshold.
 
@@ -185,9 +202,7 @@ async def coverage_gaps(
     where generation should be nudged.
     """
     cursor = await db.db.execute(
-        "SELECT category, COUNT(*) FROM ideas "
-        "WHERE status NOT IN ('rejected', 'archived') "
-        "GROUP BY category",
+        "SELECT category, COUNT(*) FROM ideas WHERE status NOT IN ('rejected', 'archived') GROUP BY category",
     )
     counts = {row[0]: row[1] for row in await cursor.fetchall()}
 

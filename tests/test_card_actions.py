@@ -69,7 +69,7 @@ async def test_card_is_div_not_anchor_wrapper(client):
     resp = await client.get("/explore")
     assert resp.status_code == 200
     # The card uses div+data-idea-id (the modal entry point).
-    assert 'data-idea-id=' in resp.text
+    assert "data-idea-id=" in resp.text
     # And NOT the old anchor wrapper, which would hijack the click.
     assert '<a href="/ideas/' not in resp.text
 

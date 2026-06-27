@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Kill Board - Project Forge{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div class="container">
+        <h1>&#9760; Kill Board</h1>
+        <p class="page-subtitle">
+            {{ total }} ideas ranked by <strong>survival odds ASC</strong> &mdash;
+            the most likely to die surface first. Each entry is an adversarial
+            pre-mortem: assume the project already failed, then work backwards.
+            Run a pre-mortem on any idea to get the <em>case against</em>,
+            fatal risks, and named competitors.
+        </p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+
+        {% if ideas %}
+        <div class="moneybot-grid">
+            {% for entry in ideas %}
+            {% set idea = entry.idea %}
+            {% set pm = entry.premortem %}
+            <div class="moneybot-card killboard-card"
+                 data-idea-id="{{ idea.id }}"
+                 data-idea-name="{{ idea.name }}"
+                 data-survival-odds="{{ pm.survival_odds if pm else '' }}">
+
+                <div class="moneybot-card-body-wrap">
+                    <div class="moneybot-card-head">
+                        {% if pm %}
+                        {% set pct = (pm.survival_odds * 100) | int %}
+                        {% set danger_cls = 'killboard-danger-high' if pm.survival_odds < 0.35 else ('killboard-danger-mid' if pm.survival_odds < 0.60 else 'killboard-danger-low') %}
+                        <span class="fundability-badge {{ danger_cls }}" title="Survival odds">
+                            &#9760; {{ "%.0f"|format(pm.survival_odds * 100) }}%
+                        </span>
+                        {% else %}
+                        <span class="fundability-badge killboard-unscored" title="Pre-mortem not yet run">
+                            &#9760; &mdash;
+                        </span>
+                        {% endif %}
+                        <span class="status-pill status-{{ idea.status }}">{{ idea.status }}</span>
+                    </div>
+
+                    <div class="moneybot-card-body">
+                        <div class="moneybot-name">{{ idea.name }}</div>
+                        <div class="moneybot-tagline">{{ idea.tagline }}</div>
+
+                        {% if pm and pm.case_against %}
+                        <div class="killboard-case-against">
+                            <strong>Case against:</strong>
+                            {{ pm.case_against }}
+                        </div>
+                        {% endif %}
+
+                        {% if pm and pm.fatal_risks %}
+                        <ul class="killboard-risks">
+                            {% for risk in pm.fatal_risks[:3] %}
+                            <li>{{ risk }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+
+                        {% if pm and pm.whos_already_doing_it %}
+                        <div class="killboard-competitors">
+                            <strong>Already doing it:</strong>
+                            {{ pm.whos_already_doing_it | join(", ") }}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="moneybot-card-foot">
+                    <code class="cat-tag">{{ idea.category.value }}</code>
+                    <button class="btn btn-sm btn-outline killboard-run-btn"
+                            type="button"
+                            data-idea-id="{{ idea.id }}"
+                            title="Run adversarial pre-mortem on this idea">
+                        &#9760; Run Pre-Mortem
+                    </button>
+                    <a href="/ideas/{{ idea.id }}" class="moneybot-issue">details &#8594;</a>
+                </div>
+
+                <div class="killboard-result-area" id="pm-result-{{ idea.id }}" style="display:none">
+                    <div class="killboard-result-inner"></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No ideas on the Kill Board yet. Ideas appear here once they have
+            been scored by the survival heuristic. Use the Explore page to
+            browse all ideas, or run the generation engine to create new ones.</p>
+        </div>
+        {% endif %}
+
+    </div>
+</section>
+
+<script src="/static/killboard.js?v=1"></script>
+{% endblock %}

@@ -57,9 +57,11 @@ class TestHeuristicScore:
         from project_forge.engine.fundability import score_fundability_heuristic
 
         without = score_fundability_heuristic(_idea())
-        with_pay = score_fundability_heuristic(_idea(
-            tech_stack=["python", "fastapi", "stripe"],
-        ))
+        with_pay = score_fundability_heuristic(
+            _idea(
+                tech_stack=["python", "fastapi", "stripe"],
+            )
+        )
         assert with_pay > without
 
     def test_paid_keywords_bump_score(self):
@@ -76,9 +78,11 @@ class TestHeuristicScore:
         from project_forge.engine.fundability import score_fundability_heuristic
 
         baseline = score_fundability_heuristic(_idea())
-        money_cat = score_fundability_heuristic(_idea(
-            category=IdeaCategory.AUTOMATION_INCOME,
-        ))
+        money_cat = score_fundability_heuristic(
+            _idea(
+                category=IdeaCategory.AUTOMATION_INCOME,
+            )
+        )
         assert money_cat > baseline
 
     def test_score_clamped_to_unit_interval(self):
@@ -151,7 +155,9 @@ class TestLLMVerification:
         backend.name = "stub"
         backend.call = MagicMock(return_value='{"score": 0.78}')
         monkeypatch.setattr(
-            fundability, "resolve_cheap_backend", lambda: backend,
+            fundability,
+            "resolve_cheap_backend",
+            lambda: backend,
         )
 
         # Heuristic gives ~0.55 (paid keywords + payment stack, no extra
@@ -172,7 +178,9 @@ class TestLLMVerification:
         backend = MagicMock()
         backend.call = MagicMock(return_value='{"score": 0.99}')
         monkeypatch.setattr(
-            fundability, "resolve_cheap_backend", lambda: backend,
+            fundability,
+            "resolve_cheap_backend",
+            lambda: backend,
         )
 
         # Generic dev tool, no paid signals — heuristic clearly low,

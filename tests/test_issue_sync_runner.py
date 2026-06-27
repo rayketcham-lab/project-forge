@@ -27,6 +27,7 @@ def _promoted_idea(
     status: str = "approved",
 ) -> Idea:
     from datetime import UTC, datetime, timedelta
+
     idea = Idea(
         name=name,
         tagline="t",
@@ -159,6 +160,7 @@ class TestSyncCycle:
         await db.save_idea(idea)
 
         called = []
+
         def _fetch(_repo, _n):
             called.append((_repo, _n))
             return {"state": "OPEN", "reason": None}

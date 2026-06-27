@@ -134,9 +134,7 @@ def test_parse_handles_json_fences():
     mock_client = MagicMock()
     mock_response = MagicMock()
     json_block = (
-        '```json\n'
-        '{"action": "new_project", "target_repo": null, "reason": "novel idea", "confidence": 0.7}'
-        "\n```"
+        '```json\n{"action": "new_project", "target_repo": null, "reason": "novel idea", "confidence": 0.7}\n```'
     )
     mock_response.content = [MagicMock(text=json_block)]
     mock_client.messages.create.return_value = mock_response
@@ -200,11 +198,7 @@ def test_route_builds_correct_repo_lines():
     import json
 
     mock_response.content = [
-        MagicMock(
-            text=json.dumps(
-                {"action": "new_project", "target_repo": None, "reason": "novel", "confidence": 0.8}
-            )
-        )
+        MagicMock(text=json.dumps({"action": "new_project", "target_repo": None, "reason": "novel", "confidence": 0.8}))
     ]
     mock_client.messages.create.return_value = mock_response
 

@@ -131,6 +131,58 @@ TECH_STACKS = {
         ["typescript", "trpc", "next.js", "prisma"],
         ["go", "gin", "postgres", "redis"],
     ],
+    # v0.16 money-bot expansion stacks — biased toward fast-to-revenue
+    # paid SaaS and seller/finance ops.
+    IdeaCategory.MICRO_SAAS: [
+        ["python", "fastapi", "sqlite", "stripe"],
+        ["typescript", "next.js", "vercel", "stripe"],
+        ["python", "fastapi", "supabase", "stripe"],
+        ["go", "chi", "postgres", "stripe"],
+    ],
+    IdeaCategory.VERTICAL_SAAS: [
+        ["typescript", "next.js", "postgres", "stripe"],
+        ["python", "django", "postgres", "stripe"],
+        ["ruby", "rails", "postgres", "stripe"],
+        ["typescript", "remix", "prisma", "stripe"],
+    ],
+    IdeaCategory.ECOMMERCE_TOOLS: [
+        ["typescript", "next.js", "shopify-api", "postgres"],
+        ["python", "fastapi", "celery", "redis"],
+        ["typescript", "node", "bullmq", "postgres"],
+        ["python", "fastapi", "playwright", "postgres"],
+    ],
+    IdeaCategory.FINTECH_TOOLS: [
+        ["python", "fastapi", "plaid", "postgres"],
+        ["typescript", "next.js", "stripe", "postgres"],
+        ["python", "fastapi", "pandas", "postgres"],
+        ["typescript", "node", "plaid", "prisma"],
+    ],
+    # v0.16 Claude Lab expansion stacks — agent runtime, evals, security,
+    # memory. Frontier (anthropic / mcp) tokens so they score on ambition.
+    IdeaCategory.AGENT_INFRA: [
+        ["python", "anthropic", "asyncio", "redis"],
+        ["typescript", "@anthropic-ai/sdk", "node", "postgres"],
+        ["python", "fastapi", "anthropic", "temporal"],
+        ["rust", "tokio", "anthropic-rs", "redis"],
+    ],
+    IdeaCategory.CLAUDE_EVALS: [
+        ["python", "anthropic", "pytest", "pandas"],
+        ["python", "anthropic", "pydantic", "duckdb"],
+        ["typescript", "@anthropic-ai/sdk", "vitest", "zod"],
+        ["python", "anthropic", "promptfoo", "sqlite"],
+    ],
+    IdeaCategory.AGENT_SECURITY: [
+        ["python", "anthropic", "mcp", "opa"],
+        ["python", "fastapi", "anthropic", "sigstore"],
+        ["typescript", "@modelcontextprotocol/sdk", "zod", "node"],
+        ["go", "anthropic", "ebpf", "opa"],
+    ],
+    IdeaCategory.CONTEXT_MEMORY: [
+        ["python", "anthropic", "pgvector", "postgres"],
+        ["python", "fastapi", "anthropic", "sqlite-vss"],
+        ["typescript", "@anthropic-ai/sdk", "pgvector", "prisma"],
+        ["python", "anthropic", "lancedb", "duckdb"],
+    ],
 }
 
 

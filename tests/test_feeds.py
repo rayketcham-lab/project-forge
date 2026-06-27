@@ -25,8 +25,7 @@ from project_forge.feeds.health import FeedHealth
 class TestFeedCache:
     def test_write_then_read_returns_data(self, tmp_path):
         cache = FeedCache(tmp_path / "feed.json", ttl=timedelta(hours=1))
-        items = [{"id": "1", "title": "x", "summary": "y", "url": "z",
-                  "ts": "2026-05-08T00:00:00+00:00"}]
+        items = [{"id": "1", "title": "x", "summary": "y", "url": "z", "ts": "2026-05-08T00:00:00+00:00"}]
 
         cache.write(items)
         loaded = cache.read()
@@ -189,6 +188,7 @@ class TestFormatForPrompt:
 
 
 # ── pytest fixtures ───────────────────────────────────────────────────
+
 
 @pytest.fixture(autouse=True)
 def _no_network(monkeypatch):

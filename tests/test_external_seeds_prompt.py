@@ -66,6 +66,7 @@ class TestIdeaGeneratorForwarding:
             def create(self, **kwargs):  # noqa: ARG002
                 class _Resp:
                     content = [type("X", (), {"text": _FAKE_JSON})]
+
                 return _Resp()
 
         class _StubClient:
@@ -84,9 +85,11 @@ class TestIdeaGeneratorForwarding:
         )
 
         seeds = [{"id": "CVE-1", "title": "x", "summary": "y", "url": "u", "ts": "t"}]
-        asyncio.run(gen.generate(
-            category=IdeaCategory.SECURITY_TOOL,
-            external_seeds=seeds,
-        ))
+        asyncio.run(
+            gen.generate(
+                category=IdeaCategory.SECURITY_TOOL,
+                external_seeds=seeds,
+            )
+        )
 
         assert captured.get("external_seeds") == seeds

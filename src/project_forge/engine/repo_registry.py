@@ -57,11 +57,7 @@ async def sync_org_repos(db: Database, org: str | None = None) -> list[RepoEntry
             logger.debug("Skipping repo %s/%s — no description", target_org, repo["name"])
             continue
 
-        topics = [
-            t["node"]["name"]
-            for t in (repo.get("repositoryTopics") or [])
-            if t.get("node", {}).get("name")
-        ]
+        topics = [t["node"]["name"] for t in (repo.get("repositoryTopics") or []) if t.get("node", {}).get("name")]
 
         entry = RepoEntry(
             repo_full_name=f"{target_org}/{repo['name']}",

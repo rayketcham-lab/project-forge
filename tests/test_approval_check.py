@@ -35,8 +35,7 @@ def _idea(**overrides) -> Idea:
         market_analysis="Real SRE need for tracing anomaly tooling.",
         feasibility_score=0.85,
         mvp_scope=(
-            "Phase 1: ingest distributed traces from OTLP. "
-            "Phase 2: cluster anomalies. Phase 3: alert per route."
+            "Phase 1: ingest distributed traces from OTLP. Phase 2: cluster anomalies. Phase 3: alert per route."
         ),
         tech_stack=["python", "fastapi", "opentelemetry"],
     )
@@ -46,8 +45,7 @@ def _idea(**overrides) -> Idea:
 
 def _super_idea(name: str, components: list[str], **overrides) -> Idea:
     body = (
-        f"{name} brings together {len(components)} complementary project "
-        "concepts into a single, cohesive platform:\n\n"
+        f"{name} brings together {len(components)} complementary project concepts into a single, cohesive platform:\n\n"
     )
     body += "\n".join(f"- **{c}**: blurb describing {c}" for c in components)
     return _idea(
@@ -92,12 +90,14 @@ class TestValidateIdeaRegular:
     def test_fails_on_scope_misalignment(self):
         """Description talks about tracing, MVP scope talks about billing —
         clear flow disconnect."""
-        result = validate_idea(_idea(
-            mvp_scope=(
-                "Phase 1: build a billing dashboard with invoice generation. "
-                "Phase 2: integrate Stripe payments and tax calculation."
-            ),
-        ))
+        result = validate_idea(
+            _idea(
+                mvp_scope=(
+                    "Phase 1: build a billing dashboard with invoice generation. "
+                    "Phase 2: integrate Stripe payments and tax calculation."
+                ),
+            )
+        )
         assert result.verdict in ("warn", "fail")
         align = next(c for c in result.checks if c["name"] == "scope_alignment")
         assert align["status"] != "pass"
@@ -105,36 +105,42 @@ class TestValidateIdeaRegular:
 
 class TestValidateIdeaSuper:
     def test_passes_coherent_super(self):
-        result = validate_idea(_super_idea(
-            "Tracing Health Aggregation",
-            [
-                "Distributed Tracing Span Sampler",
-                "Tracing Anomaly Detector",
-                "Tracing Latency Aggregator",
-                "Tracing Drift Monitor",
-            ],
-        ))
+        result = validate_idea(
+            _super_idea(
+                "Tracing Health Aggregation",
+                [
+                    "Distributed Tracing Span Sampler",
+                    "Tracing Anomaly Detector",
+                    "Tracing Latency Aggregator",
+                    "Tracing Drift Monitor",
+                ],
+            )
+        )
         assert result.verdict in ("pass", "warn")
 
     def test_fails_when_super_has_too_few_components(self):
-        result = validate_idea(_super_idea(
-            "Lonely Super",
-            ["Only Component"],
-        ))
+        result = validate_idea(
+            _super_idea(
+                "Lonely Super",
+                ["Only Component"],
+            )
+        )
         coh = next(c for c in result.checks if c["name"] == "super_components_coherent")
         assert coh["status"] == "fail"
 
     def test_warns_on_super_with_unrelated_components(self):
         """No theme cohesion: billing + tracing + crypto + emoji."""
-        result = validate_idea(_super_idea(
-            "Random Bundle",
-            [
-                "Billing Dashboard",
-                "Tracing Anomaly Detector",
-                "Crypto Key Rotator",
-                "Emoji Picker",
-            ],
-        ))
+        result = validate_idea(
+            _super_idea(
+                "Random Bundle",
+                [
+                    "Billing Dashboard",
+                    "Tracing Anomaly Detector",
+                    "Crypto Key Rotator",
+                    "Emoji Picker",
+                ],
+            )
+        )
         coh = next(c for c in result.checks if c["name"] == "super_components_coherent")
         assert coh["status"] != "pass"
 

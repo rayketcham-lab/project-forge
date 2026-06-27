@@ -54,10 +54,12 @@ class TestLeastCoveredSlot:
         from project_forge.engine.super_ideas import pick_least_covered_slot
 
         for i in range(5):
-            await db.save_idea(_super_in_category(
-                f"PQC Item {i}",
-                IdeaCategory.PQC_CRYPTOGRAPHY,
-            ))
+            await db.save_idea(
+                _super_in_category(
+                    f"PQC Item {i}",
+                    IdeaCategory.PQC_CRYPTOGRAPHY,
+                )
+            )
         slot = await pick_least_covered_slot(db)
         assert slot != 0
 

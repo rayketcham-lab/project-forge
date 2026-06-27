@@ -57,8 +57,7 @@ class TestClaudeCodeBackend:
     def test_call_returns_none_on_nonzero_exit(self):
         from project_forge.engine.llm_backend import ClaudeCodeBackend
 
-        with patch("subprocess.run",
-                   side_effect=subprocess.CalledProcessError(returncode=1, cmd=["claude"])):
+        with patch("subprocess.run", side_effect=subprocess.CalledProcessError(returncode=1, cmd=["claude"])):
             assert ClaudeCodeBackend().call("p") is None
 
     def test_call_returns_none_on_empty_stdout(self):
@@ -135,6 +134,7 @@ class TestResolveBackend:
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         # Also clear settings.anthropic_api_key
         from project_forge.config import settings as _settings
+
         monkeypatch.setattr(_settings, "anthropic_api_key", "")
         with patch("project_forge.engine.llm_backend._has_claude_cli", return_value=True):
             be = resolve_backend()
@@ -146,6 +146,7 @@ class TestResolveBackend:
         monkeypatch.delenv("FORGE_LLM_BACKEND", raising=False)
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         from project_forge.config import settings as _settings
+
         monkeypatch.setattr(_settings, "anthropic_api_key", "")
         with patch("project_forge.engine.llm_backend._has_claude_cli", return_value=False):
             assert resolve_backend() is None
@@ -158,6 +159,7 @@ class TestResolveBackend:
         monkeypatch.delenv("FORGE_LLM_MODEL", raising=False)
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         from project_forge.config import settings as _settings
+
         monkeypatch.setattr(_settings, "anthropic_api_key", "")
         with patch("project_forge.engine.llm_backend._has_claude_cli", return_value=True):
             be = resolve_backend()
@@ -169,6 +171,7 @@ class TestResolveBackend:
 
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         from project_forge.config import settings as _settings
+
         monkeypatch.setattr(_settings, "anthropic_api_key", "")
         monkeypatch.setenv("FORGE_LLM_MODEL", "haiku")
         with patch("project_forge.engine.llm_backend._has_claude_cli", return_value=True):

@@ -81,10 +81,14 @@ class TestNoBackend:
         from project_forge.engine import llm_generator
 
         monkeypatch.setattr(
-            llm_generator, "resolve_cheap_backend", lambda: None,
+            llm_generator,
+            "resolve_cheap_backend",
+            lambda: None,
         )
         result = await llm_generator.generate_idea_llm(
-            db, IdeaCategory.AUTOMATION_INCOME, backend=None,
+            db,
+            IdeaCategory.AUTOMATION_INCOME,
+            backend=None,
         )
         assert result is None
 
@@ -149,16 +153,18 @@ class TestAntiSimilarity:
         from project_forge.models import Idea
 
         for n in ("Subscriber Churn Predictor", "Open-Rate Forecaster"):
-            await db.save_idea(Idea(
-                name=n,
-                tagline="t",
-                description="d",
-                category=IdeaCategory.AUTOMATION_INCOME,
-                market_analysis="m",
-                feasibility_score=0.7,
-                mvp_scope="mvp",
-                tech_stack=["python"],
-            ))
+            await db.save_idea(
+                Idea(
+                    name=n,
+                    tagline="t",
+                    description="d",
+                    category=IdeaCategory.AUTOMATION_INCOME,
+                    market_analysis="m",
+                    feasibility_score=0.7,
+                    mvp_scope="mvp",
+                    tech_stack=["python"],
+                )
+            )
 
         backend = _stub_backend(_OK_PAYLOAD)
         await generate_idea_llm(
@@ -234,7 +240,10 @@ class TestParsing:
         backend.name = "stub"
         backend.call = MagicMock(return_value="not json at all !!")
         result = await generate_idea_llm(
-            db, IdeaCategory.AUTOMATION_INCOME, mode="novel", backend=backend,
+            db,
+            IdeaCategory.AUTOMATION_INCOME,
+            mode="novel",
+            backend=backend,
         )
         assert result is None
 
@@ -247,7 +256,10 @@ class TestParsing:
         wrapped = f"```json\n{json.dumps(_OK_PAYLOAD)}\n```"
         backend.call = MagicMock(return_value=wrapped)
         result = await generate_idea_llm(
-            db, IdeaCategory.AUTOMATION_INCOME, mode="novel", backend=backend,
+            db,
+            IdeaCategory.AUTOMATION_INCOME,
+            mode="novel",
+            backend=backend,
         )
         assert result is not None
         assert result.idea.name == _OK_PAYLOAD["name"]
@@ -258,7 +270,10 @@ class TestParsing:
 
         backend = _stub_backend(_OK_PAYLOAD)
         result = await generate_idea_llm(
-            db, IdeaCategory.AUTOMATION_INCOME, mode="inversion", backend=backend,
+            db,
+            IdeaCategory.AUTOMATION_INCOME,
+            mode="inversion",
+            backend=backend,
         )
         assert result is not None
         assert result.idea.generation_mode == "inversion"

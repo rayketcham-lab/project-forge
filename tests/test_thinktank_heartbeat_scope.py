@@ -22,8 +22,7 @@ from httpx import ASGITransport, AsyncClient
 from project_forge.models import FilteredIdea, Idea, IdeaCategory
 
 
-def _idea(name: str, *, category: IdeaCategory, days_ago: int = 0,
-          status: str = "new") -> Idea:
+def _idea(name: str, *, category: IdeaCategory, days_ago: int = 0, status: str = "new") -> Idea:
     return Idea(
         name=name,
         tagline=f"tag {name}",

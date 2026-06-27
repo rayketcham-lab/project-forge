@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Scoreboard - Project Forge{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div class="container">
+        <h1>&#128202; Scoreboard</h1>
+        <p class="page-subtitle">
+            The engine predicts &mdash; this is where it checks whether it was
+            <strong>right</strong>. Real outcome signals captured for its bets,
+            calibrated against what it predicted. {{ signal_count }} signal{{ '' if signal_count == 1 else 's' }} captured.
+            Recalibration stays human-gated &mdash; these are recommendations, not auto-applied.
+        </p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+
+        <h2>Predicted vs realized</h2>
+        {% if cal.axes %}
+        <table class="data-table">
+            <thead>
+                <tr><th>Axis</th><th>n</th><th>Direction</th><th>Avg predicted</th><th>Avg realized</th></tr>
+            </thead>
+            <tbody>
+                {% for axis, a in cal.axes.items() %}
+                <tr>
+                    <td><code>{{ axis }}</code></td>
+                    <td>{{ a.n }}</td>
+                    <td>
+                        <span class="status-pill status-{{ 'approved' if a.direction == 'aligned' else 'rejected' if a.direction == 'inverted' else 'new' }}">
+                            {{ a.direction }}
+                        </span>
+                    </td>
+                    <td>{{ a.avg_predicted }}</td>
+                    <td>{{ a.avg_realized }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state"><p>No outcome signals captured yet. The <code>scoreboard</code> cadence fills this in autonomously.</p></div>
+        {% endif %}
+
+        {% if cal.recommendations %}
+        <h2>What the engine recommends to itself</h2>
+        <ul class="recs-list">
+            {% for r in cal.recommendations %}<li>{{ r }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+
+        {% if cal.categories %}
+        <h2>By category</h2>
+        <table class="data-table">
+            <thead><tr><th>Category</th><th>n</th><th>Avg predicted</th><th>Avg realized</th></tr></thead>
+            <tbody>
+                {% for cat, c in cal.categories.items() %}
+                <tr><td><code>{{ cat }}</code></td><td>{{ c.n }}</td><td>{{ c.avg_predicted }}</td><td>{{ c.avg_realized }}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+    </div>
+</section>
+{% endblock %}

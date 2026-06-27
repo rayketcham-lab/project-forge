@@ -40,13 +40,15 @@ def parse_ietf_rss(xml_text: str) -> list[dict]:
         pub = (item.findtext("pubDate") or "").strip()
         if not title:
             continue
-        items.append({
-            "id": title,  # draft name is the natural id
-            "title": title,
-            "summary": desc,
-            "url": link,
-            "ts": pub,
-        })
+        items.append(
+            {
+                "id": title,  # draft name is the natural id
+                "title": title,
+                "summary": desc,
+                "url": link,
+                "ts": pub,
+            }
+        )
     return items
 
 

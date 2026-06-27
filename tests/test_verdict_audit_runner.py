@@ -103,9 +103,11 @@ class TestRunAuditCycle:
             }
 
         from unittest.mock import patch
+
         with patch.object(verdict_audit_runner, "_re_evaluate_challenge", _stub_re):
             result = await verdict_audit_runner.run_verdict_audit_cycle(
-                db, sample_rate=1.0,
+                db,
+                sample_rate=1.0,
             )
         assert result["audited"] == 1
         # 'strengthen' → 'narrow' is a non-trivial divergence.
@@ -123,22 +125,26 @@ class TestRunAuditCycle:
         idea = _idea("Bulk")
         await db.save_idea(idea)
         for i in range(10):
-            await db.save_challenge(Challenge(
-                idea_id=idea.id,
-                question=f"q{i}",
-                response="r",
-                verdict="strengthen",
-                confidence=0.5,
-            ))
+            await db.save_challenge(
+                Challenge(
+                    idea_id=idea.id,
+                    question=f"q{i}",
+                    response="r",
+                    verdict="strengthen",
+                    confidence=0.5,
+                )
+            )
 
         async def _stub_re(idea_obj, q, ov, ot):
-            return {"response": "ok", "verdict": "strengthen", "confidence": 0.7,
-                    "audit_notes": ""}
+            return {"response": "ok", "verdict": "strengthen", "confidence": 0.7, "audit_notes": ""}
 
         from unittest.mock import patch
+
         with patch.object(verdict_audit_runner, "_re_evaluate_challenge", _stub_re):
             result = await verdict_audit_runner.run_verdict_audit_cycle(
-                db, sample_rate=0.5, seed=42,
+                db,
+                sample_rate=0.5,
+                seed=42,
             )
         assert result["audited"] == 5
 
@@ -158,16 +164,18 @@ class TestRunAuditCycle:
         await db.save_challenge(challenge)
 
         async def _stub(idea_obj, q, ov, ot):
-            return {"response": "x", "verdict": "no_change", "confidence": 0.5,
-                    "audit_notes": ""}
+            return {"response": "x", "verdict": "no_change", "confidence": 0.5, "audit_notes": ""}
 
         from unittest.mock import patch
+
         with patch.object(verdict_audit_runner, "_re_evaluate_challenge", _stub):
             first = await verdict_audit_runner.run_verdict_audit_cycle(
-                db, sample_rate=1.0,
+                db,
+                sample_rate=1.0,
             )
             second = await verdict_audit_runner.run_verdict_audit_cycle(
-                db, sample_rate=1.0,
+                db,
+                sample_rate=1.0,
             )
         assert first["audited"] == 1
         assert second["audited"] == 0

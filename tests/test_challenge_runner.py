@@ -205,7 +205,9 @@ class TestChallengeIdeaFnFallback:
             lambda: None,
         ):
             result = await challenge_runner._challenge_idea(
-                idea, "is this real?", tone="skeptical",
+                idea,
+                "is this real?",
+                tone="skeptical",
             )
 
         assert result["verdict"] == "no_change"
@@ -222,17 +224,16 @@ class TestChallengeIdeaFnFallback:
             name = "stub"
 
             def call(self, _prompt):
-                return (
-                    '{"response":"good","verdict":"strengthen",'
-                    '"confidence":0.9,"changes":[]}'
-                )
+                return '{"response":"good","verdict":"strengthen","confidence":0.9,"changes":[]}'
 
         with patch(
             "project_forge.cron.challenge_runner.resolve_backend",
             lambda: _StubBackend(),
         ):
             result = await challenge_runner._challenge_idea(
-                idea, "go", tone="skeptical",
+                idea,
+                "go",
+                tone="skeptical",
             )
 
         assert result["verdict"] == "strengthen"

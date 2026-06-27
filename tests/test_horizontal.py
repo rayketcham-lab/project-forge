@@ -22,10 +22,13 @@ def _disable_llm_generator(monkeypatch):
     deterministic template path AND fast runs (~5s saved per test).
     Force the LLM path to return None so every test exercises the
     template fallback."""
+
     async def _none(*_a, **_kw):
         return None
+
     monkeypatch.setattr(
-        "project_forge.cron.horizontal.generate_idea_llm", _none,
+        "project_forge.cron.horizontal.generate_idea_llm",
+        _none,
     )
 
 
@@ -86,6 +89,7 @@ class TestCategoryPairLog:
         # nC2 pairs across all IdeaCategory values — compute rather than
         # hardcode so adding categories doesn't break this test.
         from project_forge.models import IdeaCategory
+
         n = len(IdeaCategory)
         expected_pairs = n * (n - 1) // 2
         assert len(pairs) == expected_pairs

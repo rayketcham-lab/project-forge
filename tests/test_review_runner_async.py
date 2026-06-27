@@ -89,8 +89,7 @@ async def test_review_calls_async_client_not_sync():
 
     fake_sync_anthropic_class = MagicMock(
         side_effect=AssertionError(
-            "_review_idea_with_api called the SYNC anthropic.Anthropic class. "
-            "It must use AsyncAnthropic.",
+            "_review_idea_with_api called the SYNC anthropic.Anthropic class. It must use AsyncAnthropic.",
         ),
     )
 
@@ -100,11 +99,11 @@ async def test_review_calls_async_client_not_sync():
 
     with patch.dict("sys.modules", {"anthropic": fake_module}):
         result = await review_runner._review_idea_with_api(
-            _stub_idea(), api_key="sk-test", model="claude-sonnet-4-6",
+            _stub_idea(),
+            api_key="sk-test",
+            model="claude-sonnet-4-6",
         )
 
     assert fake_async_anthropic_class.called, "AsyncAnthropic was never called"
-    assert fake_async_client.messages.create.await_count == 1, (
-        "messages.create must be awaited exactly once"
-    )
+    assert fake_async_client.messages.create.await_count == 1, "messages.create must be awaited exactly once"
     assert result["verdict"] == "keep"

@@ -33,8 +33,7 @@ _CONTRIBUTE_DESC = (
     " (feature doesn't exist yet, but belongs there)"
 )
 _DISCARD_DESC = (
-    '"discard": Already covered by an existing repo\'s scope, too generic,'
-    " or derivative — not worth tracking"
+    '"discard": Already covered by an existing repo\'s scope, too generic, or derivative — not worth tracking'
 )
 _NEW_PROJECT_DESC = '"new_project": Genuinely novel — no existing repo covers this territory'
 _JSON_FORMAT = (

@@ -68,8 +68,7 @@ async def generate_cross_idea(
         # Note the cross-category bridge inline so the routing layer's
         # category-pair telemetry still has something to work with.
         idea.description = (
-            idea.description
-            + "\n\n**Cross-category bridge:** "
+            idea.description + "\n\n**Cross-category bridge:** "
             f"primary {primary_cat.value} × secondary {secondary_cat.value} "
             f"(LLM mode: {llm_result.mode})."
         )

@@ -186,9 +186,7 @@ class TestAppJSSafeJsonHelper:
         )
         with open(js_path) as f:
             js = f.read()
-        assert "function safeJson" in js or "safeJson" in js, (
-            "app.js must define safeJson() helper"
-        )
+        assert "function safeJson" in js or "safeJson" in js, "app.js must define safeJson() helper"
 
     def test_no_bare_json_on_error_paths(self):
         """Error paths that open a block on !ok must use safeJson(), not bare .json()."""
@@ -216,10 +214,7 @@ class TestAppJSSafeJsonHelper:
             if "await resp.json()" in stripped and "safeJson" not in stripped:
                 # Only flag when inside a block-style error guard (has opening brace)
                 context = "".join(lines[max(0, i - 4) : i]).lower()
-                is_block_error = (
-                    ("!resp.ok) {" in context or "!response.ok) {" in context)
-                    and "throw" not in context
-                )
+                is_block_error = ("!resp.ok) {" in context or "!response.ok) {" in context) and "throw" not in context
                 if is_block_error:
                     violations.append(f"Line {i}: {stripped}")
             if "await r.json()" in stripped and "safeJson" not in stripped:
@@ -228,8 +223,7 @@ class TestAppJSSafeJsonHelper:
                     violations.append(f"Line {i}: {stripped}")
 
         assert violations == [], (
-            "Bare .json() calls inside !ok error blocks found — use safeJson() instead:\n"
-            + "\n".join(violations)
+            "Bare .json() calls inside !ok error blocks found — use safeJson() instead:\n" + "\n".join(violations)
         )
 
     def test_promote_proposal_checks_ok_before_json(self):

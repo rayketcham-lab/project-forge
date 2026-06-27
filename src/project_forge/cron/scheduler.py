@@ -111,9 +111,7 @@ async def generate_and_store(db: Database, generator: IdeaGenerator) -> Idea:
 
     # Build portfolio context for generation prompt
     repos = await db.list_repo_registry()
-    portfolio_context = (
-        "\n".join(f"- {r.repo_full_name}: {r.description}" for r in repos) if repos else None
-    )
+    portfolio_context = "\n".join(f"- {r.repo_full_name}: {r.description}" for r in repos) if repos else None
 
     # Build saturation/filter-rate summary so Claude knows what to avoid (Phase 4 wiring)
     from project_forge.engine.telemetry import build_filter_summary
@@ -177,13 +175,9 @@ async def generate_and_store(db: Database, generator: IdeaGenerator) -> Idea:
                 return None
 
             if decision.action == "contribute" and decision.target_repo:
-                logger.info(
-                    "Idea '%s' routed to %s: %s", idea.name, decision.target_repo, decision.reason
-                )
+                logger.info("Idea '%s' routed to %s: %s", idea.name, decision.target_repo, decision.reason)
                 try:
-                    issue_url = _create_enhancement_issue(
-                        decision.target_repo, idea, decision.reason
-                    )
+                    issue_url = _create_enhancement_issue(decision.target_repo, idea, decision.reason)
                     await db.update_idea_urls(idea.id, github_issue_url=issue_url)
                 except Exception as contrib_err:
                     logger.error("Failed to create enhancement issue: %s", contrib_err)

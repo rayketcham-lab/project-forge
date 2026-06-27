@@ -15,3 +15,33 @@ venv/
 .claude/settings.local.json
 .claude/*.bak/
 .claude/worktrees/
+.claude/tests/
+
+# Secrets + local env — never commit (public repo)
+secrets/
+secrets
+.env.*
+*.pem
+*.key
+
+# Coverage + caches
+.coverage
+.coverage.*
+htmlcov/
+
+# Editor / tooling / shell artifacts
+.idea/
+.idea
+.vscode/
+.vscode
+.mcp.json
+.ripgreprc
+.gitconfig
+.bash_profile
+.bashrc
+.profile
+.zprofile
+.zshrc
+
+# Dev-only reload trigger (not source)
+src/project_forge/_reload_trigger.py

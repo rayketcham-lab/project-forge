@@ -72,8 +72,15 @@ class TestApiTop:
         resp = await client.get("/api/money-bots/top?limit=1")
         item = resp.json()[0]
         for field in (
-            "id", "name", "tagline", "category", "fundability_score",
-            "generation_mode", "status", "github_issue_url", "auto_promoted_at",
+            "id",
+            "name",
+            "tagline",
+            "category",
+            "fundability_score",
+            "generation_mode",
+            "status",
+            "github_issue_url",
+            "auto_promoted_at",
         ):
             assert field in item
 

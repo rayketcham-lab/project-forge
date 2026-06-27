@@ -28,10 +28,34 @@ from project_forge.models import Idea
 from project_forge.storage.db import Database
 
 _STOP = {
-    "a", "an", "the", "and", "or", "for", "to", "with", "of", "in", "on",
-    "via", "using", "tool", "system", "platform", "engine", "framework",
-    "suite", "service", "based", "is", "be", "by", "across", "into",
-    "phase", "step",
+    "a",
+    "an",
+    "the",
+    "and",
+    "or",
+    "for",
+    "to",
+    "with",
+    "of",
+    "in",
+    "on",
+    "via",
+    "using",
+    "tool",
+    "system",
+    "platform",
+    "engine",
+    "framework",
+    "suite",
+    "service",
+    "based",
+    "is",
+    "be",
+    "by",
+    "across",
+    "into",
+    "phase",
+    "step",
 }
 _COMPONENT_BULLET_RE = re.compile(r"^-\s*\*\*(?P<name>[^*]+)\*\*", re.MULTILINE)
 _WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9]+")
@@ -121,10 +145,7 @@ def _check_scope_alignment(idea: Idea) -> dict[str, Any]:
         return {
             "name": "scope_alignment",
             "status": "fail",
-            "reason": (
-                f"description ↔ mvp_scope overlap={ratio:.0%} (<15%) — "
-                "MVP may not match the described project"
-            ),
+            "reason": (f"description ↔ mvp_scope overlap={ratio:.0%} (<15%) — MVP may not match the described project"),
         }
     if ratio < 0.30:
         return {
@@ -159,10 +180,7 @@ def _check_super_components(idea: Idea) -> dict[str, Any] | None:
         return {
             "name": "super_components_coherent",
             "status": "warn",
-            "reason": (
-                "no significant word appears in 2+ component names — "
-                "components may not share a theme"
-            ),
+            "reason": ("no significant word appears in 2+ component names — components may not share a theme"),
         }
     return {"name": "super_components_coherent", "status": "pass", "reason": ""}
 
@@ -194,9 +212,7 @@ CREATE TABLE IF NOT EXISTS approval_checks (
     created_at TEXT NOT NULL
 );
 """
-_CREATE_IDEA_INDEX_SQL = (
-    "CREATE INDEX IF NOT EXISTS idx_approval_checks_idea ON approval_checks(idea_id);"
-)
+_CREATE_IDEA_INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_approval_checks_idea ON approval_checks(idea_id);"
 
 
 async def _ensure_table(db: Database) -> None:
@@ -219,8 +235,7 @@ async def save_approval_check(
     )
     row_id = uuid.uuid4().hex[:12]
     await db.db.execute(
-        "INSERT INTO approval_checks (id, idea_id, verdict, checks, created_at) "
-        "VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO approval_checks (id, idea_id, verdict, checks, created_at) VALUES (?, ?, ?, ?, ?)",
         (
             row_id,
             idea_id,

@@ -188,9 +188,7 @@ class TestGeneratedNameQuality:
                 if word.lower() in _NAME_STOP_WORDS and len(word) >= 5:
                     bad_names.append((idea.name, word, f"base={base}"))
 
-        assert bad_names == [], (
-            f"Stop words found in base concept of generated super ideas: {bad_names}"
-        )
+        assert bad_names == [], f"Stop words found in base concept of generated super ideas: {bad_names}"
 
     @pytest.mark.asyncio
     async def test_no_hyphenated_concept_words_in_names(self, db_with_ideas):
@@ -202,8 +200,7 @@ class TestGeneratedNameQuality:
 
         supers = await db_with_ideas.list_super_ideas()
         hyphenated = [
-            idea.name for idea in supers
-            if re.search(r"[A-Za-z]+-[A-Za-z]+", idea.name.replace("[SUPER] ", ""))
+            idea.name for idea in supers if re.search(r"[A-Za-z]+-[A-Za-z]+", idea.name.replace("[SUPER] ", ""))
         ]
         assert hyphenated == [], f"Hyphenated names generated: {hyphenated}"
 
@@ -220,9 +217,7 @@ class TestGeneratedNameQuality:
             base = _super_base_name(idea.name)
             # Base must have at least one meaningful word (5+ chars, not a stop word)
             base_words = [w for w in base.split() if len(w) >= 5 and w not in _NAME_STOP_WORDS]
-            assert base_words, (
-                f"Super idea '{idea.name}' has no meaningful keywords in base '{base}'"
-            )
+            assert base_words, f"Super idea '{idea.name}' has no meaningful keywords in base '{base}'"
 
 
 # ── purge_bad_super_ideas: DB method to clean pre-fix junk ────────────
@@ -246,11 +241,11 @@ class TestPurgeBadSuperIdeas:
     @pytest.mark.asyncio
     async def test_archives_stop_word_names(self, db):
         """Names with stop-word or single-keyword bases must be archived."""
-        bad1 = _super("[SUPER] Well Known Defense Suite")         # base "well known" — both stop words
-        bad2 = _super("[SUPER] Multi Control Command Center")     # base "multi control" — both stop words
-        bad3 = _super("[SUPER] Insecure Direct Observatory")      # base "insecure direct" — both stop words
-        bad4 = _super("[SUPER] Mapper & Multi Lifecycle Platform") # base "mapper multi" — both stop words
-        bad5 = _super("[SUPER] Migration Post Command Center")    # base "migration post" — 1 meaningful word only
+        bad1 = _super("[SUPER] Well Known Defense Suite")  # base "well known" — both stop words
+        bad2 = _super("[SUPER] Multi Control Command Center")  # base "multi control" — both stop words
+        bad3 = _super("[SUPER] Insecure Direct Observatory")  # base "insecure direct" — both stop words
+        bad4 = _super("[SUPER] Mapper & Multi Lifecycle Platform")  # base "mapper multi" — both stop words
+        bad5 = _super("[SUPER] Migration Post Command Center")  # base "migration post" — 1 meaningful word only
         for b in [bad1, bad2, bad3, bad4, bad5]:
             await db.save_idea(b)
 
@@ -293,9 +288,9 @@ class TestPurgeBadSuperIdeas:
     async def test_returns_count_of_archived(self, db):
         """purge_bad_super_ideas must return the set of archived idea IDs."""
         bad_names = [
-            "[SUPER] Well Known Defense Suite",       # all stop words
-            "[SUPER] Multi Control Command Center",   # all stop words
-            "[SUPER] Certificate-Pinning Observatory", # hyphenated
+            "[SUPER] Well Known Defense Suite",  # all stop words
+            "[SUPER] Multi Control Command Center",  # all stop words
+            "[SUPER] Certificate-Pinning Observatory",  # hyphenated
             "[SUPER] Migration Post Command Center",  # only 1 meaningful keyword
         ]
         for n in bad_names:

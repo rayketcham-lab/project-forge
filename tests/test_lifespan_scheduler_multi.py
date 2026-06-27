@@ -179,8 +179,7 @@ class TestSupervisor:
         from project_forge.web.lifespan_scheduler import Cadence
 
         cadences = [
-            Cadence(name=str(i), interval=timedelta(hours=1), runner=AsyncMock(), tick_interval=0.5)
-            for i in range(3)
+            Cadence(name=str(i), interval=timedelta(hours=1), runner=AsyncMock(), tick_interval=0.5) for i in range(3)
         ]
         task = lifespan_scheduler.start_scheduler(db, cadences=cadences)
         await asyncio.sleep(0.05)

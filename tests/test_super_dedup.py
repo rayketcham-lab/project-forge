@@ -221,11 +221,7 @@ class TestSuperIdeaGenerationDedup:
 
         # If the quality gate works, no "N-capability synthesis" super should be stored
         all_ideas = await db.list_ideas(limit=200)
-        bad_supers = [
-            i for i in all_ideas
-            if i.name.startswith("[SUPER]") and "capability synthesis" in i.tagline
-        ]
-        assert bad_supers == [], (
-            "Generic fallback taglines must not be stored: "
-            + ", ".join(f"{i.name!r}: {i.tagline!r}" for i in bad_supers)
+        bad_supers = [i for i in all_ideas if i.name.startswith("[SUPER]") and "capability synthesis" in i.tagline]
+        assert bad_supers == [], "Generic fallback taglines must not be stored: " + ", ".join(
+            f"{i.name!r}: {i.tagline!r}" for i in bad_supers
         )

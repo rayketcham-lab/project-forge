@@ -103,25 +103,35 @@ class TestMetricValue:
 class TestValidatePatch:
     def test_accepts_when_drop_metric_dropped(self):
         baseline = _snapshot()
-        after = {**baseline,
-                 "filter_rate_by_category": {
-                     IdeaCategory.SECURITY_TOOL: 0.70,  # was 0.85
-                     IdeaCategory.PRIVACY: 0.40,
-                 }}
+        after = {
+            **baseline,
+            "filter_rate_by_category": {
+                IdeaCategory.SECURITY_TOOL: 0.70,  # was 0.85
+                IdeaCategory.PRIVACY: 0.40,
+            },
+        }
         ok, reason = validate_patch_against_metrics(
-            baseline, after, "filter_rate[security-tool]", "drop",
+            baseline,
+            after,
+            "filter_rate[security-tool]",
+            "drop",
         )
         assert ok, reason
 
     def test_rejects_when_drop_metric_rose(self):
         baseline = _snapshot()
-        after = {**baseline,
-                 "filter_rate_by_category": {
-                     IdeaCategory.SECURITY_TOOL: 0.92,  # got worse
-                     IdeaCategory.PRIVACY: 0.40,
-                 }}
+        after = {
+            **baseline,
+            "filter_rate_by_category": {
+                IdeaCategory.SECURITY_TOOL: 0.92,  # got worse
+                IdeaCategory.PRIVACY: 0.40,
+            },
+        }
         ok, reason = validate_patch_against_metrics(
-            baseline, after, "filter_rate[security-tool]", "drop",
+            baseline,
+            after,
+            "filter_rate[security-tool]",
+            "drop",
         )
         assert not ok
         assert "regress" in reason.lower() or "worse" in reason.lower() or "rose" in reason.lower()
@@ -130,7 +140,10 @@ class TestValidatePatch:
         baseline = _snapshot()
         after = {**baseline}
         ok, reason = validate_patch_against_metrics(
-            baseline, after, "filter_rate[security-tool]", "drop",
+            baseline,
+            after,
+            "filter_rate[security-tool]",
+            "drop",
         )
         assert not ok
         assert "no" in reason.lower() or "unchanged" in reason.lower() or "noop" in reason.lower()
@@ -147,14 +160,20 @@ class TestValidatePatch:
         # the right direction. Test that the comparator respects the literal direction.
         # If author said 'rise' and value went DOWN, that's a regression.
         ok, _ = validate_patch_against_metrics(
-            baseline, after, "novelty", "rise",
+            baseline,
+            after,
+            "novelty",
+            "rise",
         )
         # 0.85 < 0.93, so for direction=rise this is a regress
         assert not ok
 
     def test_unknown_metric_rejects(self):
         ok, reason = validate_patch_against_metrics(
-            _snapshot(), _snapshot(), "unobtanium", "drop",
+            _snapshot(),
+            _snapshot(),
+            "unobtanium",
+            "drop",
         )
         assert not ok
         assert "unknown" in reason.lower() or "missing" in reason.lower()

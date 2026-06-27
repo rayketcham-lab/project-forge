@@ -46,8 +46,16 @@ _PAID_KEYWORDS = re.compile(
 
 # Tech stack tokens that imply payment integration.
 _PAYMENT_STACK = {
-    "stripe", "paddle", "lemonsqueezy", "lemon-squeezy", "chargebee",
-    "recurly", "shopify", "gumroad", "podia", "memberful",
+    "stripe",
+    "paddle",
+    "lemonsqueezy",
+    "lemon-squeezy",
+    "chargebee",
+    "recurly",
+    "shopify",
+    "gumroad",
+    "podia",
+    "memberful",
 }
 
 # Buyer signals: a market_analysis that names a SPECIFIC paying audience.
@@ -61,6 +69,12 @@ _BUYER_SIGNAL = re.compile(
 
 _CATEGORY_BONUS: dict[IdeaCategory, float] = {
     IdeaCategory.AUTOMATION_INCOME: 0.20,
+    # v0.16 money-bot expansion — paid-product shapes with the clearest
+    # path to recurring revenue rank at or near the top of the bias.
+    IdeaCategory.VERTICAL_SAAS: 0.20,
+    IdeaCategory.MICRO_SAAS: 0.18,
+    IdeaCategory.FINTECH_TOOLS: 0.17,
+    IdeaCategory.ECOMMERCE_TOOLS: 0.15,
     IdeaCategory.CREATOR_TOOLS: 0.12,
     IdeaCategory.CONSUMER_APP: 0.10,
     IdeaCategory.PRODUCTIVITY: 0.10,
@@ -87,11 +101,13 @@ def score_fundability_heuristic(idea: Idea) -> float:
         score += 0.15
 
     # Paid-product keywords in description + scope.
-    text_blob = " ".join([
-        idea.description or "",
-        idea.mvp_scope or "",
-        idea.tagline or "",
-    ])
+    text_blob = " ".join(
+        [
+            idea.description or "",
+            idea.mvp_scope or "",
+            idea.tagline or "",
+        ]
+    )
     if _PAID_KEYWORDS.search(text_blob):
         score += 0.15
 
@@ -99,8 +115,11 @@ def score_fundability_heuristic(idea: Idea) -> float:
     if _BUYER_SIGNAL.search(idea.market_analysis or ""):
         score += 0.15
 
-    # Category bonus.
+    # Category bonus + any learned nudge (v0.17 Scoreboard auto-tune; 0.0 unless opted in).
     score += _CATEGORY_BONUS.get(idea.category, 0.0)
+    from project_forge.engine.scoreboard import learned_nudge
+
+    score += learned_nudge("fundability", idea.category)
 
     # Description-level recurring-revenue hint.
     desc_lower = (idea.description or "").lower()
@@ -126,7 +145,7 @@ async def _llm_refine(idea: Idea, heuristic: float) -> float:
         f"**Market:** {idea.market_analysis}\n"
         f"**MVP:** {idea.mvp_scope}\n"
         f"**Tech:** {', '.join(idea.tech_stack)}\n\n"
-        "Reply: {\"score\": 0.0-1.0}"
+        'Reply: {"score": 0.0-1.0}'
     )
     raw = (backend.call(prompt) or "").strip()
     if "```json" in raw:

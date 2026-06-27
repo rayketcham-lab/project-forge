@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Labs - Project Forge{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div class="container">
+        <h1>&#129514; Labs</h1>
+        <p class="page-subtitle">
+            The engine's autonomous thinking &amp; doing avenues. The themed boards
+            (Money Bots / Claude Lab / Sniper) <em>generate</em> ideas; these close the
+            rest of the lifecycle &mdash; build, react, strategize, learn, and stress-test.
+        </p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="labs-grid">
+            <a class="labs-card" href="/scoreboard">
+                <span class="labs-verb">Learn</span>
+                <h3>&#128202; Scoreboard</h3>
+                <p>Captures real outcome signals for the engine's bets and checks
+                   predicted-vs-realized per axis. The loop that makes every other board smarter.</p>
+            </a>
+            <a class="labs-card" href="/foundry">
+                <span class="labs-verb">Build</span>
+                <h3>&#127981; Foundry</h3>
+                <p>Turns a top idea into a ready-to-create starter repo &mdash; file tree,
+                   starter issues, README. Repo creation stays human-gated.</p>
+            </a>
+            <a class="labs-card" href="/pulse">
+                <span class="labs-verb">React</span>
+                <h3>&#128225; Pulse</h3>
+                <p>Watches Hacker News + GitHub for what just changed and generates fresh
+                   ideas anchored to the live signal. Event-driven, not timer-driven.</p>
+            </a>
+            <a class="labs-card" href="/cartographer">
+                <span class="labs-verb">Strategize</span>
+                <h3>&#128506; Cartographer</h3>
+                <p>Meta-analysis over the whole corpus: white space, saturation, top clusters,
+                   and a "State of the Forge" memo with the recommended next bet.</p>
+            </a>
+            <a class="labs-card" href="/killboard">
+                <span class="labs-verb">Critique</span>
+                <h3>&#9760; Kill Board</h3>
+                <p>The pre-mortem. Ranks ideas by survival odds (most likely to die first) and
+                   makes the strongest case <em>against</em> each one before you commit.</p>
+            </a>
+            <a class="labs-card" href="/explore">
+                <span class="labs-verb">Per-idea</span>
+                <h3>&#128640; Launchpad &amp; &#129302; Recruiter</h3>
+                <p>On any idea's detail page: generate a launch-ready go-to-market brief
+                   (Launchpad) and a staffed build-cost estimate (Recruiter).</p>
+            </a>
+        </div>
+    </div>
+</section>
+{% endblock %}

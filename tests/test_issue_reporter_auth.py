@@ -33,6 +33,7 @@ class TestDashboardTokenPersistsAcrossReload:
         monkeypatch.delenv("FORGE_DASHBOARD_TOKEN_RUNTIME", raising=False)
 
         from project_forge.web import app as app_mod
+
         # Save originals so we can restore module state afterward
         original_db = app_mod.db
         original_token = app_mod._dashboard_token
@@ -59,6 +60,7 @@ class TestDashboardTokenPersistsAcrossReload:
         monkeypatch.delenv("FORGE_DASHBOARD_TOKEN_RUNTIME", raising=False)
 
         from project_forge.web import app as app_mod
+
         original_db = app_mod.db
         original_token = app_mod._dashboard_token
         try:
@@ -114,8 +116,7 @@ async def test_issue_report_post_with_dashboard_token_does_not_401(monkeypatch):
 
         # Anything but 401 is acceptable for the auth contract.
         assert resp.status_code != 401, (
-            f"Issue report rejected as Unauthorized (token={token[:8]}...). "
-            f"Body: {resp.text}"
+            f"Issue report rejected as Unauthorized (token={token[:8]}...). Body: {resp.text}"
         )
 
 

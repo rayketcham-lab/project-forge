@@ -1,12 +1,32 @@
 """Shared test fixtures."""
 
 import asyncio
+import os
+import sys
 from pathlib import Path
 
 import pytest
 import pytest_asyncio
 
 from project_forge.storage.db import Database
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_sessionfinish(session, exitstatus):
+    """Exit hard once all tests + reporting + coverage are done.
+
+    The session-scoped asyncio loop + aiosqlite worker threads can leave a
+    non-daemon thread that hangs interpreter teardown indefinitely on some
+    environments (the dev box with the `claude` CLI on PATH, and the
+    self-hosted CI runner). Everything that matters — results, the terminal
+    summary, and the coverage fail-under gate — has already run by the time
+    this `trylast` hook fires, so we flush and exit with pytest's computed
+    status instead of waiting on the broken cleanup. Honour the exit code so
+    a real failure (or a coverage miss) still reds the build.
+    """
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(int(exitstatus))
 
 
 @pytest.fixture(autouse=True)

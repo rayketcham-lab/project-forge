@@ -43,10 +43,7 @@ def _heuristic_idea_from_text(text: str, category_hint: str | None = None) -> Id
     sentences = [s.strip() for s in re.split(r"[.!?\n]", text) if len(s.strip()) > 10]
     tagline = sentences[0][:120] if sentences else "User-submitted idea fragment"
 
-    description = (
-        f"Idea expanded from a user fragment.\n\n"
-        f"Original input:\n{text.strip()}"
-    )
+    description = f"Idea expanded from a user fragment.\n\nOriginal input:\n{text.strip()}"
 
     return Idea(
         name=name,

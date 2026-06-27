@@ -120,6 +120,20 @@
 
 <section class="section">
     <div class="container">
+        <div class="pitch-card" id="engine-tools">
+            <h2>Engine Tools</h2>
+            <p class="muted">Turn this idea into action &mdash; a go-to-market brief or a staffed build estimate.</p>
+            <div class="hero-actions">
+                <button class="btn btn-primary" id="launchpad-btn" data-idea-id="{{ idea.id }}">&#128640; GTM Brief</button>
+                <button class="btn btn-outline" id="recruiter-btn" data-idea-id="{{ idea.id }}">&#129302; Build Estimate</button>
+            </div>
+            <pre id="engine-tools-result" class="engine-tools-result" hidden></pre>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
         <div class="pitch-card" id="compare-section">
             <h2>Compare to Existing Project</h2>
             <p class="prose">Check if this idea overlaps with an existing GitHub repo or brings something new.</p>
@@ -267,4 +281,5 @@
     </div>
 </section>
 {% endif %}
+<script src="/static/idea_tools.js?v=1"></script>
 {% endblock %}

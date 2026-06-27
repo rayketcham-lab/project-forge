@@ -82,8 +82,7 @@ def build_step_prompt(
     # Render accumulated Q/A so the LLM has the full context.
     if answers:
         qa_lines = "\n".join(
-            f"  Q{i+1}: {a.get('question', '?')}\n  A{i+1}: {a.get('answer', '')}"
-            for i, a in enumerate(answers)
+            f"  Q{i + 1}: {a.get('question', '?')}\n  A{i + 1}: {a.get('answer', '')}" for i, a in enumerate(answers)
         )
         qa_block = f"\nAnswers so far:\n{qa_lines}\n"
     else:
@@ -187,7 +186,10 @@ def run_wizard_step(
         return None
 
     prompt = build_step_prompt(
-        step=step, fragment=fragment, answers=answers, category_hint=category_hint,
+        step=step,
+        fragment=fragment,
+        answers=answers,
+        category_hint=category_hint,
     )
     raw = backend.call(prompt)
     if not raw:

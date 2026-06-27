@@ -83,10 +83,7 @@ async def _challenge_idea(
     if backend is None:
         logger.info("No LLM backend available; skipping challenge for %s", idea.id)
         return {
-            "response": (
-                "No LLM backend reachable at challenge time — skipped "
-                "(autonomous challenge runner)."
-            ),
+            "response": ("No LLM backend reachable at challenge time — skipped (autonomous challenge runner)."),
             "verdict": "no_change",
             "confidence": 0.0,
             "changes": [],

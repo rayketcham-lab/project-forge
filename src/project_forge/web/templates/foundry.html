@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Foundry - Project Forge{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div class="container">
+        <h1>&#9919; Foundry</h1>
+        <p class="page-subtitle">
+            {{ total }} candidate ideas ready to build. Select one to generate a
+            <strong>concrete scaffold plan</strong> — repo name, file tree,
+            starter issues, README, and first steps — ready for one-click creation.
+            Actual repo creation is <strong>human-gated</strong>.
+        </p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="foundry-layout">
+
+            {# Left column: candidate idea cards #}
+            <div class="foundry-candidates" id="foundry-candidates">
+                {% if ideas %}
+                {% for idea in ideas %}
+                <div class="foundry-card {% if loop.first %}foundry-card-active{% endif %}"
+                     data-idea-id="{{ idea.id }}"
+                     data-idea-name="{{ idea.name }}"
+                     tabindex="0"
+                     role="button"
+                     aria-pressed="{% if loop.first %}true{% else %}false{% endif %}">
+                    <div class="foundry-card-head">
+                        <span class="feasibility-badge">
+                            &#128736; {{ "%.2f"|format(idea.feasibility_score) }}
+                        </span>
+                        <span class="status-pill status-{{ idea.status }}">{{ idea.status }}</span>
+                    </div>
+                    <div class="foundry-card-name">{{ idea.name }}</div>
+                    <div class="foundry-card-tagline">{{ idea.tagline }}</div>
+                    <div class="foundry-card-foot">
+                        <code class="cat-tag">{{ idea.category.value }}</code>
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="empty-state">
+                    <p>No approved ideas yet. Approve ideas from
+                    <a href="/explore">Explore</a> and they will appear here.</p>
+                </div>
+                {% endif %}
+            </div>
+
+            {# Right column: scaffold plan panel #}
+            <div class="foundry-plan-panel" id="foundry-plan-panel"
+                 aria-live="polite" aria-atomic="false">
+                <div id="foundry-plan-loading" class="foundry-plan-loading" style="display:none">
+                    <span class="spinner"></span> Generating scaffold plan&hellip;
+                </div>
+                <div id="foundry-plan-error" class="foundry-plan-error" style="display:none"></div>
+                <div id="foundry-plan-content" class="foundry-plan-content">
+                    {% if plan and selected_idea %}
+                    <div class="foundry-plan-header">
+                        <h2 class="foundry-repo-name">
+                            <code>{{ plan.repo_name }}</code>
+                        </h2>
+                        <p class="foundry-repo-desc">{{ plan.description }}</p>
+                        <div class="foundry-meta">
+                            <span class="foundry-lang-badge">{{ plan.language }}</span>
+                        </div>
+                    </div>
+
+                    <div class="foundry-section">
+                        <h3>File Tree</h3>
+                        <ul class="foundry-file-tree">
+                            {% for path in plan.file_tree %}
+                            <li><code>{{ path }}</code></li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+
+                    <div class="foundry-section">
+                        <h3>Starter Issues</h3>
+                        <ol class="foundry-issues">
+                            {% for issue in plan.starter_issues %}
+                            <li>
+                                <strong>{{ issue.title }}</strong>
+                                {% if issue.body %}
+                                <p class="foundry-issue-body">{{ issue.body }}</p>
+                                {% endif %}
+                            </li>
+                            {% endfor %}
+                        </ol>
+                    </div>
+
+                    <div class="foundry-section">
+                        <h3>First Steps</h3>
+                        <ol class="foundry-steps">
+                            {% for step in plan.first_steps %}
+                            <li>{{ step }}</li>
+                            {% endfor %}
+                        </ol>
+                    </div>
+
+                    <div class="foundry-section foundry-readme">
+                        <h3>README Preview</h3>
+                        <pre class="foundry-readme-pre"><code>{{ plan.readme_md }}</code></pre>
+                    </div>
+
+                    <div class="foundry-actions">
+                        <a href="/ideas/{{ selected_idea.id }}" class="btn btn-outline">
+                            View Full Idea &rarr;
+                        </a>
+                        <button type="button" id="foundry-regen-btn"
+                                class="btn btn-primary"
+                                data-idea-id="{{ selected_idea.id }}">
+                            Regenerate Plan
+                        </button>
+                    </div>
+                    {% else %}
+                    <div class="foundry-plan-empty">
+                        <p>Select an idea on the left to generate its scaffold plan.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+<script src="/static/foundry.js?v=1"></script>
+{% endblock %}

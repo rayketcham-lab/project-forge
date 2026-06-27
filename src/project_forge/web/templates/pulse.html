@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Pulse - Project Forge{% endblock %}
+
+{% block content %}
+<div id="pulse-root"></div>
+<section class="page-header">
+    <div class="container">
+        <h1>&#9889; Pulse</h1>
+        <p class="page-subtitle">
+            {{ total }} live signals from <strong>Hacker News</strong> and
+            <strong>GitHub trending</strong> &mdash; the engine picks the hottest
+            signal right now and generates an idea anchored to what just changed
+            in the world. Figures are live fetches; no model memory.
+        </p>
+        <div class="churn-row">
+            <button id="pulse-churn-btn" class="btn btn-primary btn-churn" type="button">
+                <span class="churn-icon">&#9889;</span>
+                <span class="churn-label">Generate from hottest</span>
+            </button>
+            <div id="pulse-churn-status" class="churn-status"></div>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+
+        {% if hot_signal %}
+        <div class="pulse-hot-banner">
+            <span class="pulse-source-badge pulse-source-{{ hot_signal.source }}">{{ hot_signal.source }}</span>
+            <strong>Hottest right now:</strong>
+            <a href="{{ hot_signal.url }}" target="_blank" rel="noopener noreferrer">{{ hot_signal.title }}</a>
+            <span class="pulse-score">&#9650; {{ hot_signal.score }}</span>
+        </div>
+        {% endif %}
+
+        {% if signals %}
+        <table class="pulse-table">
+            <thead>
+                <tr>
+                    <th>Source</th>
+                    <th>Title</th>
+                    <th>Score</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sig in signals %}
+                <tr class="pulse-row">
+                    <td>
+                        <span class="pulse-source-badge pulse-source-{{ sig.source }}">{{ sig.source }}</span>
+                    </td>
+                    <td>
+                        <a href="{{ sig.url }}" target="_blank" rel="noopener noreferrer">{{ sig.title }}</a>
+                    </td>
+                    <td class="pulse-score">&#9650; {{ sig.score }}</td>
+                    <td class="pulse-ts">{{ sig.ts[:10] if sig.ts else '' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <p>No pulse signals available right now. The live fetch may have missed &mdash; try again shortly or check network access to HN Algolia and GitHub.</p>
+        </div>
+        {% endif %}
+
+    </div>
+</section>
+
+<script src="/static/pulse.js?v=1"></script>
+{% endblock %}

@@ -25,11 +25,14 @@ from project_forge.models import FilteredIdea, Idea, IdeaCategory
 from project_forge.storage.db import Database
 
 
-def _idea(name: str = "Some Idea", *,
-          desc: str = "We will edit src/project_forge/engine/prompts.py to do X.",
-          mvp: str = "Edit src/project_forge/engine/prompts.py and add tests.",
-          market: str = "Target metric: filter_rate[security-tool] should drop.",
-          score: float = 0.85) -> Idea:
+def _idea(
+    name: str = "Some Idea",
+    *,
+    desc: str = "We will edit src/project_forge/engine/prompts.py to do X.",
+    mvp: str = "Edit src/project_forge/engine/prompts.py and add tests.",
+    market: str = "Target metric: filter_rate[security-tool] should drop.",
+    score: float = 0.85,
+) -> Idea:
     return Idea(
         name=name,
         tagline="t",
@@ -118,7 +121,8 @@ class TestGenerationModePrompt:
         }
 
         prompt = build_introspection_prompt(
-            ctx, recent_improvements=[],
+            ctx,
+            recent_improvements=[],
             mode="generation",
             generation_signals=self._signals(),
         )
@@ -136,29 +140,35 @@ class TestGenerationModePrompt:
         from project_forge.engine.introspect import build_introspection_prompt
 
         ctx = {
-            "open_issues": [], "recent_commits": [],
-            "test_count": 0, "lint_status": "clean",
-            "code_stats": {}, "file_tree": [],
+            "open_issues": [],
+            "recent_commits": [],
+            "test_count": 0,
+            "lint_status": "clean",
+            "code_stats": {},
+            "file_tree": [],
         }
 
         prompt = build_introspection_prompt(
-            ctx, recent_improvements=[],
+            ctx,
+            recent_improvements=[],
             mode="generation",
             generation_signals=self._signals(),
         )
 
         # Must require touching specific generation files
-        for path_hint in ("engine/prompts.py", "engine/categories.py",
-                          "engine/super_ideas.py", "engine/router.py"):
+        for path_hint in ("engine/prompts.py", "engine/categories.py", "engine/super_ideas.py", "engine/router.py"):
             assert path_hint in prompt, f"Missing required path hint {path_hint!r}"
 
     def test_default_mode_is_code_fix_unchanged(self):
         from project_forge.engine.introspect import build_introspection_prompt
 
         ctx = {
-            "open_issues": [], "recent_commits": [],
-            "test_count": 0, "lint_status": "clean",
-            "code_stats": {}, "file_tree": [],
+            "open_issues": [],
+            "recent_commits": [],
+            "test_count": 0,
+            "lint_status": "clean",
+            "code_stats": {},
+            "file_tree": [],
         }
 
         # No mode argument → backward-compatible code-fix prompt
@@ -175,39 +185,47 @@ class TestValidateGenerationPatch:
     def test_accepts_well_formed_patch(self):
         from project_forge.engine.introspect import validate_generation_patch
 
-        ok = validate_generation_patch(_idea(
-            desc="Edit src/project_forge/engine/prompts.py to inject saturation summary.",
-            mvp="src/project_forge/engine/prompts.py + tests/test_prompts.py",
-            market="Target metric: filter_rate[security-tool] should drop by 10%.",
-        ))
+        ok = validate_generation_patch(
+            _idea(
+                desc="Edit src/project_forge/engine/prompts.py to inject saturation summary.",
+                mvp="src/project_forge/engine/prompts.py + tests/test_prompts.py",
+                market="Target metric: filter_rate[security-tool] should drop by 10%.",
+            )
+        )
         assert ok, "Well-formed patch must be accepted"
 
     def test_rejects_patch_without_metric_mention(self):
         from project_forge.engine.introspect import validate_generation_patch
 
-        ok = validate_generation_patch(_idea(
-            desc="Edit src/project_forge/engine/prompts.py.",
-            mvp="src/project_forge/engine/prompts.py",
-            market="This will be cool.",  # no metric named
-        ))
+        ok = validate_generation_patch(
+            _idea(
+                desc="Edit src/project_forge/engine/prompts.py.",
+                mvp="src/project_forge/engine/prompts.py",
+                market="This will be cool.",  # no metric named
+            )
+        )
         assert not ok, "Patch lacking metric declaration must be rejected"
 
     def test_rejects_patch_outside_generation_files(self):
         from project_forge.engine.introspect import validate_generation_patch
 
-        ok = validate_generation_patch(_idea(
-            desc="Edit src/project_forge/web/app.py to change CSS.",
-            mvp="src/project_forge/web/app.py",
-            market="Target metric: filter_rate should drop.",  # has metric
-        ))
+        ok = validate_generation_patch(
+            _idea(
+                desc="Edit src/project_forge/web/app.py to change CSS.",
+                mvp="src/project_forge/web/app.py",
+                market="Target metric: filter_rate should drop.",  # has metric
+            )
+        )
         assert not ok, "Patch on non-generation file must be rejected"
 
     def test_accepts_super_ideas_target(self):
         from project_forge.engine.introspect import validate_generation_patch
 
-        ok = validate_generation_patch(_idea(
-            desc="Edit src/project_forge/engine/super_ideas.py to expand stop words.",
-            mvp="engine/super_ideas.py",
-            market="Target metric: super_idea_base_collisions should drop.",
-        ))
+        ok = validate_generation_patch(
+            _idea(
+                desc="Edit src/project_forge/engine/super_ideas.py to expand stop words.",
+                mvp="engine/super_ideas.py",
+                market="Target metric: super_idea_base_collisions should drop.",
+            )
+        )
         assert ok

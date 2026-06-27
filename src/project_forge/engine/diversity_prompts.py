@@ -37,78 +37,78 @@ PERSONA_SEEDS: list[dict] = [
     {
         "role": "CISO at a regional bank",
         "pain": "8-person security team, two audits per year, regulators who don't understand cloud. "
-                "Any new tool must justify itself in a board slide.",
+        "Any new tool must justify itself in a board slide.",
     },
     {
         "role": "PKI architect at a Fortune 500 migrating off a 15-year-old CA",
         "pain": "Thousands of certificates issued by an EOL CA, no inventory, half the cert owners "
-                "have left the company. The board just approved PQC transition budget.",
+        "have left the company. The board just approved PQC transition budget.",
     },
     {
         "role": "DevSecOps lead at a Series B startup with 18 engineers",
         "pain": "Moving fast, FedRAMP moderate in 6 months, no dedicated security team. "
-                "Needs automation that works without a security hire.",
+        "Needs automation that works without a security hire.",
     },
     {
         "role": "Federal contractor under CMMC Level 2",
         "pain": "Contractually required to show continuous compliance evidence. "
-                "Manual evidence collection is eating two weeks per quarter.",
+        "Manual evidence collection is eating two weeks per quarter.",
     },
     {
         "role": "Red team lead at an MSSP",
         "pain": "Runs 40+ engagements a year across wildly different environments. "
-                "Needs tooling that scales across clients without custom setup per engagement.",
+        "Needs tooling that scales across clients without custom setup per engagement.",
     },
     {
         "role": "Embedded systems engineer at an automotive OEM",
         "pain": "ECU firmware must satisfy ISO 21434, V2X requires PQC-ready certs by 2027. "
-                "Crypto libraries that work on 64KB RAM devices are almost nonexistent.",
+        "Crypto libraries that work on 64KB RAM devices are almost nonexistent.",
     },
     {
         "role": "Open-source maintainer of a widely-used crypto library",
         "pain": "Constantly asked 'are you PQC ready?' with no good answer. "
-                "Test coverage for algorithm edge cases is near zero. "
-                "Users are production-deploying untested paths.",
+        "Test coverage for algorithm edge cases is near zero. "
+        "Users are production-deploying untested paths.",
     },
     {
         "role": "Network security engineer at a Tier-1 telecom",
         "pain": "5G core relies on TLS everywhere, certificate expiry causes P1 outages twice a year. "
-                "HSM fleet spans 3 data centers and nobody has a full inventory.",
+        "HSM fleet spans 3 data centers and nobody has a full inventory.",
     },
     {
         "role": "Platform engineer at a cloud-native SaaS scaling from 10 to 500 services",
         "pain": "Service mesh cert rotation is manual, secrets are duplicated across 12 Kubernetes "
-                "namespaces, and the on-call runbook hasn't been updated in 18 months.",
+        "namespaces, and the on-call runbook hasn't been updated in 18 months.",
     },
     {
         "role": "Security researcher at an academic lab studying protocol attacks",
         "pain": "Needs reproducible environments to test TLS downgrade and side-channel attacks. "
-                "Setting up a controlled PKI for experiments takes a week each time.",
+        "Setting up a controlled PKI for experiments takes a week each time.",
     },
     {
         "role": "CTO at a healthcare SaaS startup",
         "pain": "HIPAA BAA with every customer, PHI in motion needs encryption audit trail, "
-                "and the board just got spooked by a competitor's breach announcement.",
+        "and the board just got spooked by a competitor's breach announcement.",
     },
     {
         "role": "IAM engineer at a global financial institution",
         "pain": "Certificate-based authentication for 80,000 employees, half still on smart cards. "
-                "Every PQC upgrade requires touching every identity provider in the estate.",
+        "Every PQC upgrade requires touching every identity provider in the estate.",
     },
     {
         "role": "Vulnerability researcher doing independent CVE work",
         "pain": "Needs to quickly stand up test harnesses for protocol implementations to confirm "
-                "whether a suspected bug is exploitable. Existing tooling assumes you know the target stack.",
+        "whether a suspected bug is exploitable. Existing tooling assumes you know the target stack.",
     },
     {
         "role": "GRC analyst at a mid-market insurance company",
         "pain": "Maps controls manually across NIST CSF, SOC 2, and state insurance regs. "
-                "A single framework change means weeks of spreadsheet rework.",
+        "A single framework change means weeks of spreadsheet rework.",
     },
     {
         "role": "Cloud security architect at a hyperscaler-adjacent ISV",
         "pain": "Customers demand FIPS-validated crypto in multi-tenant environments. "
-                "Key isolation between tenants is a compliance requirement, not a nice-to-have.",
+        "Key isolation between tenants is a compliance requirement, not a nice-to-have.",
     },
 ]
 

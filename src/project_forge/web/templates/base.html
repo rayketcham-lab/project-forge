@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Project Forge{% endblock %}</title>
     <meta name="forge-token" content="{{ dashboard_token }}">
-    <link rel="stylesheet" href="/static/style.css?v=17">
+    <link rel="stylesheet" href="/static/style.css?v=18">
 </head>
 <body>
     <nav class="navbar">
@@ -23,6 +23,8 @@
                 <a href="/explore" class="nav-link {% if is_explore %}active{% endif %}">Explore</a>
                 <a href="/money-bots" class="nav-link nav-link-money {% if request.url.path == '/money-bots' %}active{% endif %}">Money Bots</a>
                 <a href="/claude-lab" class="nav-link nav-link-frontier {% if request.url.path == '/claude-lab' %}active{% endif %}">Claude Lab</a>
+                <a href="/sniper" class="nav-link nav-link-snipe {% if request.url.path == '/sniper' %}active{% endif %}">Sniper</a>
+                <a href="/labs" class="nav-link nav-link-labs {% if request.url.path in ['/labs', '/scoreboard', '/foundry', '/pulse', '/cartographer', '/killboard'] %}active{% endif %}">Labs</a>
                 <a href="/projects" class="nav-link {% if request.url.path == '/projects' %}active{% endif %}">Projects</a>
                 <a href="/thinktank" class="nav-link {% if request.url.path == '/thinktank' %}active{% endif %}">Think Tank</a>
             </div>

@@ -160,12 +160,45 @@ async def fetch_url_content(url: str) -> UrlContent:
 
 
 _SECURITY_KEYWORDS = {
-    "crypto", "tls", "ssl", "pki", "certificate", "merkle", "hash", "encrypt",
-    "vulnerability", "cve", "exploit", "attack", "malware", "ransomware",
-    "threat", "authentication", "auth", "oauth", "jwt", "token", "key",
-    "firewall", "intrusion", "pentest", "ctf", "reverse engineering",
-    "binary", "fuzzing", "sanitize", "injection", "xss", "csrf",
-    "zero trust", "siem", "soc", "audit", "compliance", "gdpr", "nist",
+    "crypto",
+    "tls",
+    "ssl",
+    "pki",
+    "certificate",
+    "merkle",
+    "hash",
+    "encrypt",
+    "vulnerability",
+    "cve",
+    "exploit",
+    "attack",
+    "malware",
+    "ransomware",
+    "threat",
+    "authentication",
+    "auth",
+    "oauth",
+    "jwt",
+    "token",
+    "key",
+    "firewall",
+    "intrusion",
+    "pentest",
+    "ctf",
+    "reverse engineering",
+    "binary",
+    "fuzzing",
+    "sanitize",
+    "injection",
+    "xss",
+    "csrf",
+    "zero trust",
+    "siem",
+    "soc",
+    "audit",
+    "compliance",
+    "gdpr",
+    "nist",
 }
 
 _CATEGORY_KEYWORDS: dict[str, list[str]] = {
@@ -214,9 +247,8 @@ def _heuristic_idea_from_content(content: UrlContent, category_hint: str | None 
     name = re.sub(r"\s*[-|:]\s*.*$", "", title).strip() or content.domain
     name = name[:60]
 
-    description = (
-        f"Idea derived from: {content.url}\n\n"
-        + (content.text[:800] if content.text else f"Source: {content.domain}")
+    description = f"Idea derived from: {content.url}\n\n" + (
+        content.text[:800] if content.text else f"Source: {content.domain}"
     )
 
     return Idea(

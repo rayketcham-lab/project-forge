@@ -41,8 +41,7 @@ def _idea(
 
 def _super_idea(name: str, components: list[str], *, score: float = 0.85) -> Idea:
     body = (
-        f"{name} brings together {len(components)} complementary project "
-        "concepts into a single, cohesive platform:\n\n"
+        f"{name} brings together {len(components)} complementary project concepts into a single, cohesive platform:\n\n"
     )
     body += "\n".join(f"- **{c}**: blurb for {c}" for c in components)
     return _idea(
@@ -87,11 +86,13 @@ class TestRegularNameSimilarity:
 
     @pytest.mark.asyncio
     async def test_name_check_scoped_to_same_category(self, db):
-        await db.save_idea(_idea(
-            "Distributed Tracing Anomaly Detector",
-            "x",
-            category=IdeaCategory.OBSERVABILITY,
-        ))
+        await db.save_idea(
+            _idea(
+                "Distributed Tracing Anomaly Detector",
+                "x",
+                category=IdeaCategory.OBSERVABILITY,
+            )
+        )
         # Same name tokens, different category — must NOT reject.
         cand = _idea(
             "Tracing Anomaly Detector Distributed",
@@ -114,17 +115,24 @@ class TestVerticalCapAtInsert:
 
         monkeypatch.setattr(_dedup, "VERTICAL_CAP", 2)
 
-        await db.save_idea(_idea(
-            "Pqc Tracker for Healthcare", "one tagline",
-            category=IdeaCategory.PQC_CRYPTOGRAPHY,
-        ))
-        await db.save_idea(_idea(
-            "Pqc Tracker for Financial", "two tagline aaaa",
-            category=IdeaCategory.PQC_CRYPTOGRAPHY,
-        ))
+        await db.save_idea(
+            _idea(
+                "Pqc Tracker for Healthcare",
+                "one tagline",
+                category=IdeaCategory.PQC_CRYPTOGRAPHY,
+            )
+        )
+        await db.save_idea(
+            _idea(
+                "Pqc Tracker for Financial",
+                "two tagline aaaa",
+                category=IdeaCategory.PQC_CRYPTOGRAPHY,
+            )
+        )
 
         cand = _idea(
-            "Pqc Tracker for Container", "three tagline aaaa bbbb",
+            "Pqc Tracker for Container",
+            "three tagline aaaa bbbb",
             category=IdeaCategory.PQC_CRYPTOGRAPHY,
         )
         accepted, reason = await should_accept(cand, db)

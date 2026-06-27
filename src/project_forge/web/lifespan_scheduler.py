@@ -59,6 +59,15 @@ FEED_REFRESH_INTERVAL = _interval_from_env("FORGE_FEED_REFRESH_INTERVAL_HOURS", 
 FUNDABILITY_SCORE_INTERVAL = _interval_from_env("FORGE_FUNDABILITY_INTERVAL_HOURS", 24.0)
 AUTO_PROMOTE_INTERVAL = _interval_from_env("FORGE_AUTO_PROMOTE_INTERVAL_HOURS", 168.0)
 ISSUE_SYNC_INTERVAL = _interval_from_env("FORGE_ISSUE_SYNC_INTERVAL_HOURS", 1.0)
+# v0.16 — grounded competitive-displacement generation for the Sniper board.
+SNIPE_INTERVAL = _interval_from_env("FORGE_SNIPE_INTERVAL_HOURS", 6.0)
+# v0.17 — Scoreboard: capture realized outcome signals for the engine's bets.
+SCOREBOARD_INTERVAL = _interval_from_env("FORGE_SCOREBOARD_INTERVAL_HOURS", 24.0)
+# v0.17 — Cartographer: weekly corpus white-space/saturation memo.
+CARTOGRAPHER_INTERVAL = _interval_from_env("FORGE_CARTOGRAPHER_INTERVAL_HOURS", 168.0)
+# v0.17 — Pulse: event-driven generation seeded by live HN/GitHub signal.
+PULSE_INTERVAL = _interval_from_env("FORGE_PULSE_INTERVAL_HOURS", 3.0)
+
 
 def _seconds_from_env(var: str, default_seconds: float) -> timedelta:
     """Same warn-and-fallback pattern as `_interval_from_env`, but the
@@ -149,10 +158,7 @@ async def _cadence_loop(db: Database, cadence: Cadence) -> None:
 
 async def _supervisor(db: Database, cadences: list[Cadence]) -> None:
     """Own N cadence loops. Cancelling the supervisor cancels every child."""
-    tasks = [
-        asyncio.create_task(_cadence_loop(db, c), name=f"sched-{c.name}")
-        for c in cadences
-    ]
+    tasks = [asyncio.create_task(_cadence_loop(db, c), name=f"sched-{c.name}") for c in cadences]
     try:
         await asyncio.gather(*tasks)
     except asyncio.CancelledError:
@@ -196,6 +202,18 @@ async def seconds_until_next_expand(db: Database, interval: timedelta) -> float:
     generated idea proves the cadence fired; we don't care which category.
     """
     cursor = await db.db.execute("SELECT MAX(generated_at) FROM ideas")
+    row = await cursor.fetchone()
+    return _delay_from_watermark(row[0] if row else None, interval)
+
+
+async def seconds_until_next_snipe(db: Database, interval: timedelta) -> float:
+    """Delay until the next snipe-generation fire.
+
+    Watermark = MAX(generated_at) over snipe-mode ideas. Survives uvicorn
+    reloads (which restart the supervisor) so we don't spam the LLM + the
+    external intel APIs every reload.
+    """
+    cursor = await db.db.execute("SELECT MAX(generated_at) FROM ideas WHERE generation_mode = 'snipe'")
     row = await cursor.fetchone()
     return _delay_from_watermark(row[0] if row else None, interval)
 
@@ -382,6 +400,108 @@ async def _fire_issue_sync(db: Database) -> None:
     )
 
 
+async def _fire_snipe(db: Database) -> None:
+    """Generate a small batch of grounded competitive-displacement snipes
+    across the Sniper hunting grounds; score + dedup-save each.
+
+    Batch is tiny (2) — each snipe makes a couple of external intel calls
+    plus an LLM call, so we catch up over ticks rather than hammering.
+    Touches no GitHub state, so re-firing on a uvicorn reload is benign.
+    """
+    import random as _random
+
+    from project_forge.engine.dedup import filter_and_save
+    from project_forge.engine.llm_generator import generate_snipe_llm
+    from project_forge.engine.snipe import score_snipe
+    from project_forge.models import SNIPER_CATEGORIES
+
+    made = 0
+    cats = list(SNIPER_CATEGORIES)
+    _random.shuffle(cats)
+    for category in cats[:2]:
+        try:
+            result = await generate_snipe_llm(db, category)
+            if result is None:
+                continue
+            result.idea.snipe_score = await score_snipe(result.idea)
+            _saved, ok, _reason = await filter_and_save(result.idea, db)
+            if ok:
+                made += 1
+        except Exception:
+            logger.exception("snipe generation failed for %s", category.value)
+    logger.info("Snipe cycle produced %d ideas", made)
+
+
+async def _fire_scoreboard(db: Database) -> None:
+    """Capture realized outcome signals for the engine's Sniper bets — the
+    autonomous LEARN loop. Grounded on the top OSS-challenger star count for
+    each named incumbent (cached per incumbent). Best-effort; never raises."""
+    from project_forge.engine.llm_generator import _incumbent_cache
+    from project_forge.engine.scoreboard import capture_outcome_signals
+    from project_forge.feeds.market_intel import fetch_incumbent_intel
+
+    def _gh_stars(incumbent: str) -> int | None:
+        bundle = fetch_incumbent_intel(incumbent, cache=_incumbent_cache(incumbent))
+        challengers = bundle.get("oss_challengers") or []
+        return max((c.get("stars", 0) for c in challengers), default=None)
+
+    result = await capture_outcome_signals(db, gh_stars=_gh_stars)
+    logger.info("Scoreboard cycle captured %d outcome signals", result.get("captured", 0))
+
+    # Gated learning: only when the operator opts in. Default off → the
+    # scorers see an empty nudge cache and behave exactly as before.
+    if os.environ.get("FORGE_SCOREBOARD_AUTOTUNE", "").lower() in ("1", "true", "yes", "on"):
+        from project_forge.engine.scoreboard import apply_autotune
+
+        tuned = await apply_autotune(db)
+        logger.info("Scoreboard auto-tune applied %d learned nudges", tuned.get("applied", 0))
+
+
+async def _fire_cartographer(db: Database) -> None:
+    """Build the corpus atlas (white space + saturation) and log the memo
+    headline. Read-only aggregate over the corpus — no external calls."""
+    from project_forge.engine.cartographer import build_atlas
+
+    atlas = await build_atlas(db)
+    logger.info(
+        "Cartographer atlas: white_space=%d saturation=%d next_bet=%r",
+        len(atlas.get("white_space", [])),
+        len(atlas.get("saturation", [])),
+        atlas.get("recommended_next_bet"),
+    )
+
+
+async def _fire_pulse(db: Database) -> None:
+    """React to the world: pull the hottest live HN/GitHub signal and generate
+    one fresh idea anchored to it. Best-effort; degrades to a normal churn if
+    no signal returns. Touches no GitHub state."""
+    import random as _random
+
+    from project_forge.engine.dedup import filter_and_save
+    from project_forge.engine.fundability import score_fundability
+    from project_forge.engine.llm_generator import generate_idea_llm
+    from project_forge.feeds.pulse import (
+        fetch_pulse_signals,
+        pick_hot_signal,
+        signal_to_seed,
+    )
+    from project_forge.models import MONEY_CATEGORIES
+
+    try:
+        hot = pick_hot_signal(fetch_pulse_signals())
+        seed = signal_to_seed(hot) if hot else None
+        category = _random.choice(MONEY_CATEGORIES)
+        result = await generate_idea_llm(db, category, mode="novel", seed=seed)
+        if result is None:
+            logger.info("Pulse cycle: no idea produced")
+            return
+        result.idea.fundability_score = await score_fundability(result.idea)
+        _saved, ok, _reason = await filter_and_save(result.idea, db)
+        logger.info("Pulse cycle: %s (seed=%s)", "saved" if ok else "rejected", bool(seed))
+    except Exception:
+        logger.exception("pulse cycle failed")
+
+
 async def _fire_feed_refresh(db: Database) -> None:
     """Refresh NVD / arXiv / IETF caches that feed prompt-seed material.
 
@@ -402,16 +522,27 @@ async def _fire_feed_refresh(db: Database) -> None:
     base.mkdir(parents=True, exist_ok=True)
 
     fetchers = [
-        ("nvd", lambda: nvd.fetch(
-            cache=FeedCache(base / "nvd.json", ttl=_td(hours=12)), days=7,
-        )),
-        ("arxiv", lambda: arxiv.fetch(
-            cache=FeedCache(base / "arxiv.json", ttl=_td(hours=48)),
-            category="cs.CR", max_results=25,
-        )),
-        ("ietf", lambda: ietf.fetch(
-            cache=FeedCache(base / "ietf.json", ttl=_td(hours=24)),
-        )),
+        (
+            "nvd",
+            lambda: nvd.fetch(
+                cache=FeedCache(base / "nvd.json", ttl=_td(hours=12)),
+                days=7,
+            ),
+        ),
+        (
+            "arxiv",
+            lambda: arxiv.fetch(
+                cache=FeedCache(base / "arxiv.json", ttl=_td(hours=48)),
+                category="cs.CR",
+                max_results=25,
+            ),
+        ),
+        (
+            "ietf",
+            lambda: ietf.fetch(
+                cache=FeedCache(base / "ietf.json", ttl=_td(hours=24)),
+            ),
+        ),
     ]
     for label, run in fetchers:
         try:
@@ -542,6 +673,46 @@ def default_cadences() -> list[Cadence]:
             runner=_fire_issue_sync,
             delay_query=None,
             tick_interval=ISSUE_SYNC_INTERVAL.total_seconds(),
+            initial_delay=initial,
+        ),
+        Cadence(
+            # v0.16 — grounded competitive-displacement generation for the
+            # Sniper board. Watermark-gated so uvicorn reloads don't re-fire
+            # it; touches no GitHub state so a stray fire is harmless.
+            name="snipe",
+            interval=SNIPE_INTERVAL,
+            runner=_fire_snipe,
+            delay_query=seconds_until_next_snipe,
+            tick_interval=1800.0,  # re-check every 30min; fires per watermark
+            initial_delay=initial,
+        ),
+        Cadence(
+            # v0.17 — Scoreboard: capture realized outcome signals for the
+            # engine's bets (read-only external fetches, no GH state).
+            name="scoreboard",
+            interval=SCOREBOARD_INTERVAL,
+            runner=_fire_scoreboard,
+            delay_query=None,
+            tick_interval=SCOREBOARD_INTERVAL.total_seconds(),
+            initial_delay=initial,
+        ),
+        Cadence(
+            # v0.17 — Cartographer: weekly corpus strategy memo (read-only).
+            name="cartographer",
+            interval=CARTOGRAPHER_INTERVAL,
+            runner=_fire_cartographer,
+            delay_query=None,
+            tick_interval=CARTOGRAPHER_INTERVAL.total_seconds(),
+            initial_delay=initial,
+        ),
+        Cadence(
+            # v0.17 — Pulse: event-driven generation seeded by live signal.
+            # Watermark-gated so reloads don't re-fire; no GH state touched.
+            name="pulse",
+            interval=PULSE_INTERVAL,
+            runner=_fire_pulse,
+            delay_query=seconds_until_next_expand,
+            tick_interval=1800.0,
             initial_delay=initial,
         ),
         # REMOVED v0.14b — auto_promote cadence: the user explicitly

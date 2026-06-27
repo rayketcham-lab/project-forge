@@ -111,11 +111,13 @@ def find_large_files(project_root: Path, threshold: int = 300) -> list[dict]:
         line_count = len(py_file.read_text().splitlines())
         if line_count > threshold:
             rel = py_file.relative_to(project_root)
-            findings.append({
-                "path": str(rel),
-                "lines": line_count,
-                "blocks": _largest_top_level_blocks(py_file, top_n=5),
-            })
+            findings.append(
+                {
+                    "path": str(rel),
+                    "lines": line_count,
+                    "blocks": _largest_top_level_blocks(py_file, top_n=5),
+                }
+            )
 
     return findings
 
@@ -219,15 +221,9 @@ def generate_static_proposals(project_root: Path | None = None) -> list[Idea]:
         blocks = finding.get("blocks") or []
         # Build a richer description: name the actual largest blocks (the
         # natural split candidates) instead of a generic "it's big" message.
-        desc_parts = [
-            f"{finding['path']} is {finding['lines']} lines — past the 300-line "
-            f"split threshold."
-        ]
+        desc_parts = [f"{finding['path']} is {finding['lines']} lines — past the 300-line split threshold."]
         if blocks:
-            top_lines = ", ".join(
-                f"{b['kind']} {b['name']} ({b['lines']} lines)"
-                for b in blocks[:3]
-            )
+            top_lines = ", ".join(f"{b['kind']} {b['name']} ({b['lines']} lines)" for b in blocks[:3])
             desc_parts.append(
                 f"Largest top-level blocks (natural split candidates): {top_lines}.",
             )
@@ -244,10 +240,7 @@ def generate_static_proposals(project_root: Path | None = None) -> list[Idea]:
 
         # Concrete mvp_scope: name the suggested new files.
         if blocks:
-            split_targets = ", ".join(
-                f"{Path(finding['path']).parent}/{b['name'].lower()}.py"
-                for b in blocks[:3]
-            )
+            split_targets = ", ".join(f"{Path(finding['path']).parent}/{b['name'].lower()}.py" for b in blocks[:3])
             mvp_scope = (
                 f"Extract the top blocks ({', '.join(b['name'] for b in blocks[:3])}) "
                 f"into separate modules — e.g. {split_targets}. Update imports "

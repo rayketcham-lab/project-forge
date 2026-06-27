@@ -275,7 +275,7 @@ def test_fallback_issue_includes_element_info():
     report = IssueReport(
         issue_type="ui_bug",
         description="Button does nothing",
-        element_info="div.card > button#approve-btn — \"Approve\"",
+        element_info='div.card > button#approve-btn — "Approve"',
     )
     result = _fallback_issue(report)
     assert "div.card > button#approve-btn" in result["body"]

@@ -16,9 +16,7 @@ from project_forge.models import Idea, IdeaCategory
 from project_forge.storage.db import Database
 
 
-def _idea(name: str, tagline: str, *,
-          category: IdeaCategory = IdeaCategory.SECURITY_TOOL,
-          score: float = 0.7) -> Idea:
+def _idea(name: str, tagline: str, *, category: IdeaCategory = IdeaCategory.SECURITY_TOOL, score: float = 0.7) -> Idea:
     return Idea(
         name=name,
         tagline=tagline,
@@ -47,20 +45,15 @@ class TestClusterDetection:
     async def test_finds_paraphrase_cluster(self, db):
         from project_forge.engine.siphon import find_duplicate_clusters
 
-        await db.save_idea(_idea("Cert Pin Detector",
-                                 "certificate pinning misconfiguration scanner"))
-        await db.save_idea(_idea("Pinning Misconfig Scanner",
-                                 "certificate pinning misconfiguration detector"))
-        await db.save_idea(_idea("Unrelated Tool",
-                                 "post-quantum migration playbook engine"))
+        await db.save_idea(_idea("Cert Pin Detector", "certificate pinning misconfiguration scanner"))
+        await db.save_idea(_idea("Pinning Misconfig Scanner", "certificate pinning misconfiguration detector"))
+        await db.save_idea(_idea("Unrelated Tool", "post-quantum migration playbook engine"))
 
         clusters = await find_duplicate_clusters(db)
 
         # 1 cluster of 2; the unrelated tool is its own cluster (or excluded).
         cluster_sizes = sorted(len(c) for c in clusters if len(c) > 1)
-        assert cluster_sizes == [2], (
-            f"Expected one 2-idea cluster; got sizes {cluster_sizes}"
-        )
+        assert cluster_sizes == [2], f"Expected one 2-idea cluster; got sizes {cluster_sizes}"
 
     @pytest.mark.asyncio
     async def test_separates_by_category(self, db):
@@ -75,9 +68,7 @@ class TestClusterDetection:
         clusters = await find_duplicate_clusters(db)
         # No cross-category clustering — both ideas survive
         cluster_sizes = sorted(len(c) for c in clusters if len(c) > 1)
-        assert cluster_sizes == [], (
-            f"Cross-category match was clustered (shouldn't be): {clusters}"
-        )
+        assert cluster_sizes == [], f"Cross-category match was clustered (shouldn't be): {clusters}"
 
     @pytest.mark.asyncio
     async def test_transitive_clustering(self, db):
@@ -90,9 +81,7 @@ class TestClusterDetection:
 
         clusters = await find_duplicate_clusters(db)
         big = [c for c in clusters if len(c) >= 3]
-        assert len(big) == 1, (
-            f"Expected one transitive cluster of 3; got {[len(c) for c in clusters]}"
-        )
+        assert len(big) == 1, f"Expected one transitive cluster of 3; got {[len(c) for c in clusters]}"
 
     @pytest.mark.asyncio
     async def test_archived_ideas_excluded(self, db):
@@ -106,9 +95,7 @@ class TestClusterDetection:
         await db.update_idea_status(a.id, "archived")
 
         clusters = await find_duplicate_clusters(db)
-        assert all(len(c) <= 1 for c in clusters), (
-            "Archived ideas leaked into clusters"
-        )
+        assert all(len(c) <= 1 for c in clusters), "Archived ideas leaked into clusters"
 
 
 # ── Pick-the-survivor logic ──────────────────────────────────────────
@@ -129,9 +116,7 @@ class TestSurvivorChoice:
         report = await siphon_duplicates(db, dry_run=True)
         clusters = report["clusters"]
         target = [c for c in clusters if len(c["members"]) == 3][0]
-        assert target["keep"] == b.id, (
-            f"Should keep B (highest score 0.85); kept {target['keep']}"
-        )
+        assert target["keep"] == b.id, f"Should keep B (highest score 0.85); kept {target['keep']}"
         assert set(target["archive"]) == {a.id, c.id}
 
 
@@ -252,6 +237,4 @@ class TestGoingForwardThreshold:
         await db.save_idea(existing)
         candidate = _idea("Candidate", "container image provenance verification engine")
         ok, reason = await should_accept(candidate, db)
-        assert ok is False, (
-            f"Tighter threshold did not catch a near-paraphrase. reason={reason}"
-        )
+        assert ok is False, f"Tighter threshold did not catch a near-paraphrase. reason={reason}"

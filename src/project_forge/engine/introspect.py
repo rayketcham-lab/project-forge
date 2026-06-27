@@ -444,7 +444,8 @@ def validate_generation_patch(idea: Idea) -> bool:
     if not any(path_hint in text for path_hint in GENERATION_FILES):
         logger.info(
             "Generation patch '%s' rejected: no generation file referenced (need one of %s)",
-            idea.name, GENERATION_FILES,
+            idea.name,
+            GENERATION_FILES,
         )
         return False
 

@@ -23,8 +23,7 @@ from project_forge.models import Idea, IdeaCategory
 from project_forge.storage.db import Database
 
 
-def _idea(name: str, *, idea_id: str | None = None,
-          category: IdeaCategory = IdeaCategory.SECURITY_TOOL) -> Idea:
+def _idea(name: str, *, idea_id: str | None = None, category: IdeaCategory = IdeaCategory.SECURITY_TOOL) -> Idea:
     i = Idea(
         name=name,
         tagline=f"tag for {name}",

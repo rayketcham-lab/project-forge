@@ -22,8 +22,13 @@ from project_forge.models import FilteredIdea, Idea, IdeaCategory
 from project_forge.storage.db import Database
 
 
-def _idea(name: str, *, category: IdeaCategory = IdeaCategory.SECURITY_TOOL,
-          score: float = 0.82, content_hash: str | None = None) -> Idea:
+def _idea(
+    name: str,
+    *,
+    category: IdeaCategory = IdeaCategory.SECURITY_TOOL,
+    score: float = 0.82,
+    content_hash: str | None = None,
+) -> Idea:
     i = Idea(
         name=name,
         tagline=f"tag for {name}",
@@ -61,8 +66,7 @@ class TestRequiredIndexes:
         rows = await cursor.fetchall()
         names = {r[0] for r in rows}
         assert "idx_filtered_filtered_at" in names, (
-            f"Missing idx_filtered_filtered_at — needed for time-windowed telemetry. "
-            f"Have: {names}"
+            f"Missing idx_filtered_filtered_at — needed for time-windowed telemetry. Have: {names}"
         )
 
     @pytest.mark.asyncio
@@ -73,8 +77,7 @@ class TestRequiredIndexes:
         rows = await cursor.fetchall()
         names = {r[0] for r in rows}
         assert "idx_filtered_similar_to" in names, (
-            f"Missing idx_filtered_similar_to — needed for orphan detection. "
-            f"Have: {names}"
+            f"Missing idx_filtered_similar_to — needed for orphan detection. Have: {names}"
         )
 
     @pytest.mark.asyncio
@@ -85,8 +88,7 @@ class TestRequiredIndexes:
         rows = await cursor.fetchall()
         names = {r[0] for r in rows}
         assert "idx_ideas_status_category" in names, (
-            f"Missing composite idx_ideas_status_category — speeds list_super_ideas, "
-            f"counts. Have: {names}"
+            f"Missing composite idx_ideas_status_category — speeds list_super_ideas, counts. Have: {names}"
         )
 
 
@@ -95,46 +97,80 @@ class TestRequiredIndexes:
 
 # Snapshot of expected tables. Adding a table requires updating this list
 # AND a migration; this guards against accidental schema drift.
-EXPECTED_TABLES = frozenset({
-    "ideas",
-    "generation_runs",
-    "used_tuples",
-    "category_pair_log",
-    "idea_reviews",
-    "challenges",
-    "filtered_ideas",
-    "resources",
-    "idea_denials",
-    "selection_rounds",
-    "repo_registry",
-    "route_decisions",
-})
+EXPECTED_TABLES = frozenset(
+    {
+        "ideas",
+        "generation_runs",
+        "used_tuples",
+        "category_pair_log",
+        "idea_reviews",
+        "challenges",
+        "filtered_ideas",
+        "resources",
+        "idea_denials",
+        "selection_rounds",
+        "repo_registry",
+        "route_decisions",
+        "outcome_signals",  # v0.17 Scoreboard
+        "calibration_weights",  # v0.17 Scoreboard auto-tune
+    }
+)
 
 # Required columns per table. Adding a column requires updating this map.
 EXPECTED_COLUMNS = {
-    "ideas": frozenset({
-        "id", "name", "tagline", "description", "category",
-        "market_analysis", "feasibility_score", "mvp_scope", "tech_stack",
-        "generated_at", "status", "github_issue_url", "project_repo_url",
-        "content_hash", "source_url",
-    }),
-    "filtered_ideas": frozenset({
-        "id", "idea_name", "idea_tagline", "idea_category",
-        "filter_reason", "original_idea_json", "filtered_at", "similar_to_id",
-    }),
+    "ideas": frozenset(
+        {
+            "id",
+            "name",
+            "tagline",
+            "description",
+            "category",
+            "market_analysis",
+            "feasibility_score",
+            "mvp_scope",
+            "tech_stack",
+            "generated_at",
+            "status",
+            "github_issue_url",
+            "project_repo_url",
+            "content_hash",
+            "source_url",
+        }
+    ),
+    "filtered_ideas": frozenset(
+        {
+            "id",
+            "idea_name",
+            "idea_tagline",
+            "idea_category",
+            "filter_reason",
+            "original_idea_json",
+            "filtered_at",
+            "similar_to_id",
+        }
+    ),
     # Challenges table schema regression (issue #68): SCHEMA literal
     # was extended without a corresponding ALTER TABLE migration, so
     # production DBs were left without these columns and POSTs to
     # /api/ideas/{id}/challenge crashed with "no column named
     # challenge_type". Lock all 11 columns here.
-    "challenges": frozenset({
-        "id", "idea_id", "question",
-        "challenge_type", "focus_area", "tone",
-        "response", "verdict", "confidence",
-        "changes", "created_at",
-        # Issue #70: idempotency tracking for the apply-changes endpoint.
-        "applied_at",
-    }),
+    "challenges": frozenset(
+        {
+            "id",
+            "idea_id",
+            "question",
+            "challenge_type",
+            "focus_area",
+            "tone",
+            "response",
+            "verdict",
+            "confidence",
+            "changes",
+            "created_at",
+            # Issue #70: idempotency tracking for the apply-changes endpoint.
+            "applied_at",
+        }
+    ),
 }
 
 
@@ -151,10 +187,7 @@ class TestSchemaLock:
         missing = EXPECTED_TABLES - actual
         extra = actual - EXPECTED_TABLES
         assert not missing, f"Missing tables: {missing}"
-        assert not extra, (
-            f"Unexpected tables: {extra}. If intentional, update EXPECTED_TABLES "
-            f"in this test."
-        )
+        assert not extra, f"Unexpected tables: {extra}. If intentional, update EXPECTED_TABLES in this test."
 
     @pytest.mark.asyncio
     async def test_ideas_columns_locked(self, db):
@@ -258,9 +291,7 @@ class TestVerifyIntegrity:
         report = await db.verify_integrity()
 
         orphans = report["orphaned_filtered_similar_to"]
-        assert any(fi.id in entry for entry in orphans), (
-            f"Did not detect orphaned similar_to_id. Report: {orphans}"
-        )
+        assert any(fi.id in entry for entry in orphans), f"Did not detect orphaned similar_to_id. Report: {orphans}"
 
     @pytest.mark.asyncio
     async def test_does_not_flag_filtered_with_null_similar_to(self, db):

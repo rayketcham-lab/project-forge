@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}Cartographer - Project Forge{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div class="container">
+        <h1>&#128506; Cartographer</h1>
+        <p class="page-subtitle">
+            Autonomous strategy map over the whole corpus. The Cartographer
+            analyses every active idea by category to surface
+            <strong>white space</strong> (where generation should focus),
+            <strong>saturated clusters</strong> (where it should cool off),
+            and the single <strong>recommended next bet</strong>.
+            Rebuilt weekly by the scheduler; hit the button to regenerate now.
+        </p>
+        <div class="churn-row">
+            <form method="post" action="/cartographer/refresh" style="display:inline">
+                <button type="submit" class="btn btn-primary btn-churn">
+                    <span class="churn-icon">&#128506;</span>
+                    <span class="churn-label">Refresh Atlas</span>
+                </button>
+            </form>
+            <span class="churn-status">
+                {% if atlas.generated_at %}
+                    Last built: <code>{{ atlas.generated_at[:19].replace("T", " ") }} UTC</code>
+                {% endif %}
+            </span>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+
+        {# ------------------------------------------------------------------ #}
+        {# Recommended next bet banner                                         #}
+        {# ------------------------------------------------------------------ #}
+        <div class="atlas-rec-banner">
+            <span class="atlas-rec-label">Recommended next bet</span>
+            <span class="atlas-rec-value">
+                {% if atlas.recommended_next_bet == "balanced" %}
+                    &#9989; Balanced &mdash; all categories meet minimum density
+                {% else %}
+                    <strong>{{ atlas.recommended_next_bet }}</strong>
+                    &mdash;
+                    {{ atlas.vertical_coverage.get(atlas.recommended_next_bet, 0) }}
+                    active ideas (below threshold)
+                {% endif %}
+            </span>
+        </div>
+
+        {# ------------------------------------------------------------------ #}
+        {# Two-column layout: white space / saturation                        #}
+        {# ------------------------------------------------------------------ #}
+        <div class="atlas-columns">
+
+            <div class="atlas-col">
+                <h2 class="atlas-col-title atlas-ws-title">&#128260; White Space</h2>
+                <p class="atlas-col-desc">
+                    Under-covered categories — fewer than
+                    <strong>{{ white_space_threshold }}</strong> active ideas.
+                    Generation should prioritise these.
+                </p>
+                {% if atlas.white_space %}
+                <ul class="atlas-list">
+                    {% for cat in atlas.white_space %}
+                    <li class="atlas-list-item">
+                        <code class="cat-tag">{{ cat }}</code>
+                        <span class="atlas-count atlas-count-low">
+                            {{ atlas.vertical_coverage.get(cat, 0) }} ideas
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="atlas-empty">All categories meet minimum density.</p>
+                {% endif %}
+            </div>
+
+            <div class="atlas-col">
+                <h2 class="atlas-col-title atlas-sat-title">&#128293; Saturation</h2>
+                <p class="atlas-col-desc">
+                    Over-covered categories — high idea count
+                    (&#8805;&nbsp;<strong>{{ saturation_count_threshold }}</strong>)
+                    or elevated rejection rate (&#8805;&nbsp;<strong>{{ saturation_rate_pct }}%</strong>).
+                    Generation should cool off here.
+                </p>
+                {% if atlas.saturation %}
+                <ul class="atlas-list">
+                    {% for cat in atlas.saturation %}
+                    <li class="atlas-list-item">
+                        <code class="cat-tag">{{ cat }}</code>
+                        <span class="atlas-count atlas-count-high">
+                            {{ atlas.vertical_coverage.get(cat, 0) }} ideas
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="atlas-empty">No categories flagged as saturated.</p>
+                {% endif %}
+            </div>
+
+        </div>
+
+        {# ------------------------------------------------------------------ #}
+        {# Top clusters bar chart (CSS-only)                                  #}
+        {# ------------------------------------------------------------------ #}
+        {% if atlas.top_clusters %}
+        <div class="atlas-clusters">
+            <h2 class="atlas-section-title">Top Clusters</h2>
+            {% set max_count = atlas.top_clusters[0].count if atlas.top_clusters else 1 %}
+            {% for entry in atlas.top_clusters %}
+            <div class="atlas-bar-row">
+                <code class="atlas-bar-label cat-tag">{{ entry.category }}</code>
+                <div class="atlas-bar-track">
+                    <div class="atlas-bar-fill"
+                         style="width: {{ ((entry.count / max_count) * 100) | int }}%"></div>
+                </div>
+                <span class="atlas-bar-count">{{ entry.count }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# ------------------------------------------------------------------ #}
+        {# Full vertical coverage table                                        #}
+        {# ------------------------------------------------------------------ #}
+        <div class="atlas-full-coverage">
+            <h2 class="atlas-section-title">Full Coverage Map</h2>
+            <table class="atlas-table">
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Active Ideas</th>
+                        <th>Signal</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cat, count in atlas.vertical_coverage.items() | sort(attribute='1', reverse=true) %}
+                    <tr class="{% if cat in atlas.saturation %}atlas-row-sat{% elif cat in atlas.white_space %}atlas-row-ws{% endif %}">
+                        <td><code class="cat-tag">{{ cat }}</code></td>
+                        <td>{{ count }}</td>
+                        <td>
+                            {% if cat in atlas.saturation %}
+                                <span class="mode-pill" style="background:#c0392b;color:#fff">saturated</span>
+                            {% elif cat in atlas.white_space %}
+                                <span class="mode-pill" style="background:#2980b9;color:#fff">white space</span>
+                            {% else %}
+                                <span class="mode-pill" style="background:#27ae60;color:#fff">healthy</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {# ------------------------------------------------------------------ #}
+        {# State of the Forge memo                                             #}
+        {# ------------------------------------------------------------------ #}
+        <div class="atlas-memo">
+            <h2 class="atlas-section-title">State of the Forge Memo</h2>
+            <pre class="atlas-memo-body">{{ memo }}</pre>
+        </div>
+
+    </div>
+</section>
+{% endblock %}

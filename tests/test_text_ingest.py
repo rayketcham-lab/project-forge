@@ -73,8 +73,7 @@ class TestTextIngestPrompt:
 
         prompt = build_text_ingest_prompt(text="x" * 100)
         assert "JSON" in prompt or "json" in prompt
-        for field in ("name", "tagline", "description", "category",
-                      "feasibility_score", "mvp_scope"):
+        for field in ("name", "tagline", "description", "category", "feasibility_score", "mvp_scope"):
             assert field in prompt, f"Prompt missing required JSON field: {field}"
 
 
@@ -203,6 +202,7 @@ async def test_falls_back_to_heuristic_when_no_backend(monkeypatch):
 
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     from project_forge.config import settings as _settings
+
     monkeypatch.setattr(_settings, "anthropic_api_key", "")
     with patch(
         "project_forge.engine.llm_backend._has_claude_cli",

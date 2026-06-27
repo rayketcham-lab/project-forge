@@ -18,6 +18,9 @@ from project_forge.engine.dedup import filter_and_save
 from project_forge.engine.llm_backend import resolve_backend
 from project_forge.engine.scorer import score_summary
 from project_forge.models import (
+    CLAUDE_LAB_CATEGORIES,
+    MONEY_CATEGORIES,
+    SNIPER_CATEGORIES,
     Challenge,
     Idea,
     IdeaCategory,
@@ -124,10 +127,7 @@ async def explore(
             all_chal = await db.list_challenged_ideas(limit=10000)
             ql = q.lower()
             filtered = [
-                i for i in all_chal
-                if ql in i.name.lower()
-                or ql in i.tagline.lower()
-                or ql in i.description.lower()
+                i for i in all_chal if ql in i.name.lower() or ql in i.tagline.lower() or ql in i.description.lower()
             ]
         else:
             filtered = await db.list_challenged_ideas(limit=10000)
@@ -159,7 +159,10 @@ async def explore(
             candidates = await db.search_ideas(q, limit=10000)
         else:
             candidates = await db.list_ideas(
-                status=typed_status, category=cat, limit=10000, offset=0,
+                status=typed_status,
+                category=cat,
+                limit=10000,
+                offset=0,
             )
         if vertical == "__nomatch__":
             filtered = []
@@ -175,7 +178,10 @@ async def explore(
             total = len(await db.search_ideas(q, limit=10000))
         else:
             ideas = await db.list_ideas(
-                status=typed_status, category=cat, limit=limit, offset=offset,
+                status=typed_status,
+                category=cat,
+                limit=limit,
+                offset=offset,
             )
             total = await db.count_ideas(status=typed_status)
 
@@ -200,13 +206,14 @@ async def explore(
     )
 
 
-_MONEY_CATEGORIES = (
-    "automation-income", "creator-tools", "consumer-app", "productivity",
-)
+# Derived from the canonical groupings in models.py so /money-bots,
+# /claude-lab, the stats counter, and the auto-promote picker can't drift.
+# Kept as plain .value strings here to match the SQL bindings below.
+_MONEY_CATEGORIES = tuple(c.value for c in MONEY_CATEGORIES)
 
-_CLAUDE_LAB_CATEGORIES = (
-    "claude-skills-agents", "ai-marketplace",
-)
+_CLAUDE_LAB_CATEGORIES = tuple(c.value for c in CLAUDE_LAB_CATEGORIES)
+
+_SNIPER_CATEGORIES = tuple(c.value for c in SNIPER_CATEGORIES)
 
 
 @router.get("/claude-lab", response_class=HTMLResponse)
@@ -221,8 +228,8 @@ async def claude_lab(
     cats = (category,) if category in _CLAUDE_LAB_CATEGORIES else _CLAUDE_LAB_CATEGORIES
     placeholders = ",".join("?" * len(cats))
     cur = await db.db.execute(
-        f"SELECT id FROM ideas "
-        f"WHERE category IN ({placeholders}) "  # noqa: S608
+        f"SELECT id FROM ideas "  # noqa: S608
+        f"WHERE category IN ({placeholders}) "
         f"AND status NOT IN ('archived', 'rejected') "
         f"AND ambition_score IS NOT NULL "
         f"ORDER BY ambition_score DESC, generated_at DESC LIMIT ?",
@@ -258,9 +265,9 @@ async def api_claude_lab_top(limit: int = Query(default=10, ge=1, le=100)):
     ecosystem categories."""
     placeholders = ",".join("?" * len(_CLAUDE_LAB_CATEGORIES))
     cur = await db.db.execute(
-        f"SELECT id, name, tagline, category, ambition_score, "
+        f"SELECT id, name, tagline, category, ambition_score, "  # noqa: S608
         f"fundability_score, generation_mode, status "
-        f"FROM ideas WHERE category IN ({placeholders}) "  # noqa: S608
+        f"FROM ideas WHERE category IN ({placeholders}) "
         f"AND status NOT IN ('archived', 'rejected') "
         f"AND ambition_score IS NOT NULL "
         f"ORDER BY ambition_score DESC, generated_at DESC LIMIT ?",
@@ -282,6 +289,329 @@ async def api_claude_lab_top(limit: int = Query(default=10, ge=1, le=100)):
     ]
 
 
+@router.get("/sniper", response_class=HTMLResponse)
+async def sniper(
+    request: Request,
+    category: str | None = None,
+    limit: int = Query(default=30, ge=1, le=100),
+):
+    """Competitive-displacement ideas — each wedges into a market-proven
+    incumbent's demand — sorted by snipe_score DESC. Filters on
+    snipe_score IS NOT NULL (not category), so any snipe surfaces here
+    regardless of which domain its incumbent lives in. Optional category
+    filter narrows to one of the SNIPER_CATEGORIES hunting grounds."""
+    cat_filter = category if category in _SNIPER_CATEGORIES else None
+    if cat_filter:
+        where = "category = ? AND snipe_score IS NOT NULL"
+        params: tuple = (cat_filter,)
+    else:
+        where = "snipe_score IS NOT NULL"
+        params = ()
+    cur = await db.db.execute(
+        f"SELECT id FROM ideas "  # noqa: S608
+        f"WHERE {where} "
+        f"AND status NOT IN ('archived', 'rejected') "
+        f"ORDER BY snipe_score DESC, generated_at DESC LIMIT ?",
+        (*params, limit),
+    )
+    rows = await cur.fetchall()
+    ideas = []
+    for r in rows:
+        idea = await db.get_idea(r["id"])
+        if idea is not None:
+            ideas.append(idea)
+    cur = await db.db.execute(
+        f"SELECT COUNT(*) FROM ideas WHERE {where} "  # noqa: S608
+        f"AND status NOT IN ('archived', 'rejected')",
+        params,
+    )
+    total = (await cur.fetchone())[0]
+    return templates.TemplateResponse(
+        request,
+        "sniper.html",
+        {
+            "ideas": ideas,
+            "total": total,
+            "categories": list(_SNIPER_CATEGORIES),
+            "category_filter": cat_filter,
+        },
+    )
+
+
+@router.get("/api/sniper/top")
+async def api_sniper_top(limit: int = Query(default=10, ge=1, le=100)):
+    """JSON: top-N snipe_score-ranked competitive-displacement ideas."""
+    cur = await db.db.execute(
+        "SELECT id, name, tagline, category, snipe_score, target_incumbent, "
+        "artifact_type, generation_mode, status "
+        "FROM ideas WHERE snipe_score IS NOT NULL "
+        "AND status NOT IN ('archived', 'rejected') "
+        "ORDER BY snipe_score DESC, generated_at DESC LIMIT ?",
+        (limit,),
+    )
+    rows = await cur.fetchall()
+    return [
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "tagline": r["tagline"],
+            "category": r["category"],
+            "snipe_score": r["snipe_score"],
+            "target_incumbent": r["target_incumbent"],
+            "angle": r["artifact_type"],
+            "generation_mode": r["generation_mode"],
+            "status": r["status"],
+        }
+        for r in rows
+    ]
+
+
+@router.get("/scoreboard", response_class=HTMLResponse)
+async def scoreboard_page(request: Request):
+    """The autonomous LEARN loop: predicted-vs-realized calibration across the
+    scoring axes, plus the recommendations the engine surfaces for itself."""
+    from project_forge.engine.scoreboard import build_calibration, read_signals
+
+    cal = await build_calibration(db)
+    signals = await read_signals(db)
+    return templates.TemplateResponse(
+        request,
+        "scoreboard.html",
+        {"cal": cal, "signals": signals[:50], "signal_count": len(signals)},
+    )
+
+
+@router.get("/api/scoreboard")
+async def api_scoreboard():
+    """JSON: the calibration report (axes + categories + recommendations)."""
+    from project_forge.engine.scoreboard import build_calibration
+
+    return await build_calibration(db)
+
+
+# === v0.17 autonomous avenues: Labs hub + Foundry / Pulse / Cartographer /
+# Kill board / Launchpad / Recruiter ===
+
+
+@router.get("/labs", response_class=HTMLResponse)
+async def labs(request: Request):
+    """Hub for the engine's autonomous thinking/doing avenues."""
+    return templates.TemplateResponse(request, "labs.html", {})
+
+
+@router.get("/foundry", response_class=HTMLResponse)
+async def foundry_page(request: Request):
+    """The Foundry — turn a top idea into a ready-to-create starter repo.
+    The plan itself loads via JS so the page stays fast (no LLM on GET)."""
+    cur = await db.db.execute(
+        "SELECT id FROM ideas WHERE status NOT IN ('archived', 'rejected') ORDER BY feasibility_score DESC LIMIT 30"
+    )
+    rows = await cur.fetchall()
+    ideas = []
+    for r in rows:
+        idea = await db.get_idea(r["id"])
+        if idea is not None:
+            ideas.append(idea)
+    return templates.TemplateResponse(
+        request,
+        "foundry.html",
+        {"ideas": ideas, "total": len(ideas), "plan": None, "selected_idea": None},
+    )
+
+
+@router.post("/api/foundry/plan/{idea_id}")
+async def api_foundry_plan(idea_id: str):
+    from project_forge.engine.foundry import build_scaffold_plan
+
+    idea = await db.get_idea(idea_id)
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+    return {"plan": build_scaffold_plan(idea), "idea_id": idea_id}
+
+
+@router.post("/api/foundry/create/{idea_id}")
+async def api_foundry_create(idea_id: str, request: Request):
+    """Human-gated: turn the Foundry plan into a REAL GitHub repo. Reuses the
+    proven scaffold flow (template skeleton + push) and additionally files the
+    Foundry plan's LLM-tailored starter issues. Closes the think -> build loop.
+    """
+    import logging
+    import tempfile
+    from pathlib import Path
+
+    from project_forge.config import settings
+    from project_forge.engine.foundry import build_scaffold_plan
+    from project_forge.scaffold.builder import build_scaffold_spec, render_scaffold
+    from project_forge.scaffold.github import create_issue, create_repo, push_initial_commit
+
+    logger = logging.getLogger(__name__)
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"foundry-create:{client_ip}")
+
+    idea = await db.get_idea(idea_id)
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+    if idea.status not in ("new", "approved"):
+        raise HTTPException(status_code=400, detail=f"Cannot build idea with status: {idea.status}")
+
+    owner = settings.github_owner
+    try:
+        plan = build_scaffold_plan(idea)
+        spec = build_scaffold_spec(idea)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_dir = render_scaffold(spec, idea, Path(tmpdir), owner=owner)
+            repo_url = create_repo(spec.repo_name, idea.tagline[:200], public=True, owner=owner)
+            push_initial_commit(str(project_dir), repo_url)
+            full_repo = f"{owner}/{spec.repo_name}"
+            issues_filed = 0
+            for issue in plan.get("starter_issues") or []:
+                try:
+                    create_issue(full_repo, issue.get("title", "Task"), issue.get("body", ""))
+                    issues_filed += 1
+                except RuntimeError:
+                    logger.warning("foundry: issue create failed: %s", issue.get("title"))
+        await db.update_idea_urls(idea_id, project_repo_url=repo_url)
+        await db.update_idea_status(idea_id, "scaffolded")
+        logger.info("Foundry built %s -> %s (%d issues)", idea.name, repo_url, issues_filed)
+        return {"status": "scaffolded", "id": idea_id, "repo_url": repo_url, "issues_filed": issues_filed}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Foundry create failed for %s: %s", idea_id, e)
+        raise HTTPException(status_code=500, detail="Repo creation failed. Check server logs.") from e
+
+
+@router.get("/pulse", response_class=HTMLResponse)
+async def pulse_page(request: Request):
+    """The Pulse — what just changed in the world, so generation can react."""
+    from project_forge.feeds.pulse import fetch_pulse_signals, pick_hot_signal
+
+    signals = fetch_pulse_signals()
+    return templates.TemplateResponse(
+        request,
+        "pulse.html",
+        {"signals": signals, "hot_signal": pick_hot_signal(signals), "total": len(signals)},
+    )
+
+
+@router.post("/api/pulse/churn")
+async def api_pulse_churn():
+    """Generate a fresh idea anchored to the hottest real-world signal."""
+    import random as _random
+
+    from project_forge.engine.dedup import filter_and_save
+    from project_forge.engine.fundability import score_fundability
+    from project_forge.engine.llm_generator import generate_idea_llm
+    from project_forge.feeds.pulse import (
+        fetch_pulse_signals,
+        pick_hot_signal,
+        signal_to_seed,
+    )
+
+    signals = fetch_pulse_signals()
+    hot = pick_hot_signal(signals)
+    seed = signal_to_seed(hot) if hot else None
+    category = IdeaCategory(_random.choice(_MONEY_CATEGORIES))
+    result = await generate_idea_llm(db, category, mode="novel", seed=seed)
+    if result is None:
+        return {"idea": None, "message": "LLM backend returned no idea; try again.", "seed": seed}
+    result.idea.fundability_score = await score_fundability(result.idea)
+    _saved, ok, reason = await filter_and_save(result.idea, db)
+    if not ok:
+        return {"idea": None, "message": f"dedup rejected: {reason}", "seed": seed}
+    return {
+        "idea": {
+            "id": result.idea.id,
+            "name": result.idea.name,
+            "tagline": result.idea.tagline,
+            "category": result.idea.category.value,
+            "fundability_score": result.idea.fundability_score,
+        },
+        "seed": seed,
+        "hot_signal": hot,
+    }
+
+
+@router.get("/cartographer", response_class=HTMLResponse)
+async def cartographer_page(request: Request):
+    """The Cartographer — white-space + saturation map over the whole corpus."""
+    from project_forge.engine.cartographer import build_atlas, format_memo
+
+    atlas = await build_atlas(db)
+    return templates.TemplateResponse(
+        request,
+        "cartographer.html",
+        {
+            "atlas": atlas,
+            "memo": format_memo(atlas),
+            "white_space_threshold": 5,
+            "saturation_count_threshold": 20,
+            "saturation_rate_pct": 70,
+        },
+    )
+
+
+@router.post("/cartographer/refresh")
+async def cartographer_refresh():
+    from fastapi.responses import RedirectResponse
+
+    return RedirectResponse(url="/cartographer", status_code=303)
+
+
+@router.get("/killboard", response_class=HTMLResponse)
+async def killboard_page(request: Request):
+    """The Kill Board — ideas ranked by survival odds (most likely to die first).
+    Heuristic survival on load (cheap); full case-against on demand."""
+    from project_forge.engine.premortem import score_survival_heuristic
+
+    cur = await db.db.execute(
+        "SELECT id FROM ideas WHERE status NOT IN ('archived', 'rejected') ORDER BY generated_at DESC LIMIT 60"
+    )
+    rows = await cur.fetchall()
+    entries = []
+    for r in rows:
+        idea = await db.get_idea(r["id"])
+        if idea is None:
+            continue
+        entries.append({"idea": idea, "premortem": {"survival_odds": score_survival_heuristic(idea)}})
+    entries.sort(key=lambda e: e["premortem"]["survival_odds"])
+    return templates.TemplateResponse(
+        request,
+        "killboard.html",
+        {"ideas": entries[:30], "total": len(entries)},
+    )
+
+
+@router.post("/api/premortem/{idea_id}")
+async def api_premortem(idea_id: str):
+    from project_forge.engine.premortem import generate_premortem
+
+    idea = await db.get_idea(idea_id)
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+    return await generate_premortem(idea)
+
+
+@router.post("/api/launchpad/{idea_id}")
+async def api_launchpad(idea_id: str):
+    from project_forge.engine.launchpad import generate_gtm_brief
+
+    idea = await db.get_idea(idea_id)
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+    return generate_gtm_brief(idea)
+
+
+@router.post("/api/recruiter/{idea_id}")
+async def api_recruiter(idea_id: str):
+    from project_forge.engine.recruiter import estimate_build
+
+    idea = await db.get_idea(idea_id)
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+    return estimate_build(idea)
+
+
 @router.get("/money-bots", response_class=HTMLResponse)
 async def money_bots(
     request: Request,
@@ -293,8 +623,8 @@ async def money_bots(
     cats = (category,) if category in _MONEY_CATEGORIES else _MONEY_CATEGORIES
     placeholders = ",".join("?" * len(cats))
     cur = await db.db.execute(
-        f"SELECT id FROM ideas "
-        f"WHERE category IN ({placeholders}) "  # noqa: S608
+        f"SELECT id FROM ideas "  # noqa: S608
+        f"WHERE category IN ({placeholders}) "
         f"AND status NOT IN ('archived', 'rejected') "
         f"AND fundability_score IS NOT NULL "
         f"ORDER BY fundability_score DESC, generated_at DESC LIMIT ?",
@@ -337,12 +667,13 @@ async def api_promote(idea_id: str):
     Idempotent: re-promoting an already-promoted idea returns the existing
     issue URL without creating a new one.
     """
+    from datetime import UTC as _UTC
+    from datetime import datetime as _dt
+
     from project_forge.cron.auto_promote_runner import (
         _create_promotion_issue,
         build_issue_body,  # noqa: F401  — kept for tests / introspection
     )
-    from datetime import UTC as _UTC
-    from datetime import datetime as _dt
 
     idea = await db.get_idea(idea_id)
     if not idea:
@@ -360,7 +691,8 @@ async def api_promote(idea_id: str):
     except Exception as exc:
         logger.exception("manual promote: issue creation failed for %s", idea_id)
         raise HTTPException(
-            status_code=502, detail=f"GitHub issue creation failed: {exc}",
+            status_code=502,
+            detail=f"GitHub issue creation failed: {exc}",
         ) from exc
 
     idea.status = "approved"
@@ -403,9 +735,7 @@ async def api_backend_info():
 
     env_view = {
         "ANTHROPIC_API_KEY": _maskprefix(_os.environ.get("ANTHROPIC_API_KEY", "")),
-        "FORGE_ANTHROPIC_API_KEY": _maskprefix(
-            _os.environ.get("FORGE_ANTHROPIC_API_KEY", "")
-        ),
+        "FORGE_ANTHROPIC_API_KEY": _maskprefix(_os.environ.get("FORGE_ANTHROPIC_API_KEY", "")),
         "FORGE_HAIKU_API_KEY": _maskprefix(_os.environ.get("FORGE_HAIKU_API_KEY", "")),
         "FORGE_LLM_BACKEND": _os.environ.get("FORGE_LLM_BACKEND", ""),
         "FORGE_LLM_MODEL": _os.environ.get("FORGE_LLM_MODEL", ""),
@@ -434,21 +764,27 @@ async def api_churn(request: Request):
     for the given (or auto-picked) category, runs dedup + scoring,
     returns the new idea (or a reason if it couldn't land).
 
-    Powers the Churn Now button on /money-bots AND /claude-lab. The
-    `lab` param picks which family scores apply:
+    Powers the Churn Now button on /money-bots, /claude-lab AND /sniper.
+    The `lab` param picks which family + scoring axis applies:
       lab=money  (default) → fundability scored, money categories
       lab=claude            → ambition scored, claude-lab categories
+      lab=snipe             → snipe scored, grounded incumbent wedge
 
-    Cheap — ~1 generation Haiku call + ~1 scoring call (~$0.003 total)."""
+    Cheap — ~1 generation Haiku call + ~1 scoring call (~$0.003 total).
+    Snipe also makes a couple of keyless HTTP calls for live incumbent
+    intel (cached per incumbent)."""
+    import random as _random
+
     from project_forge.engine.ambition import score_ambition
     from project_forge.engine.dedup import filter_and_save
     from project_forge.engine.fundability import score_fundability
     from project_forge.engine.llm_generator import (
         GENERATION_MODES,
         generate_idea_llm,
+        generate_snipe_llm,
         pick_least_used_mode,
     )
-    import random as _random
+    from project_forge.engine.snipe import score_snipe
 
     try:
         payload = await request.json()
@@ -456,10 +792,10 @@ async def api_churn(request: Request):
         payload = {}
 
     lab = (payload.get("lab") or "money").strip().lower()
-    if lab == "claude":
-        allowed = _CLAUDE_LAB_CATEGORIES
-    else:
-        allowed = _MONEY_CATEGORIES
+    allowed = {
+        "claude": _CLAUDE_LAB_CATEGORIES,
+        "snipe": _SNIPER_CATEGORIES,
+    }.get(lab, _MONEY_CATEGORIES)
 
     cat_str = (payload.get("category") or "").strip()
     if cat_str in allowed:
@@ -467,20 +803,26 @@ async def api_churn(request: Request):
     else:
         category = IdeaCategory(_random.choice(allowed))
 
-    mode = payload.get("mode") or await pick_least_used_mode(db, category)
-    if mode not in GENERATION_MODES:
-        mode = "novel"
+    # Generate. Snipe has its own grounded path; the others share one.
+    if lab == "snipe":
+        result = await generate_snipe_llm(db, category)
+    else:
+        mode = payload.get("mode") or await pick_least_used_mode(db, category)
+        if mode not in GENERATION_MODES:
+            mode = "novel"
+        result = await generate_idea_llm(db, category, mode=mode)
 
-    result = await generate_idea_llm(db, category, mode=mode)
     if result is None:
         return {
             "idea": None,
             "message": "LLM backend returned no parseable idea; try again.",
         }
 
-    # Score for the right axis. Both are cheap; score whichever the page wants.
+    # Score for the right axis.
     if lab == "claude":
         result.idea.ambition_score = await score_ambition(result.idea)
+    elif lab == "snipe":
+        result.idea.snipe_score = await score_snipe(result.idea)
     else:
         result.idea.fundability_score = await score_fundability(result.idea)
 
@@ -499,6 +841,8 @@ async def api_churn(request: Request):
             "category": result.idea.category.value,
             "fundability_score": result.idea.fundability_score,
             "ambition_score": result.idea.ambition_score,
+            "snipe_score": result.idea.snipe_score,
+            "target_incumbent": result.idea.target_incumbent,
             "generation_mode": result.mode,
             "artifact_type": result.artifact_type,
             "persona": result.persona,
@@ -511,9 +855,9 @@ async def api_money_bots_top(limit: int = Query(default=10, ge=1, le=100)):
     """JSON: top-N money-bot ideas across money categories by fundability_score."""
     placeholders = ",".join("?" * len(_MONEY_CATEGORIES))
     cur = await db.db.execute(
-        f"SELECT id, name, tagline, category, fundability_score, "
+        f"SELECT id, name, tagline, category, fundability_score, "  # noqa: S608
         f"generation_mode, status, github_issue_url, auto_promoted_at "
-        f"FROM ideas WHERE category IN ({placeholders}) "  # noqa: S608
+        f"FROM ideas WHERE category IN ({placeholders}) "
         f"AND status NOT IN ('archived', 'rejected') "
         f"AND fundability_score IS NOT NULL "
         f"ORDER BY fundability_score DESC, generated_at DESC LIMIT ?",
@@ -620,11 +964,7 @@ async def _run_approval_check(idea) -> str:
                 "Approval check for %s verdict=%s: %s",
                 idea.id,
                 result.verdict,
-                "; ".join(
-                    f"{c['name']}={c['status']}"
-                    for c in result.checks
-                    if c["status"] != "pass"
-                ),
+                "; ".join(f"{c['name']}={c['status']}" for c in result.checks if c["status"] != "pass"),
             )
         return result.verdict
     except Exception:
@@ -848,24 +1188,21 @@ async def thinktank_page(request: Request):
     si_value = IdeaCategory.SELF_IMPROVEMENT.value
 
     cursor = await db.db.execute(
-        "SELECT generated_at FROM ideas WHERE category = ? "
-        "ORDER BY generated_at DESC LIMIT 1",
+        "SELECT generated_at FROM ideas WHERE category = ? ORDER BY generated_at DESC LIMIT 1",
         (si_value,),
     )
     row = await cursor.fetchone()
     last_proposal = row[0] if row else None
 
     cursor = await db.db.execute(
-        "SELECT COUNT(*) FROM filtered_ideas "
-        "WHERE filtered_at >= datetime('now', '-1 day') AND idea_category = ?",
+        "SELECT COUNT(*) FROM filtered_ideas WHERE filtered_at >= datetime('now', '-1 day') AND idea_category = ?",
         (si_value,),
     )
     row = await cursor.fetchone()
     filtered_24h = row[0] if row else 0
 
     cursor = await db.db.execute(
-        "SELECT COUNT(*) FROM ideas "
-        "WHERE generated_at >= datetime('now', '-1 day') AND category = ?",
+        "SELECT COUNT(*) FROM ideas WHERE generated_at >= datetime('now', '-1 day') AND category = ?",
         (si_value,),
     )
     row = await cursor.fetchone()
@@ -889,12 +1226,14 @@ async def thinktank_page(request: Request):
     )
     recent_events = []
     for row in await cursor.fetchall():
-        recent_events.append({
-            "kind": row[0],
-            "title": row[1],
-            "when": row[2],
-            "reason": (row[3] or "")[:100] if row[3] else None,
-        })
+        recent_events.append(
+            {
+                "kind": row[0],
+                "title": row[1],
+                "when": row[2],
+                "reason": (row[3] or "")[:100] if row[3] else None,
+            }
+        )
 
     heartbeat = {
         "now": datetime.now(UTC).isoformat(),
@@ -1323,7 +1662,8 @@ async def ingest_text(request_body: TextIngestRequest, request: Request):
     _check_rate_limit(f"ingest:{client_ip}")
 
     idea = await generate_idea_from_text(
-        text=request_body.text, category_hint=request_body.category,
+        text=request_body.text,
+        category_hint=request_body.category,
     )
     _, accepted, reason = await filter_and_save(idea, db)
     if not accepted:
@@ -1800,7 +2140,7 @@ async def api_apply_challenge(idea_id: str, challenge_id: str):
     # Convert challenge.changes (list of {field, action, text}) → dict
     # of {field: new_value}. Last entry wins on conflict.
     field_updates: dict[str, str] = {}
-    for ch in (challenge.changes or []):
+    for ch in challenge.changes or []:
         if not isinstance(ch, dict):
             continue
         field = ch.get("field")

@@ -187,14 +187,10 @@ def resolve_backend(
     # plumb a cheap key without giving project-forge their Sonnet/Opus key.
     if model_override == "haiku":
         api_key = os.environ.get("FORGE_HAIKU_API_KEY", "") or (
-            settings.anthropic_api_key
-            or os.environ.get("ANTHROPIC_API_KEY", "")
+            settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
         )
     else:
-        api_key = (
-            settings.anthropic_api_key
-            or os.environ.get("ANTHROPIC_API_KEY", "")
-        )
+        api_key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
 
     if forced in ("static", "none"):
         return None

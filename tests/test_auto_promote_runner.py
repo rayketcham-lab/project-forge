@@ -100,11 +100,13 @@ class TestPicker:
         Even if its fundability is highest, the picker skips it."""
         from project_forge.cron.auto_promote_runner import pick_promotion_candidate
 
-        await db.save_idea(_idea(
-            "Big-Sec",
-            category=IdeaCategory.SECURITY_TOOL,
-            fundability_score=0.99,
-        ))
+        await db.save_idea(
+            _idea(
+                "Big-Sec",
+                category=IdeaCategory.SECURITY_TOOL,
+                fundability_score=0.99,
+            )
+        )
         await db.save_idea(_idea("Smaller-Money", fundability_score=0.6))
 
         result = await pick_promotion_candidate(db)
@@ -148,7 +150,8 @@ class TestRunCycle:
         await db.save_idea(idea)
 
         with patch.object(
-            auto_promote_runner, "_create_promotion_issue",
+            auto_promote_runner,
+            "_create_promotion_issue",
             return_value="https://github.com/x/y/issues/42",
         ):
             result = await auto_promote_runner.run_auto_promote_cycle(db)
@@ -171,7 +174,8 @@ class TestRunCycle:
         await db.save_idea(b)
 
         with patch.object(
-            auto_promote_runner, "_create_promotion_issue",
+            auto_promote_runner,
+            "_create_promotion_issue",
             return_value="https://github.com/x/y/issues/1",
         ):
             r1 = await auto_promote_runner.run_auto_promote_cycle(db)
@@ -190,7 +194,8 @@ class TestRunCycle:
         await db.save_idea(idea)
 
         with patch.object(
-            auto_promote_runner, "_create_promotion_issue",
+            auto_promote_runner,
+            "_create_promotion_issue",
             side_effect=RuntimeError("gh down"),
         ):
             result = await auto_promote_runner.run_auto_promote_cycle(db)

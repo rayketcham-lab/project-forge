@@ -49,8 +49,7 @@ def _super_idea(name: str, components: list[str], *, score: float = 0.85) -> Ide
     the production format ('- **Name**: blurb').
     """
     body = (
-        f"{name} brings together {len(components)} complementary project "
-        "concepts into a single, cohesive platform:\n\n"
+        f"{name} brings together {len(components)} complementary project concepts into a single, cohesive platform:\n\n"
     )
     body += "\n".join(f"- **{c}**: blurb for {c}" for c in components)
     return _idea(
@@ -84,16 +83,20 @@ class TestSiphonThresholdOverride:
         # Two atomic ideas with very different names, partially-overlapping
         # taglines (Jaccard ~0.5). Defaults (0.6 / 0.7) leave them alone;
         # tightened (0.45 / 0.55) clusters them.
-        await db.save_idea(_idea(
-            "Alpha Detector",
-            "anomaly detector for distributed traces with sampling",
-            score=0.8,
-        ))
-        await db.save_idea(_idea(
-            "Beta Profiler",
-            "anomaly detector for distributed traces with rules",
-            score=0.6,
-        ))
+        await db.save_idea(
+            _idea(
+                "Alpha Detector",
+                "anomaly detector for distributed traces with sampling",
+                score=0.8,
+            )
+        )
+        await db.save_idea(
+            _idea(
+                "Beta Profiler",
+                "anomaly detector for distributed traces with rules",
+                score=0.6,
+            )
+        )
 
         loose = await siphon_duplicates(db, dry_run=True)
         tight = await siphon_duplicates(
@@ -123,9 +126,7 @@ class TestSiphonSupersByComponents:
         report = await siphon_supers_by_components(db, dry_run=False, overlap_min=3)
         assert report["archived_count"] == 1
         # The lower-scored super was the one archived.
-        cursor = await db.db.execute(
-            "SELECT name FROM ideas WHERE status='archived'"
-        )
+        cursor = await db.db.execute("SELECT name FROM ideas WHERE status='archived'")
         archived = [row["name"] for row in await cursor.fetchall()]
         assert archived == ["[SUPER] Theme Two"]
 
@@ -146,19 +147,26 @@ class TestSiphonSupersByComponents:
         still cluster — that's the 'Drift Tracker / Drift Tracking' bug."""
         from project_forge.engine.siphon import siphon_supers_by_components
 
-        await db.save_idea(_super_idea(
-            "IETF Standards Compliance Drift Tracker",
-            ["X1", "X2", "X3"],
-            score=0.9,
-        ))
-        await db.save_idea(_super_idea(
-            "IETF Standards Compliance Drift Tracking",
-            ["Y1", "Y2", "Y3"],
-            score=0.85,
-        ))
+        await db.save_idea(
+            _super_idea(
+                "IETF Standards Compliance Drift Tracker",
+                ["X1", "X2", "X3"],
+                score=0.9,
+            )
+        )
+        await db.save_idea(
+            _super_idea(
+                "IETF Standards Compliance Drift Tracking",
+                ["Y1", "Y2", "Y3"],
+                score=0.85,
+            )
+        )
 
         report = await siphon_supers_by_components(
-            db, dry_run=False, overlap_min=100, name_jaccard=0.6,
+            db,
+            dry_run=False,
+            overlap_min=100,
+            name_jaccard=0.6,
         )
         assert report["archived_count"] == 1
 
@@ -172,21 +180,27 @@ class TestSiphonSupersByComponents:
 
         report = await siphon_supers_by_components(db, dry_run=False, overlap_min=2)
         assert report["archived_count"] == 0
-        cursor = await db.db.execute(
-            "SELECT COUNT(*) FROM ideas WHERE status='new'"
-        )
+        cursor = await db.db.execute("SELECT COUNT(*) FROM ideas WHERE status='new'")
         assert (await cursor.fetchone())[0] == 2
 
     @pytest.mark.asyncio
     async def test_dry_run_does_not_mutate(self, db):
         from project_forge.engine.siphon import siphon_supers_by_components
 
-        await db.save_idea(_super_idea(
-            "Alpha", ["A", "B", "C", "D"], score=0.9,
-        ))
-        await db.save_idea(_super_idea(
-            "Beta", ["A", "B", "C", "D"], score=0.8,
-        ))
+        await db.save_idea(
+            _super_idea(
+                "Alpha",
+                ["A", "B", "C", "D"],
+                score=0.9,
+            )
+        )
+        await db.save_idea(
+            _super_idea(
+                "Beta",
+                ["A", "B", "C", "D"],
+                score=0.8,
+            )
+        )
 
         report = await siphon_supers_by_components(db, dry_run=True, overlap_min=3)
         assert report["dry_run"] is True
@@ -214,9 +228,7 @@ class TestSiphonVerticals:
         report = await siphon_verticals(db, dry_run=False, cap=2)
 
         assert report["archived_count"] == 3
-        cursor = await db.db.execute(
-            "SELECT name FROM ideas WHERE status='new' ORDER BY feasibility_score DESC"
-        )
+        cursor = await db.db.execute("SELECT name FROM ideas WHERE status='new' ORDER BY feasibility_score DESC")
         kept = [r["name"] for r in await cursor.fetchall()]
         # Top 2 by score survive.
         assert kept == [
@@ -251,9 +263,14 @@ class TestSiphonVerticals:
         regardless of vertical-cap."""
         from project_forge.engine.siphon import siphon_verticals
 
-        await db.save_idea(_idea(
-            "Concept for Healthcare", "t", score=0.99, status="approved",
-        ))
+        await db.save_idea(
+            _idea(
+                "Concept for Healthcare",
+                "t",
+                score=0.99,
+                status="approved",
+            )
+        )
         await db.save_idea(_idea("Concept for Financial", "t", score=0.85))
         await db.save_idea(_idea("Concept for Container", "t", score=0.8))
         await db.save_idea(_idea("Concept for Telecom", "t", score=0.75))
@@ -261,9 +278,7 @@ class TestSiphonVerticals:
         report = await siphon_verticals(db, dry_run=False, cap=1)
         # cap=1 → one 'new' survives, two get archived; the 'approved' is
         # untouchable so it doesn't count toward the cap budget either.
-        cursor = await db.db.execute(
-            "SELECT name, status FROM ideas ORDER BY feasibility_score DESC"
-        )
+        cursor = await db.db.execute("SELECT name, status FROM ideas ORDER BY feasibility_score DESC")
         rows = [(r["name"], r["status"]) for r in await cursor.fetchall()]
         statuses = {n: s for n, s in rows}
         assert statuses["Concept for Healthcare"] == "approved"

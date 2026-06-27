@@ -19,9 +19,9 @@ from httpx import ASGITransport, AsyncClient
 from project_forge.models import Idea, IdeaCategory
 
 
-def _idea(name: str = "X", score: float = 0.7,
-          status: str = "new",
-          category: IdeaCategory = IdeaCategory.SECURITY_TOOL) -> Idea:
+def _idea(
+    name: str = "X", score: float = 0.7, status: str = "new", category: IdeaCategory = IdeaCategory.SECURITY_TOOL
+) -> Idea:
     i = Idea(
         name=name,
         tagline=f"tag for {name}",
@@ -38,6 +38,7 @@ def _idea(name: str = "X", score: float = 0.7,
 @pytest_asyncio.fixture
 async def db(tmp_path):
     from project_forge.storage.db import Database
+
     d = Database(tmp_path / "stats.db")
     await d.connect()
     yield d
@@ -79,8 +80,7 @@ class TestStatsActiveVsArchived:
             f"total_active should exclude archived+rejected; got {stats.get('total_active')}"
         )
         assert stats.get("total_archived") == 5, (
-            f"total_archived should be exactly the 'archived' status count; "
-            f"got {stats.get('total_archived')}"
+            f"total_archived should be exactly the 'archived' status count; got {stats.get('total_archived')}"
         )
 
     @pytest.mark.asyncio
@@ -126,13 +126,13 @@ async def test_dashboard_total_tile_shows_active_not_total(client):
     # We can't pin position, but assert: nowhere in the visible stats grid
     # does ">100<" appear as a stat-number.
     import re
+
     big_numbers = re.findall(
-        r'class="stat-number">\s*(\d+)\s*<', html,
+        r'class="stat-number">\s*(\d+)\s*<',
+        html,
     )
     assert "100" not in big_numbers, (
         f"A stat tile renders 100 (the sum). Stats now: {big_numbers}. "
         f"Should show 4 for active, archived in a different tile/badge."
     )
-    assert "4" in big_numbers, (
-        f"Active-count 4 is missing from the stat tiles: {big_numbers}"
-    )
+    assert "4" in big_numbers, f"Active-count 4 is missing from the stat tiles: {big_numbers}"

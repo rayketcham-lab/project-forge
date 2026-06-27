@@ -43,13 +43,15 @@ def parse_arxiv_atom(xml_text: str) -> list[dict]:
         elif id_elem is not None and id_elem.text:
             url = id_elem.text
 
-        items.append({
-            "id": (id_elem.text if id_elem is not None and id_elem.text else "").strip(),
-            "title": (title_elem.text if title_elem is not None and title_elem.text else "").strip(),
-            "summary": (summary_elem.text if summary_elem is not None and summary_elem.text else "").strip(),
-            "url": url,
-            "ts": (published_elem.text if published_elem is not None and published_elem.text else "").strip(),
-        })
+        items.append(
+            {
+                "id": (id_elem.text if id_elem is not None and id_elem.text else "").strip(),
+                "title": (title_elem.text if title_elem is not None and title_elem.text else "").strip(),
+                "summary": (summary_elem.text if summary_elem is not None and summary_elem.text else "").strip(),
+                "url": url,
+                "ts": (published_elem.text if published_elem is not None and published_elem.text else "").strip(),
+            }
+        )
     return items
 
 

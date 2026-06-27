@@ -46,10 +46,14 @@ class TestIngestRateLimit:
         from project_forge.models import Idea, IdeaCategory
 
         stub_idea = Idea(
-            name="x", tagline="t", description="d" * 80,
+            name="x",
+            tagline="t",
+            description="d" * 80,
             category=IdeaCategory.OBSERVABILITY,
-            market_analysis="m" * 40, feasibility_score=0.6,
-            mvp_scope="mvp" * 5, tech_stack=["python"],
+            market_analysis="m" * 40,
+            feasibility_score=0.6,
+            mvp_scope="mvp" * 5,
+            tech_stack=["python"],
         )
 
         async def _fake_ingest(_req):
@@ -58,12 +62,15 @@ class TestIngestRateLimit:
         async def _fake_save(_idea, _db):
             return _idea, True, None
 
-        with patch(
-            "project_forge.web.routes.ingest_idea_from_url",
-            new=_fake_ingest,
-        ), patch(
-            "project_forge.web.routes.filter_and_save",
-            new=_fake_save,
+        with (
+            patch(
+                "project_forge.web.routes.ingest_idea_from_url",
+                new=_fake_ingest,
+            ),
+            patch(
+                "project_forge.web.routes.filter_and_save",
+                new=_fake_save,
+            ),
         ):
             statuses = []
             for _ in range(8):
@@ -82,10 +89,14 @@ class TestIngestRateLimit:
         from project_forge.models import Idea, IdeaCategory
 
         stub_idea = Idea(
-            name="t", tagline="t", description="d" * 80,
+            name="t",
+            tagline="t",
+            description="d" * 80,
             category=IdeaCategory.OBSERVABILITY,
-            market_analysis="m" * 40, feasibility_score=0.6,
-            mvp_scope="mvp" * 5, tech_stack=["python"],
+            market_analysis="m" * 40,
+            feasibility_score=0.6,
+            mvp_scope="mvp" * 5,
+            tech_stack=["python"],
         )
 
         async def _fake_text(text, category_hint=None):
@@ -94,12 +105,15 @@ class TestIngestRateLimit:
         async def _fake_save(_idea, _db):
             return _idea, True, None
 
-        with patch(
-            "project_forge.web.routes.generate_idea_from_text",
-            new=_fake_text,
-        ), patch(
-            "project_forge.web.routes.filter_and_save",
-            new=_fake_save,
+        with (
+            patch(
+                "project_forge.web.routes.generate_idea_from_text",
+                new=_fake_text,
+            ),
+            patch(
+                "project_forge.web.routes.filter_and_save",
+                new=_fake_save,
+            ),
         ):
             statuses = []
             for _ in range(8):
@@ -121,10 +135,14 @@ class TestRateLimitIsolation:
         from project_forge.models import Idea, IdeaCategory
 
         stub_idea = Idea(
-            name="x", tagline="t", description="d" * 80,
+            name="x",
+            tagline="t",
+            description="d" * 80,
             category=IdeaCategory.OBSERVABILITY,
-            market_analysis="m" * 40, feasibility_score=0.6,
-            mvp_scope="mvp" * 5, tech_stack=["python"],
+            market_analysis="m" * 40,
+            feasibility_score=0.6,
+            mvp_scope="mvp" * 5,
+            tech_stack=["python"],
         )
 
         async def _fake_ingest(_req):
@@ -133,12 +151,15 @@ class TestRateLimitIsolation:
         async def _fake_save(_idea, _db):
             return _idea, True, None
 
-        with patch(
-            "project_forge.web.routes.ingest_idea_from_url",
-            new=_fake_ingest,
-        ), patch(
-            "project_forge.web.routes.filter_and_save",
-            new=_fake_save,
+        with (
+            patch(
+                "project_forge.web.routes.ingest_idea_from_url",
+                new=_fake_ingest,
+            ),
+            patch(
+                "project_forge.web.routes.filter_and_save",
+                new=_fake_save,
+            ),
         ):
             for _ in range(8):
                 await client.post(

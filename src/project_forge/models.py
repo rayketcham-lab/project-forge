@@ -37,6 +37,65 @@ class IdeaCategory(StrEnum):
     # scoring axis (ambition_score) — same generation pipeline.
     CLAUDE_SKILLS_AGENTS = "claude-skills-agents"
     AI_MARKETPLACE = "ai-marketplace"
+    # v0.16 money-bot expansion — fundable, shippable product shapes that
+    # the original content/automation framing missed. These all carry a
+    # fundability bonus and surface on /money-bots.
+    MICRO_SAAS = "micro-saas"
+    VERTICAL_SAAS = "vertical-saas"
+    ECOMMERCE_TOOLS = "ecommerce-tools"
+    FINTECH_TOOLS = "fintech-tools"
+    # v0.16 Claude Lab expansion — the other axes of the agent ecosystem
+    # beyond skills/marketplace: the runtime that runs agents, the evals
+    # that prove they work, the security that keeps them safe, and the
+    # memory that gives them continuity. Ambition-scored, artifact-rotated.
+    AGENT_INFRA = "agent-infra"
+    CLAUDE_EVALS = "claude-evals"
+    AGENT_SECURITY = "agent-security"
+    CONTEXT_MEMORY = "context-memory"
+
+
+# --------------------------------------------------------------------------- #
+# Themed-dashboard category groupings                                         #
+# --------------------------------------------------------------------------- #
+# Canonical source of truth for which categories belong to the two themed
+# dashboards. Centralized here so the /money-bots and /claude-lab routes,
+# the dashboard stats counter, and the auto-promote picker can't drift
+# apart — add a category in ONE place and every surface picks it up.
+
+MONEY_CATEGORIES: tuple["IdeaCategory", ...] = (
+    IdeaCategory.AUTOMATION_INCOME,
+    IdeaCategory.CREATOR_TOOLS,
+    IdeaCategory.CONSUMER_APP,
+    IdeaCategory.PRODUCTIVITY,
+    IdeaCategory.MICRO_SAAS,
+    IdeaCategory.VERTICAL_SAAS,
+    IdeaCategory.ECOMMERCE_TOOLS,
+    IdeaCategory.FINTECH_TOOLS,
+)
+
+CLAUDE_LAB_CATEGORIES: tuple["IdeaCategory", ...] = (
+    IdeaCategory.CLAUDE_SKILLS_AGENTS,
+    IdeaCategory.AI_MARKETPLACE,
+    IdeaCategory.AGENT_INFRA,
+    IdeaCategory.CLAUDE_EVALS,
+    IdeaCategory.AGENT_SECURITY,
+    IdeaCategory.CONTEXT_MEMORY,
+)
+
+# v0.16 Sniper board — categories the snipe generator hunts incumbents in.
+# Spans the commercial money categories PLUS the fat-incumbent IT/security
+# space (Venafi, DigiCert, Vault, Okta, CrowdStrike, Datadog, …), which is
+# the operator's home turf. The /sniper page itself filters on
+# snipe_score IS NOT NULL, so these only bound where churn picks from.
+SNIPER_CATEGORIES: tuple["IdeaCategory", ...] = (
+    *MONEY_CATEGORIES,
+    IdeaCategory.SECURITY_TOOL,
+    IdeaCategory.DEVOPS_TOOLING,
+    IdeaCategory.OBSERVABILITY,
+    IdeaCategory.COMPLIANCE,
+    IdeaCategory.CRYPTO_INFRASTRUCTURE,
+    IdeaCategory.PQC_CRYPTOGRAPHY,
+)
 
 
 IdeaStatus = Literal["new", "approved", "scaffolded", "rejected", "archived", "contributed", "implemented"]
@@ -79,8 +138,18 @@ class Idea(BaseModel):
     # protocol / ability. None = the default project-pitch shape
     # (everything pre-v0.15a). Only Claude Lab categories rotate
     # through these; money-bot and IT/security categories keep the
-    # project-pitch shape.
+    # project-pitch shape. NOTE: Sniper-board ideas reuse this column to
+    # store their snipe ANGLE (price-snipe / unbundle / …) — disjoint
+    # vocabulary, same column, no collision since snipe categories never
+    # artifact-rotate.
     artifact_type: str | None = None
+    # v0.16 Sniper board — competitive-displacement axis. Where fundability
+    # asks "can we sell it" and ambition "does it push the ceiling",
+    # snipe_score asks "can we wedge into a market-PROVEN incumbent's
+    # demand". target_incumbent is the named real comp the wedge targets
+    # (powers the "vs. X" badge). Both None for non-snipe ideas.
+    snipe_score: float | None = None
+    target_incumbent: str | None = None
 
 
 class Resource(BaseModel):

@@ -66,9 +66,7 @@ class TestKeywordExtraction:
         keywords = _extract_cluster_keywords(_SECURITY_IDEAS)
         keyword_set = set(keywords)
         domain_terms = {"supply", "chain", "certificate", "transparency", "oauth", "shadow", "lifecycle"}
-        assert len(keyword_set & domain_terms) >= 2, (
-            f"Expected domain terms in keywords, got: {keywords}"
-        )
+        assert len(keyword_set & domain_terms) >= 2, f"Expected domain terms in keywords, got: {keywords}"
 
 
 class TestDynamicClusterName:
@@ -121,9 +119,7 @@ class TestDynamicClusterName:
                 _make_idea("Key Escrow Risk Analyzer", "key escrow risk analysis: government", cat),
             ]
             name = _dynamic_cluster_name(ideas, frozenset({cat}))
-            assert "Unified Platform" not in name, (
-                f"{cat.value}: got generic name {name!r}"
-            )
+            assert "Unified Platform" not in name, f"{cat.value}: got generic name {name!r}"
 
 
 class TestSuperTagline:
@@ -141,9 +137,7 @@ class TestSuperTagline:
         tagline = _build_super_tagline(ideas)
         tagline_lower = tagline.lower()
         content_terms = {"supply chain", "certificate", "attack", "transparency"}
-        assert any(t in tagline_lower for t in content_terms), (
-            f"No component concepts in tagline: {tagline!r}"
-        )
+        assert any(t in tagline_lower for t in content_terms), f"No component concepts in tagline: {tagline!r}"
 
     def test_max_120_chars(self):
         assert len(_build_super_tagline(_SECURITY_IDEAS)) <= 120
@@ -191,9 +185,7 @@ class TestFindIdeaClustersNaming:
         clusters = find_idea_clusters(ideas)
         assert len(clusters) > 0
         for cluster in clusters:
-            assert "Unified Platform" not in cluster["theme"], (
-                f"Generic name in cluster: {cluster['theme']!r}"
-            )
+            assert "Unified Platform" not in cluster["theme"], f"Generic name in cluster: {cluster['theme']!r}"
 
     def test_single_category_cluster_not_generic(self):
         """Single-category clusters must not use 'X Unified Platform' fallback."""
@@ -232,9 +224,7 @@ class TestSynthesizeEnd2End:
         si = synthesize_super_idea(cluster)
         tagline_lower = si.tagline.lower()
         content_terms = {"supply chain", "certificate", "attack", "transparency", "oauth"}
-        assert any(t in tagline_lower for t in content_terms), (
-            f"No content in super idea tagline: {si.tagline!r}"
-        )
+        assert any(t in tagline_lower for t in content_terms), f"No content in super idea tagline: {si.tagline!r}"
 
     def test_synthesize_uses_cluster_theme_as_name(self):
         ideas = _SECURITY_IDEAS[:2]
@@ -314,9 +304,7 @@ class TestStatCardIntegrity:
         This tests the template logic — stats.super_ideas (from DB COUNT query)
         must be what feeds the stat-number element, not ns.active_super.
         """
-        template_path = (
-            "/opt/vmdata/project-forge/src/project_forge/web/templates/dashboard.html"
-        )
+        template_path = "/opt/vmdata/project-forge/src/project_forge/web/templates/dashboard.html"
         with open(template_path) as f:
             content = f.read()
         # The stat-number for Super Ideas must use stats.super_ideas
@@ -333,10 +321,10 @@ class TestStatCardIntegrity:
             content = f.read()
         # numbers[4] must reference contributed, not avg_feasibility_score
         # Find the block containing numbers[4]
-        assert "numbers[4].textContent = stats.ideas_by_status.contributed" in content or \
-               "numbers[4].textContent = (stats.ideas_by_status.contributed" in content, (
-            "JS numbers[4] must set Contributed count, not avg_feasibility_score"
-        )
+        assert (
+            "numbers[4].textContent = stats.ideas_by_status.contributed" in content
+            or "numbers[4].textContent = (stats.ideas_by_status.contributed" in content
+        ), "JS numbers[4] must set Contributed count, not avg_feasibility_score"
 
     def test_js_updates_avg_score_at_index_5(self):
         """JS must update the Avg Score card at numbers[5]."""

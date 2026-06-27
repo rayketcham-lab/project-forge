@@ -54,12 +54,14 @@ async def _active_ideas_by_category(db: Database) -> dict[str, list]:
     rows = await cur.fetchall()
     buckets: dict[str, list] = defaultdict(list)
     for r in rows:
-        buckets[r["category"]].append({
-            "id": r["id"],
-            "name": r["name"],
-            "tagline": r["tagline"],
-            "score": float(r["feasibility_score"] or 0.0),
-        })
+        buckets[r["category"]].append(
+            {
+                "id": r["id"],
+                "name": r["name"],
+                "tagline": r["tagline"],
+                "score": float(r["feasibility_score"] or 0.0),
+            }
+        )
     return buckets
 
 
@@ -162,21 +164,21 @@ async def siphon_duplicates(
         archive_ids = [c["id"] for c in archive]
         planned_archive.extend(archive_ids)
 
-        report_clusters.append({
-            "members": [c["id"] for c in cluster],
-            "keep": keep["id"],
-            "keep_name": keep["name"],
-            "keep_score": keep["score"],
-            "archive": archive_ids,
-        })
+        report_clusters.append(
+            {
+                "members": [c["id"] for c in cluster],
+                "keep": keep["id"],
+                "keep_name": keep["name"],
+                "keep_score": keep["score"],
+                "archive": archive_ids,
+            }
+        )
 
         if not dry_run:
             now = datetime.now(UTC).isoformat()
             for victim in archive:
                 await db.db.execute(
-                    "UPDATE ideas SET status = 'archived', "
-                    "archived_reason = ?, archived_at = ? "
-                    "WHERE id = ?",
+                    "UPDATE ideas SET status = 'archived', archived_reason = ?, archived_at = ? WHERE id = ?",
                     ("retroactive_dedup", now, victim["id"]),
                 )
                 applied_ids.append(victim["id"])
@@ -313,18 +315,19 @@ async def siphon_supers_by_components(
         archive = [supers[v] for v in victim_idxs]
         archive_ids = [c["id"] for c in archive]
         planned_archive.extend(archive_ids)
-        report_clusters.append({
-            "keep": keep["id"],
-            "keep_name": keep["name"],
-            "keep_score": keep["score"],
-            "archive": archive_ids,
-        })
+        report_clusters.append(
+            {
+                "keep": keep["id"],
+                "keep_name": keep["name"],
+                "keep_score": keep["score"],
+                "archive": archive_ids,
+            }
+        )
         if not dry_run:
             now = datetime.now(UTC).isoformat()
             for victim in archive:
                 await db.db.execute(
-                    "UPDATE ideas SET status='archived', "
-                    "archived_reason=?, archived_at=? WHERE id=?",
+                    "UPDATE ideas SET status='archived', archived_reason=?, archived_at=? WHERE id=?",
                     ("super_overlap", now, victim["id"]),
                 )
                 applied_ids.append(victim["id"])
@@ -387,12 +390,14 @@ async def siphon_verticals(
         stem = _strip_vertical(r["name"])
         if stem is None:
             continue
-        groups[stem].append({
-            "id": r["id"],
-            "name": r["name"],
-            "score": float(r["feasibility_score"] or 0.0),
-            "status": r["status"],
-        })
+        groups[stem].append(
+            {
+                "id": r["id"],
+                "name": r["name"],
+                "score": float(r["feasibility_score"] or 0.0),
+                "status": r["status"],
+            }
+        )
 
     applied_ids: list[str] = []
     report_clusters: list[dict] = []
@@ -415,17 +420,18 @@ async def siphon_verticals(
             continue
         archive_ids = [a["id"] for a in archive]
         planned_archive.extend(archive_ids)
-        report_clusters.append({
-            "concept": stem,
-            "keep": [k["id"] for k in (protected + kept)],
-            "archive": archive_ids,
-        })
+        report_clusters.append(
+            {
+                "concept": stem,
+                "keep": [k["id"] for k in (protected + kept)],
+                "archive": archive_ids,
+            }
+        )
         if not dry_run:
             now = datetime.now(UTC).isoformat()
             for victim in archive:
                 await db.db.execute(
-                    "UPDATE ideas SET status='archived', "
-                    "archived_reason=?, archived_at=? WHERE id=?",
+                    "UPDATE ideas SET status='archived', archived_reason=?, archived_at=? WHERE id=?",
                     ("vertical_cap", now, victim["id"]),
                 )
                 applied_ids.append(victim["id"])
@@ -476,9 +482,7 @@ async def siphon_all(
         "atomic": atomic,
         "supers": supers,
         "verticals": verticals,
-        "total_archived": atomic["archived_count"]
-        + supers["archived_count"]
-        + verticals["archived_count"],
+        "total_archived": atomic["archived_count"] + supers["archived_count"] + verticals["archived_count"],
     }
 
 

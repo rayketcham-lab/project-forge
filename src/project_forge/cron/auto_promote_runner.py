@@ -29,19 +29,16 @@ from datetime import UTC, datetime
 from typing import Any
 
 from project_forge.config import settings
-from project_forge.models import Idea, IdeaCategory
+from project_forge.models import MONEY_CATEGORIES, Idea, IdeaCategory
 from project_forge.storage.db import Database
 
 logger = logging.getLogger(__name__)
 
 
 # Default money-friendly categories. Env override comma-separated values.
-_DEFAULT_PROMOTE_CATEGORIES = (
-    IdeaCategory.AUTOMATION_INCOME,
-    IdeaCategory.CREATOR_TOOLS,
-    IdeaCategory.CONSUMER_APP,
-    IdeaCategory.PRODUCTIVITY,
-)
+# Sourced from the canonical money grouping so a new money category is
+# promotion-eligible the moment it's added.
+_DEFAULT_PROMOTE_CATEGORIES = MONEY_CATEGORIES
 
 
 def _promote_categories() -> list[IdeaCategory]:
@@ -118,11 +115,7 @@ async def pick_promotion_candidate(db: Database) -> Idea | None:
 def build_issue_body(idea: Idea) -> str:
     """Markdown body for the auto-promote GitHub issue."""
     tech = ", ".join(idea.tech_stack) if idea.tech_stack else "(none specified)"
-    score = (
-        f"{idea.fundability_score:.2f}"
-        if idea.fundability_score is not None
-        else "n/a"
-    )
+    score = f"{idea.fundability_score:.2f}" if idea.fundability_score is not None else "n/a"
     mode = idea.generation_mode or "template"
     return (
         f"# Auto-promoted by Project Forge\n\n"
@@ -161,10 +154,8 @@ def _create_promotion_issue(idea: Idea) -> str:
     repo = _promote_repo()
     # Bootstrap labels (idempotent; fails-soft).
     try:
-        create_label(repo, "auto-promoted", "0e8a16",
-                     "Auto-promoted by the money-flipper cadence")
-        create_label(repo, "money-bot", "fbca04",
-                     "Money-making bot or monetization-focused project")
+        create_label(repo, "auto-promoted", "0e8a16", "Auto-promoted by the money-flipper cadence")
+        create_label(repo, "money-bot", "fbca04", "Money-making bot or monetization-focused project")
     except Exception:
         logger.warning("auto-promote: label bootstrap had a hiccup; continuing")
 
@@ -217,7 +208,8 @@ async def run_auto_promote_cycle(db: Database) -> dict[str, Any]:
 
     logger.info(
         "auto-promote: promoted idea=%s issue=%s",
-        candidate.id, issue_url,
+        candidate.id,
+        issue_url,
     )
     return {
         "promoted": 1,

@@ -75,8 +75,7 @@ class TestDirectionAwareTaglines:
         # At least 30% of pairs should be below threshold (different directions)
         low_sim_ratio = 1 - (high_sim_count / max(total_pairs, 1))
         assert low_sim_ratio > 0.2, (
-            f"Only {low_sim_ratio:.0%} of tagline pairs are dissimilar — "
-            f"directions need more differentiation"
+            f"Only {low_sim_ratio:.0%} of tagline pairs are dissimilar — directions need more differentiation"
         )
 
 
@@ -154,6 +153,4 @@ class TestExpandedSeedSpace:
         idea, *_ = generate_local_idea(category=IdeaCategory.SECURITY_TOOL)
         # Domain info must survive — if it's stripped, normalized == concept-only.
         # The colon format 'concept: domain' makes domain part of the normalized form.
-        assert ":" in idea.tagline, (
-            f"Tagline should use ': domain' format, got: {idea.tagline!r}"
-        )
+        assert ":" in idea.tagline, f"Tagline should use ': domain' format, got: {idea.tagline!r}"

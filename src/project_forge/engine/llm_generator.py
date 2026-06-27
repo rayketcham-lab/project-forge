@@ -67,14 +67,14 @@ GENERATION_MODES = ["novel", "inversion", "bundle", "microservice", "adversarial
 # for skills, sub-agents, MCP servers, hooks, slash commands, workflows,
 # protocols, and raw capability extensions.
 ARTIFACT_TYPES = [
-    "skill",          # .claude/skills/ entry — single-purpose, focused
-    "sub-agent",      # .claude/agents/ entry — specialized agent w/ role
-    "mcp-server",     # MCP protocol server exposing N tools
-    "hook",           # Claude Code lifecycle hook (PreToolUse, etc.)
+    "skill",  # .claude/skills/ entry — single-purpose, focused
+    "sub-agent",  # .claude/agents/ entry — specialized agent w/ role
+    "mcp-server",  # MCP protocol server exposing N tools
+    "hook",  # Claude Code lifecycle hook (PreToolUse, etc.)
     "slash-command",  # /command in a project for a repeated workflow
-    "workflow",       # composition of 2-4 sub-agents fanned for a task
-    "protocol",       # standard/spec proposal for inter-agent comms
-    "ability",        # raw capability extension — what the agent can NOW do
+    "workflow",  # composition of 2-4 sub-agents fanned for a task
+    "protocol",  # standard/spec proposal for inter-agent comms
+    "ability",  # raw capability extension — what the agent can NOW do
 ]
 
 # Categories that get artifact-type variety. Everything else stays on
@@ -82,6 +82,12 @@ ARTIFACT_TYPES = [
 _ARTIFACT_ROTATION_CATEGORIES = {
     IdeaCategory.CLAUDE_SKILLS_AGENTS,
     IdeaCategory.AI_MARKETPLACE,
+    # v0.16 Claude Lab expansion — same artifact-shape rotation so these
+    # categories also pitch skills / sub-agents / MCP servers / etc.
+    IdeaCategory.AGENT_INFRA,
+    IdeaCategory.CLAUDE_EVALS,
+    IdeaCategory.AGENT_SECURITY,
+    IdeaCategory.CONTEXT_MEMORY,
 }
 
 
@@ -229,7 +235,7 @@ PERSONAS_BY_CATEGORY: dict[IdeaCategory, list[str]] = {
     IdeaCategory.CLAUDE_SKILLS_AGENTS: [
         "indie dev shipping Claude Code skills for their 5-person team, wants a skill that wins on day one",
         "platform engineer at a 200-person org, building MCP servers for internal infra, needs auth + audit baked in",
-        "AI researcher prototyping agentic workflows, wants fanned-out sub-agents that compose without orchestration glue",
+        "AI researcher prototyping agentic workflows, wants fanned-out sub-agents that compose without glue",
         "engineering manager who wants per-PR review sub-agents that learn from accepted/rejected diffs",
         "terminal power user automating their life: dotfiles + email + RSS + bills via Claude Code agents",
         "DevSecOps engineer building a sub-agent that grades code for safety + hallucination risk before merge",
@@ -241,7 +247,7 @@ PERSONAS_BY_CATEGORY: dict[IdeaCategory, list[str]] = {
         "DevRel engineer building MCP demos for a platform team, needs each one to be impressive in 90 seconds",
     ],
     IdeaCategory.AI_MARKETPLACE: [
-        "founder building 'the App Store for agents' — needs a discovery + payment + reputation layer that doesn't suck",
+        "founder building 'the App Store for agents' — needs discovery + payment + reputation that doesn't suck",
         "VC scouting AI marketplaces, wants to know which primitive everyone will pay for once it exists",
         "AI engineer at a platform company designing the agent layer that handles attribution + revenue split",
         "skill author wanting income from their distribution without building a whole storefront",
@@ -265,6 +271,106 @@ PERSONAS_BY_CATEGORY: dict[IdeaCategory, list[str]] = {
         "course creator with 500 students, wants better completion analytics than Teachable provides",
         "writer juggling Substack + Medium + personal site, cross-posting eats 3 hours/week",
         "live-streamer who wants automated highlight reels for clip-farming subreddits",
+    ],
+    # v0.16 money-bot expansion personas.
+    IdeaCategory.MICRO_SAAS: [
+        "solo founder shipping a paid micro-tool every quarter, wants one that hits $1k MRR fast",
+        "indie hacker who sells 3 tiny APIs, each $200/mo, looking for the next single-endpoint product",
+        "bootstrapper allergic to VC, needs a product one person can run and support forever",
+        "freelance dev productizing a script clients keep asking for, wants Stripe live this weekend",
+        "no-code builder who wants a focused backend they can charge a flat monthly fee for",
+        "open-source maintainer monetizing a hosted version of their CLI tool",
+        "agency owner spinning off an internal tool into a standalone paid SaaS",
+        "side-project builder with a day job, 6 hours a week, needs deploy-in-a-weekend scope",
+        "micro-ISV doing $4k MRR across 5 tools, hunting the sixth with low support burden",
+        "developer who wants recurring revenue from one sharp feature, not a sprawling platform",
+    ],
+    IdeaCategory.VERTICAL_SAAS: [
+        "dentist running two practices, juggling scheduling + recalls + payments across three apps",
+        "boutique gym owner losing money to no-shows, membership management is a spreadsheet",
+        "HVAC contractor quoting jobs on paper, invoices go out late, cash flow is a guess",
+        "solo immigration lawyer tracking case deadlines in email, terrified of a missed filing",
+        "vet clinic manager whose recall reminders are manual and whose no-show rate is brutal",
+        "independent restaurant owner with no real handle on food cost or menu margins",
+        "tattoo studio owner managing bookings + deposits + portfolios across Instagram DMs",
+        "residential cleaning company owner routing crews and chasing payment by text",
+        "small-nonprofit director tracking donors, grants, and volunteers in disconnected sheets",
+        "med-spa owner whose treatment plans and appointments live in three incompatible tools",
+        "music teacher with 40 students, scheduling + progress + invoicing all by hand",
+        "small landlord with 12 units, maintenance requests and rent roll scattered everywhere",
+    ],
+    IdeaCategory.ECOMMERCE_TOOLS: [
+        "Shopify seller doing $40k/mo, overselling because inventory isn't synced to Amazon",
+        "Amazon FBA seller fighting listing hijackers and fake reviews by hand every week",
+        "DTC brand founder whose return rate is eating margin and nobody knows which SKUs",
+        "Etsy seller scaling past 1k orders/mo, fulfillment and shipping rates are chaos",
+        "subscription-box operator bleeding churn tied to delivery delays they can't see",
+        "dropshipper graduating to a real brand, needs landed-cost truth per unit",
+        "multichannel seller on 4 marketplaces, fee reconciliation is a monthly nightmare",
+        "B2B wholesaler taking orders by email, wants a tiered-pricing self-serve portal",
+        "print-on-demand seller whose product photos and listings take all weekend",
+        "small 3PL operator optimizing pick paths and proving delivery for clients",
+    ],
+    IdeaCategory.FINTECH_TOOLS: [
+        "freelancer chasing late invoices, no read receipts, cash flow is feast or famine",
+        "1099 contractor terrified of quarterly estimated taxes, does it on a napkin",
+        "small-business owner with no cash-flow forecast, finds out about shortfalls too late",
+        "agency owner reconciling multi-currency contractor payouts by hand each month",
+        "couple budgeting shared expenses without merging accounts, fighting over categories",
+        "solo-LLC founder unsure how to split owner draw vs payroll, no finance hire yet",
+        "consultant burning retainer hours invisibly, clients surprised by the top-up ask",
+        "e-commerce seller who just learned they owe sales tax in five states retroactively",
+        "creator with real business income missing deductions because receipts are everywhere",
+        "bookkeeper for 15 micro-clients drowning in receipt-to-QuickBooks data entry",
+    ],
+    # v0.16 Claude Lab expansion personas.
+    IdeaCategory.AGENT_INFRA: [
+        "platform engineer running 200 agents nightly, token spend is unpredictable and scary",
+        "infra lead who needs agent runs to survive crashes and resume from a checkpoint",
+        "founder of an AI-first product whose cold-start latency is killing the demo",
+        "SRE on call for an agent fleet with no backpressure, queues melt during spikes",
+        "data engineer fanning out 500 sub-agents, half do redundant work with no shared context",
+        "cost owner who needs per-team token attribution before finance kills the project",
+        "platform team standardizing how agents get short-lived secrets without leaking them",
+        "ML infra engineer wanting deterministic replay of any agent run for debugging",
+        "engineering manager who needs blue/green agent deploys with shadow comparison",
+        "startup CTO who must hard-cap spend per task or one runaway loop bankrupts the month",
+    ],
+    IdeaCategory.CLAUDE_EVALS: [
+        "AI product lead who ships prompt changes blind, no idea if quality regressed",
+        "ML researcher whose evals are flaky and can't tell model variance from real change",
+        "DevSecOps engineer wanting an eval gate that blocks merges on quality regressions",
+        "team lead building an LLM-as-judge harness but worried the judge is biased",
+        "founder comparing two models, needs a cost-vs-quality frontier, not a vibe check",
+        "QA engineer who needs golden datasets mined from real production traces",
+        "researcher measuring hallucination rate grounded against a source corpus",
+        "platform engineer wiring tool-call correctness scoring into CI",
+        "AI eng who needs to prove jailbreak + injection resistance before launch",
+        "product owner who wants a leaderboard ranked by validated outcomes, not downloads",
+    ],
+    IdeaCategory.AGENT_SECURITY: [
+        "security engineer treating the agent as an attack surface, fears indirect prompt injection",
+        "platform owner who needs MCP servers verified + signed before anyone installs one",
+        "DevSecOps lead wanting least-privilege tool grants per task, not blanket session access",
+        "compliance officer demanding tamper-evident audit logs for every agent action",
+        "AppSec engineer red-teaming agents by fuzzing their tools with adversarial inputs",
+        "enterprise architect worried about agents exfiltrating data to new domains",
+        "PKI engineer designing agent identity + attestation so tools can trust the caller",
+        "incident responder who needs a kill-switch + quarantine for misbehaving agents",
+        "security lead scanning the skill supply chain — who wrote it, what it reads, what it sends",
+        "fintech security engineer blocking PII from crossing a classification boundary",
+    ],
+    IdeaCategory.CONTEXT_MEMORY: [
+        "agent builder whose sessions forget every decision the moment the window fills",
+        "consultant running 7 client agents that must never leak one client's facts to another",
+        "developer who wants project memory that survives across sessions and machines",
+        "ML engineer building recall that surfaces only the memories a task actually needs",
+        "team lead who wants shared agent memory with provenance and access control per fact",
+        "researcher needing time-aware memory: 'what did this codebase look like 3 months ago'",
+        "power user whose agent keeps repeating approaches that already failed last week",
+        "platform engineer who needs a memory write-policy: is this even worth remembering",
+        "founder whose agent's stored facts contradict current reality and nobody reconciles them",
+        "knowledge-management lead wanting citation-backed memory linking every fact to a source",
     ],
     # Security categories still get their detailed personas via the
     # original PERSONA_SEEDS list (diversity_prompts.py). We pull from
@@ -356,7 +462,9 @@ def _pick_persona(category: IdeaCategory) -> str:
 
 
 async def _recent_idea_lines(
-    db: Database, category: IdeaCategory, limit: int = 30,
+    db: Database,
+    category: IdeaCategory,
+    limit: int = 30,
 ) -> list[str]:
     """Return up to `limit` recent 'name — tagline' strings from the same
     category. Used as the do-not-produce list in the prompt."""
@@ -397,8 +505,10 @@ def _build_prompt(
     persona: str,
     avoid_list: list[str],
     artifact_type: str | None = None,
+    seed: str | None = None,
 ) -> str:
     avoid_block = "\n".join(avoid_list) if avoid_list else "(none yet)"
+    seed_block = f"## Fresh real-world signal to react to (anchor the idea to this)\n{seed}\n\n" if seed else ""
 
     # Two prompt frames: the project-pitch (default — every category before
     # v0.15a used this) and the artifact-shape pitch (Claude Lab categories).
@@ -406,9 +516,7 @@ def _build_prompt(
         artifact_block = ""
         headline = f"You are pitching a project idea in the {category.value} category."
     else:
-        artifact_block = (
-            f"## Artifact type: {artifact_type}\n{_ARTIFACT_PROMPTS[artifact_type]}\n\n"
-        )
+        artifact_block = f"## Artifact type: {artifact_type}\n{_ARTIFACT_PROMPTS[artifact_type]}\n\n"
         headline = (
             f"You are pitching a {artifact_type.upper()} for the "
             f"{category.value} category — not a generic project, this "
@@ -420,6 +528,7 @@ def _build_prompt(
         f"## Persona\n{persona}\n\n"
         f"## Generation mode: {mode}\n{_MODE_PROMPTS[mode]}\n\n"
         f"{artifact_block}"
+        f"{seed_block}"
         f"## Do NOT produce anything resembling these recent ideas\n"
         f"(no renames, no verb-tense variants, no 'X for {{vertical}}' clones):\n"
         f"{avoid_block}\n\n"
@@ -491,6 +600,7 @@ async def generate_idea_llm(
     mode: str | None = None,
     artifact_type: str | None = None,
     backend: LLMBackend | None = None,
+    seed: str | None = None,
 ) -> LLMGenerationResult | None:
     """One LLM-first generation. Returns None when no backend reaches or the
     response fails parsing — caller falls back to the template path.
@@ -515,7 +625,7 @@ async def generate_idea_llm(
 
     persona = _pick_persona(category)
     avoid = await _recent_idea_lines(db, category)
-    prompt = _build_prompt(category, mode, persona, avoid, artifact_type=artifact_type)
+    prompt = _build_prompt(category, mode, persona, avoid, artifact_type=artifact_type, seed=seed)
 
     raw = backend.call(prompt) or ""
     if not raw.strip():
@@ -538,4 +648,154 @@ async def generate_idea_llm(
         backend=backend.name,
         raw_response=raw,
         artifact_type=artifact_type,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Sniper board — grounded competitive-displacement generation                 #
+# --------------------------------------------------------------------------- #
+
+
+_SNIPE_JSON_SCHEMA_INSTRUCTION = """
+Respond with JSON only — no markdown wrapping, no commentary:
+{
+  "target_incumbent": "The exact name of the real incumbent you are sniping",
+  "name": "Distinctive FUN brand name (1-3 words) — invented word or vivid metaphor, not the pricing model",
+  "tagline": "One-line wedge, max 100 chars, lowercase, concrete",
+  "description": "2-3 sentences: the incumbent's structural weakness, your wedge, and the why-now catalyst.",
+  "market_analysis": "PROVEN demand: cite the incumbent's traction (figures [approx]); who switches and why.",
+  "mvp_scope": "Phase 1 = the beachhead. Phase 2, Phase 3 = expand from it.",
+  "tech_stack": ["language", "framework", "key-lib"],
+  "feasibility_score": 0.70
+}
+""".strip()
+
+
+def _build_snipe_prompt(
+    category: IdeaCategory,
+    angle: str,
+    incumbent: str,
+    persona: str,
+    intel_block: str,
+    avoid_list: list[str],
+) -> str:
+    from project_forge.engine.snipe import _ANGLE_PROMPTS
+
+    avoid_block = "\n".join(avoid_list) if avoid_list else "(none yet)"
+    return (
+        f"You are a competitive strategist hunting a SNIPE in the "
+        f"{category.value} space: a market-PROVEN incumbent with real paying "
+        f"demand, and a sharp, focused opening to take a slice.\n\n"
+        f"## Incumbent to snipe\n{incumbent}\n\n"
+        f"{intel_block}\n\n"
+        f"## Persona you're building for\n{persona}\n\n"
+        f"## {_ANGLE_PROMPTS[angle]}\n\n"
+        f"## Rules\n"
+        f"- The incumbent is REAL and its demand is already proven — your job "
+        f"is the wedge, not inventing a market.\n"
+        f"- Anchor every traction claim in the grounded signal above. Mark any "
+        f"number you're unsure of with [approx].\n"
+        f"- The pitch must read: incumbent X proves demand → its weakness is Y "
+        f"→ we snipe with Z from beachhead B → because now N.\n"
+        f"- Stay focused: a beachhead a small team can ship, not a clone of "
+        f"the whole incumbent.\n"
+        f"- NAME IT WELL — this is a real product, give it a name with "
+        f"personality. BANNED: starting the name with 'Flat', naming it after "
+        f"the pricing model (no 'Flat-', 'Cheap-', 'Open-'), naming it after "
+        f"the incumbent, or generic 'Adjective + Category' (e.g. 'Simple "
+        f"Scheduler'). Invent something a founder would proudly launch.\n\n"
+        f"## Do NOT produce anything resembling these recent ideas\n"
+        f"{avoid_block}\n\n"
+        f"## Output\n{_SNIPE_JSON_SCHEMA_INSTRUCTION}\n"
+    )
+
+
+def _incumbent_cache(incumbent: str):
+    """Build a per-incumbent FeedCache under the feeds dir, or None if the
+    path can't be resolved. 24h TTL — incumbent traction moves slowly."""
+    import os
+    from datetime import timedelta
+    from pathlib import Path
+
+    from project_forge.config import settings
+    from project_forge.feeds.cache import FeedCache
+    from project_forge.feeds.market_intel import slug
+
+    try:
+        env = os.environ.get("FORGE_FEEDS_DIR")
+        base = Path(env) if env else Path(settings.db_path).parent / "feeds"
+        base = base / "incumbents"
+        base.mkdir(parents=True, exist_ok=True)
+        return FeedCache(base / f"{slug(incumbent)}.json", ttl=timedelta(hours=24))
+    except Exception:  # noqa: BLE001 — cache is best-effort
+        return None
+
+
+async def generate_snipe_llm(
+    db: Database,
+    category: IdeaCategory,
+    *,
+    angle: str | None = None,
+    incumbent: str | None = None,
+    intel: dict | None = None,
+    backend: LLMBackend | None = None,
+) -> LLMGenerationResult | None:
+    """One grounded snipe generation. Picks a real incumbent in this
+    category, fetches live HN + GitHub signal, and asks the LLM for a
+    competitive-displacement wedge. Returns None when no backend reaches,
+    no incumbent is known for the category, or parsing fails.
+
+    `incumbent` / `intel` are injectable for tests; in production they're
+    auto-picked and live-fetched (cached per incumbent).
+    """
+    from project_forge.engine.snipe import SNIPE_ANGLES, pick_least_used_angle
+    from project_forge.feeds.market_intel import (
+        fetch_incumbent_intel,
+        format_intel_for_prompt,
+        pick_incumbent,
+    )
+
+    backend = backend if backend is not None else resolve_cheap_backend()
+    if backend is None:
+        return None
+
+    incumbent = incumbent or pick_incumbent(category)
+    if not incumbent:
+        logger.info("snipe: no incumbent registered for %s", category.value)
+        return None
+
+    angle = angle if angle in SNIPE_ANGLES else await pick_least_used_angle(db, category)
+
+    if intel is None:
+        intel = fetch_incumbent_intel(incumbent, cache=_incumbent_cache(incumbent))
+    intel_block = format_intel_for_prompt(intel)
+
+    persona = _pick_persona(category)
+    avoid = await _recent_idea_lines(db, category)
+    prompt = _build_snipe_prompt(category, angle, incumbent, persona, intel_block, avoid)
+
+    raw = backend.call(prompt) or ""
+    if not raw.strip():
+        logger.info("snipe: backend returned empty (incumbent=%s)", incumbent)
+        return None
+
+    payload = _parse_idea_payload(raw)
+    if payload is None:
+        logger.info("snipe: payload parse failed (incumbent=%s)", incumbent)
+        return None
+
+    # Angle rides in artifact_type; mode is fixed to 'snipe'.
+    idea = _build_idea_from_payload(payload, category, "snipe", artifact_type=angle)
+    if idea is None:
+        return None
+    named = (payload.get("target_incumbent") or incumbent).strip()[:120]
+    idea.target_incumbent = named or incumbent
+
+    return LLMGenerationResult(
+        idea=idea,
+        mode="snipe",
+        persona=persona,
+        backend=backend.name,
+        raw_response=raw,
+        artifact_type=angle,
     )

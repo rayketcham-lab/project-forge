@@ -14,8 +14,9 @@ from httpx import ASGITransport, AsyncClient
 from project_forge.models import Idea, IdeaCategory
 
 
-def _idea(name: str, *, desc: str = "d", category: IdeaCategory = IdeaCategory.SECURITY_TOOL,
-          score: float = 0.85) -> Idea:
+def _idea(
+    name: str, *, desc: str = "d", category: IdeaCategory = IdeaCategory.SECURITY_TOOL, score: float = 0.85
+) -> Idea:
     return Idea(
         name=name,
         tagline=f"tag for {name}",
@@ -96,8 +97,17 @@ class TestExploreVerticalChipRow:
     async def test_explore_renders_vertical_chips(self, client):
         resp = await client.get("/explore")
         html = resp.text
-        for slug in ("government", "healthcare", "education", "finance",
-                     "retail", "hospitality", "manufacturing", "energy", "telco"):
+        for slug in (
+            "government",
+            "healthcare",
+            "education",
+            "finance",
+            "retail",
+            "hospitality",
+            "manufacturing",
+            "energy",
+            "telco",
+        ):
             assert f"vertical={slug}" in html, f"Missing chip link for {slug}"
 
     @pytest.mark.asyncio

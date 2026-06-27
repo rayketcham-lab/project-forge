@@ -54,6 +54,7 @@ class TestDefaults:
 
     def test_db_path_default(self):
         from pathlib import Path
+
         s = Settings()
         assert isinstance(s.db_path, Path)
 

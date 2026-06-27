@@ -136,9 +136,7 @@ The feasibility_score should be between 0.0 and 1.0:
 def build_text_ingest_prompt(text: str, category_hint: str | None = None) -> str:
     """Build a prompt for expanding a free-form text fragment into an Idea."""
     if category_hint:
-        category_section = (
-            f"SUGGESTED CATEGORY: {category_hint} (use this if it fits the fragment)"
-        )
+        category_section = f"SUGGESTED CATEGORY: {category_hint} (use this if it fits the fragment)"
         category_value = category_hint
     else:
         all_cats = ", ".join(c.value for c in IdeaCategory)
@@ -254,10 +252,7 @@ def build_generation_prompt(
 
     # Always inject a persona — grounds the idea in a specific human's problem
     persona = random.choice(PERSONA_SEEDS)
-    diversity_section += (
-        f"\nPERSPECTIVE: Design this for a {persona['role']}. "
-        f"Their situation: {persona['pain']}\n"
-    )
+    diversity_section += f"\nPERSPECTIVE: Design this for a {persona['role']}. Their situation: {persona['pain']}\n"
 
     recent_str = ", ".join(recent_ideas[-5:]) if recent_ideas else "None yet"
 

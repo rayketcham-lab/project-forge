@@ -38,54 +38,70 @@ def _idea(name: str = "X", tagline: str = "t", description: str = "d") -> Idea:
 
 class TestInferVerticals:
     def test_government_keywords(self):
-        v = infer_verticals(_idea(
-            description="A FedRAMP compliance tool for federal agencies migrating to FIPS 140-3.",
-        ))
+        v = infer_verticals(
+            _idea(
+                description="A FedRAMP compliance tool for federal agencies migrating to FIPS 140-3.",
+            )
+        )
         assert "government" in v
 
     def test_healthcare_keywords(self):
-        v = infer_verticals(_idea(
-            description="HIPAA-compliant patient EHR audit tool for hospitals.",
-        ))
+        v = infer_verticals(
+            _idea(
+                description="HIPAA-compliant patient EHR audit tool for hospitals.",
+            )
+        )
         assert "healthcare" in v
 
     def test_education_keywords(self):
-        v = infer_verticals(_idea(
-            description="A FERPA-aware student records anonymization tool for K-12 schools.",
-        ))
+        v = infer_verticals(
+            _idea(
+                description="A FERPA-aware student records anonymization tool for K-12 schools.",
+            )
+        )
         assert "education" in v
 
     def test_hospitality_keywords(self):
-        v = infer_verticals(_idea(
-            description="Hotel guest WiFi captive portal with stay-duration token rotation.",
-        ))
+        v = infer_verticals(
+            _idea(
+                description="Hotel guest WiFi captive portal with stay-duration token rotation.",
+            )
+        )
         assert "hospitality" in v
 
     def test_finance_keywords(self):
-        v = infer_verticals(_idea(
-            description="PCI-DSS audit automation for fintech payment processors.",
-        ))
+        v = infer_verticals(
+            _idea(
+                description="PCI-DSS audit automation for fintech payment processors.",
+            )
+        )
         assert "finance" in v
 
     def test_no_match_returns_empty_list(self):
-        v = infer_verticals(_idea(
-            description="A general-purpose CLI to grep YAML files.",
-        ))
+        v = infer_verticals(
+            _idea(
+                description="A general-purpose CLI to grep YAML files.",
+            )
+        )
         assert v == []
 
     def test_multi_vertical(self):
-        v = infer_verticals(_idea(
-            description="HIPAA + FedRAMP combined compliance dashboard for federal hospitals.",
-        ))
+        v = infer_verticals(
+            _idea(
+                description="HIPAA + FedRAMP combined compliance dashboard for federal hospitals.",
+            )
+        )
         assert "government" in v
         assert "healthcare" in v
 
     def test_inference_uses_name_and_tagline_too(self):
-        v = infer_verticals(_idea(
-            name="University SSO Bridge",
-            tagline="A single sign-on bridge for campus identity systems",
-            description="Generic.",
-        ))
+        v = infer_verticals(
+            _idea(
+                name="University SSO Bridge",
+                tagline="A single sign-on bridge for campus identity systems",
+                description="Generic.",
+            )
+        )
         assert "education" in v
 
     def test_case_insensitive(self):
@@ -102,8 +118,17 @@ class TestInferVerticals:
 class TestKnownVerticals:
     def test_canonical_set_present(self):
         # Stable set — UI relies on these slugs
-        for slug in ("government", "healthcare", "education", "finance",
-                     "retail", "hospitality", "manufacturing", "energy", "telco"):
+        for slug in (
+            "government",
+            "healthcare",
+            "education",
+            "finance",
+            "retail",
+            "hospitality",
+            "manufacturing",
+            "energy",
+            "telco",
+        ):
             assert slug in KNOWN_VERTICALS, f"Missing canonical vertical: {slug}"
 
 
@@ -120,14 +145,17 @@ class TestMatchesVertical:
         idea = _idea(description="anything")
         assert matches_vertical(idea, "not-a-real-vertical") is False
 
-    @pytest.mark.parametrize("vertical,desc,expected", [
-        ("government", "DoD ATO automation tool", True),
-        ("government", "tool for hotels", False),
-        ("hospitality", "tool for hotels", True),
-        ("manufacturing", "OT/ICS network monitor for factory floors", True),
-        ("energy", "smart meter tampering detector", True),
-        ("telco", "5G core slicing observer", True),
-    ])
+    @pytest.mark.parametrize(
+        "vertical,desc,expected",
+        [
+            ("government", "DoD ATO automation tool", True),
+            ("government", "tool for hotels", False),
+            ("hospitality", "tool for hotels", True),
+            ("manufacturing", "OT/ICS network monitor for factory floors", True),
+            ("energy", "smart meter tampering detector", True),
+            ("telco", "5G core slicing observer", True),
+        ],
+    )
     def test_parametrized(self, vertical: str, desc: str, expected: bool):
         idea = _idea(description=desc)
         assert matches_vertical(idea, vertical) is expected

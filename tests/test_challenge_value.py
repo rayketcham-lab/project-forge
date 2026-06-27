@@ -40,6 +40,7 @@ async def client(tmp_path, monkeypatch):
     Claude Code path, which we then mock)."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     from project_forge.config import settings as _settings
+
     monkeypatch.setattr(_settings, "anthropic_api_key", "")
 
     from project_forge.web.app import app, db
@@ -65,7 +66,7 @@ async def test_challenge_uses_llm_backend_when_no_api_key():
 
     fake_response = (
         '{"response": "Real LLM analysis of the question — '
-        'specifically pushing back on feasibility because the threat model '
+        "specifically pushing back on feasibility because the threat model "
         'is unclear.", "verdict": "narrow", "confidence": 0.78, '
         '"changes": [{"field": "mvp_scope", "action": "modified", '
         '"text": "Add explicit threat-model section"}]}'
@@ -73,6 +74,7 @@ async def test_challenge_uses_llm_backend_when_no_api_key():
 
     class _FakeBackend:
         name = "test-backend"
+
         def call(self, prompt: str) -> str:  # noqa: ARG002
             return fake_response
 
@@ -118,10 +120,8 @@ async def test_apply_changes_updates_idea(client):
         verdict="narrow",
         confidence=0.8,
         changes=[
-            {"field": "mvp_scope", "action": "modified",
-             "text": "New tighter scope: just the threat-model section."},
-            {"field": "feasibility_score", "action": "modified",
-             "text": "0.82"},
+            {"field": "mvp_scope", "action": "modified", "text": "New tighter scope: just the threat-model section."},
+            {"field": "feasibility_score", "action": "modified", "text": "0.82"},
         ],
     )
     await db.save_challenge(ch)
@@ -187,8 +187,11 @@ async def test_apply_returns_404_for_wrong_idea(client):
     await db.save_idea(idea1)
     await db.save_idea(idea2)
     ch = Challenge(
-        idea_id=idea1.id, question="?", response="r",
-        verdict="narrow", confidence=0.8,
+        idea_id=idea1.id,
+        question="?",
+        response="r",
+        verdict="narrow",
+        confidence=0.8,
         changes=[{"field": "mvp_scope", "action": "modified", "text": "v"}],
     )
     await db.save_challenge(ch)

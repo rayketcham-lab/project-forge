@@ -44,13 +44,15 @@ def parse_nvd_response(payload: dict[str, Any]) -> list[dict]:
         if not summary and descriptions:
             summary = descriptions[0].get("value", "")
 
-        items.append({
-            "id": cve_id,
-            "title": cve_id,
-            "summary": summary,
-            "url": f"https://nvd.nist.gov/vuln/detail/{cve_id}",
-            "ts": cve.get("published", ""),
-        })
+        items.append(
+            {
+                "id": cve_id,
+                "title": cve_id,
+                "summary": summary,
+                "url": f"https://nvd.nist.gov/vuln/detail/{cve_id}",
+                "ts": cve.get("published", ""),
+            }
+        )
     return items
 
 
@@ -61,10 +63,7 @@ def fetch(*, cache: FeedCache, days: int = 7, results_per_page: int = 50) -> lis
     """
     pub_start = (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%dT00:00:00.000")
     pub_end = datetime.now(UTC).strftime("%Y-%m-%dT00:00:00.000")
-    url = (
-        f"{NVD_API_URL}?pubStartDate={pub_start}&pubEndDate={pub_end}"
-        f"&resultsPerPage={results_per_page}"
-    )
+    url = f"{NVD_API_URL}?pubStartDate={pub_start}&pubEndDate={pub_end}&resultsPerPage={results_per_page}"
 
     try:
         raw = _http_get_bytes(url, timeout=15.0)

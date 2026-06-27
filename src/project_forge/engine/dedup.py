@@ -205,9 +205,7 @@ async def should_accept(idea: Idea, db: Database) -> tuple[bool, str | None]:
                 existing_components = _extract_super_components(row[2] or "")
                 shared = len(cand_components & existing_components)
                 if shared >= SUPER_COMPONENT_OVERLAP_MIN:
-                    return False, (
-                        f"duplicate:super_overlap:{shared} (shares atoms with {row[0]})"
-                    )
+                    return False, (f"duplicate:super_overlap:{shared} (shares atoms with {row[0]})")
         return True, None
 
     # Check 3: vertical-cap. Done BEFORE the tagline / name-similarity loop
@@ -217,9 +215,7 @@ async def should_accept(idea: Idea, db: Database) -> tuple[bool, str | None]:
     cand_stem = _strip_vertical_name(idea.name)
     if cand_stem is not None:
         cursor = await db.db.execute(
-            "SELECT id, name FROM ideas "
-            "WHERE lower(name) LIKE '% for %' "
-            "AND status NOT IN ('archived', 'rejected')",
+            "SELECT id, name FROM ideas WHERE lower(name) LIKE '% for %' AND status NOT IN ('archived', 'rejected')",
         )
         same_concept = 0
         for row in await cursor.fetchall():
@@ -227,17 +223,13 @@ async def should_accept(idea: Idea, db: Database) -> tuple[bool, str | None]:
             if other_stem == cand_stem:
                 same_concept += 1
         if same_concept >= VERTICAL_CAP:
-            return False, (
-                f"duplicate:vertical_cap:{same_concept}>={VERTICAL_CAP} "
-                f"(concept stem '{cand_stem}')"
-            )
+            return False, (f"duplicate:vertical_cap:{same_concept}>={VERTICAL_CAP} (concept stem '{cand_stem}')")
 
     # Check 4: fuzzy tagline dedup + name-token Jaccard (regular ideas only).
     # Skip rows that belong to the same vertical-clone family as the candidate;
     # the cap above is the authority for that family.
     cursor = await db.db.execute(
-        "SELECT id, name, tagline FROM ideas "
-        "WHERE category = ? AND status != 'rejected'",
+        "SELECT id, name, tagline FROM ideas WHERE category = ? AND status != 'rejected'",
         (idea.category.value,),
     )
     rows = await cursor.fetchall()
@@ -259,12 +251,10 @@ async def should_accept(idea: Idea, db: Database) -> tuple[bool, str | None]:
         # opinion catches lexical-near-but-conceptually-different pairs
         # (and vice versa for clever rewrites that game token overlap).
         borderline_tag = (
-            SIMILARITY_THRESHOLD - SEMANTIC_DEDUP_BAND
-            <= score < SIMILARITY_THRESHOLD + SEMANTIC_DEDUP_BAND
+            SIMILARITY_THRESHOLD - SEMANTIC_DEDUP_BAND <= score < SIMILARITY_THRESHOLD + SEMANTIC_DEDUP_BAND
         )
         borderline_name = (
-            NAME_JACCARD_THRESHOLD - SEMANTIC_DEDUP_BAND
-            <= n_score < NAME_JACCARD_THRESHOLD + SEMANTIC_DEDUP_BAND
+            NAME_JACCARD_THRESHOLD - SEMANTIC_DEDUP_BAND <= n_score < NAME_JACCARD_THRESHOLD + SEMANTIC_DEDUP_BAND
         )
         # Above the heuristic threshold → ordinarily reject; under threshold → keep.
         heuristic_reject_tag = score >= SIMILARITY_THRESHOLD
@@ -272,12 +262,14 @@ async def should_accept(idea: Idea, db: Database) -> tuple[bool, str | None]:
 
         if borderline_tag or borderline_name:
             verdict = semantic_dedup_check(
-                idea.name, idea.tagline, existing_name, existing_tagline,
+                idea.name,
+                idea.tagline,
+                existing_name,
+                existing_tagline,
             )
             if verdict is True:
                 return False, (
-                    f"duplicate:semantic_dedup tag={score:.2f} name={n_score:.2f} "
-                    f"(LLM-confirmed same as {existing_id})"
+                    f"duplicate:semantic_dedup tag={score:.2f} name={n_score:.2f} (LLM-confirmed same as {existing_id})"
                 )
             if verdict is False:
                 # LLM overrules a borderline reject → continue checking
@@ -294,12 +286,22 @@ async def should_accept(idea: Idea, db: Database) -> tuple[bool, str | None]:
 
 
 # Keep in sync with _SYNTHESIS_SUFFIXES in engine/super_ideas.py
-_SUPER_SYNTHESIS_SUFFIXES = frozenset({
-    "intelligence center", "operations center", "defense suite",
-    "governance engine", "observatory", "command center",
-    "analysis hub", "enforcement suite", "discovery engine",
-    "lifecycle platform", "security intelligence", "automation hub",
-})
+_SUPER_SYNTHESIS_SUFFIXES = frozenset(
+    {
+        "intelligence center",
+        "operations center",
+        "defense suite",
+        "governance engine",
+        "observatory",
+        "command center",
+        "analysis hub",
+        "enforcement suite",
+        "discovery engine",
+        "lifecycle platform",
+        "security intelligence",
+        "automation hub",
+    }
+)
 
 
 def _super_base_name(full_name: str) -> str:

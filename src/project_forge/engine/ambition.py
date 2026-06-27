@@ -55,14 +55,25 @@ _FRONTIER_KEYWORDS = re.compile(
 
 # Tech-stack tokens that imply Anthropic / MCP / agent ecosystem.
 _FRONTIER_STACK = {
-    "anthropic", "@anthropic-ai/sdk", "anthropic-rs",
-    "mcp", "@modelcontextprotocol/sdk", "modelcontextprotocol",
-    "claude", "claude-code",
+    "anthropic",
+    "@anthropic-ai/sdk",
+    "anthropic-rs",
+    "mcp",
+    "@modelcontextprotocol/sdk",
+    "modelcontextprotocol",
+    "claude",
+    "claude-code",
 }
 
 _CATEGORY_BONUS: dict[IdeaCategory, float] = {
     IdeaCategory.CLAUDE_SKILLS_AGENTS: 0.25,
     IdeaCategory.AI_MARKETPLACE: 0.22,
+    # v0.16 Claude Lab expansion — the other agent-ecosystem axes. All
+    # frontier work, so all carry a strong ambition bias.
+    IdeaCategory.AGENT_INFRA: 0.24,
+    IdeaCategory.AGENT_SECURITY: 0.23,
+    IdeaCategory.CONTEXT_MEMORY: 0.22,
+    IdeaCategory.CLAUDE_EVALS: 0.21,
     IdeaCategory.AUTOMATION: 0.05,
     IdeaCategory.SELF_IMPROVEMENT: 0.05,
 }
@@ -75,16 +86,21 @@ def score_ambition_heuristic(idea: Idea) -> float:
     """Cheap, deterministic frontier-bias score in [0.0, 1.0]."""
     score = 0.20
 
-    # Category bonus.
+    # Category bonus + any learned nudge (v0.17 Scoreboard auto-tune; 0.0 unless opted in).
     score += _CATEGORY_BONUS.get(idea.category, 0.0)
+    from project_forge.engine.scoreboard import learned_nudge
+
+    score += learned_nudge("ambition", idea.category)
 
     # Frontier keywords — count distinct hits, cap at 4 so a keyword-stuffed
     # pitch doesn't max out the band.
-    blob = " ".join([
-        idea.description or "",
-        idea.mvp_scope or "",
-        idea.tagline or "",
-    ])
+    blob = " ".join(
+        [
+            idea.description or "",
+            idea.mvp_scope or "",
+            idea.tagline or "",
+        ]
+    )
     distinct_hits = {m.group(0).lower() for m in _FRONTIER_KEYWORDS.finditer(blob)}
     score += min(len(distinct_hits), 4) * 0.05
 
@@ -119,7 +135,7 @@ async def _llm_refine(idea: Idea, heuristic: float) -> float:
         f"**Description:** {idea.description}\n"
         f"**MVP:** {idea.mvp_scope}\n"
         f"**Tech:** {', '.join(idea.tech_stack)}\n\n"
-        "Reply: {\"score\": 0.0-1.0}"
+        'Reply: {"score": 0.0-1.0}'
     )
     raw = (backend.call(prompt) or "").strip()
     if "```json" in raw:

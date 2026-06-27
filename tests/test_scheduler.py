@@ -58,15 +58,19 @@ class TestRunFullCycleNoneGuard:
         """Sanity check: when generate succeeds, the idea is returned even
         if downstream GH/scaffold steps fail (they're wrapped in try)."""
         idea = _idea()
-        with patch(
-            "project_forge.cron.scheduler.generate_and_store",
-            new=AsyncMock(return_value=idea),
-        ), patch(
-            "project_forge.cron.scheduler.create_github_issue_for_idea",
-            new=AsyncMock(side_effect=RuntimeError("gh down")),
-        ), patch(
-            "project_forge.cron.scheduler.is_high_value",
-            return_value=False,
+        with (
+            patch(
+                "project_forge.cron.scheduler.generate_and_store",
+                new=AsyncMock(return_value=idea),
+            ),
+            patch(
+                "project_forge.cron.scheduler.create_github_issue_for_idea",
+                new=AsyncMock(side_effect=RuntimeError("gh down")),
+            ),
+            patch(
+                "project_forge.cron.scheduler.is_high_value",
+                return_value=False,
+            ),
         ):
             result = await run_full_cycle(db, generator=object())
         assert result is idea

@@ -615,8 +615,7 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
     },
     IdeaCategory.CONSUMER_APP: {
         "description": (
-            "Everyday-user mobile and web apps — utilities, social, "
-            "lifestyle, niche games. Not enterprise software."
+            "Everyday-user mobile and web apps — utilities, social, lifestyle, niche games. Not enterprise software."
         ),
         "seed_concepts": [
             "shared-grocery list with auto-categorized aisles",
@@ -728,16 +727,26 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "MCP server: time-aware project memory ('what was the codebase like 3 months ago for this question')",
             "agent: weekly digest of model performance regressions across your eval suite",
             "skill: turn a vague Slack message into a written PRD with acceptance criteria",
-            "sub-agent: 'second-brain compiler' — extracts decisions from your meeting transcripts into a queryable graph",
+            "sub-agent: 'second-brain compiler' — decisions from meeting transcripts into a queryable graph",
             "MCP server: open-source dependency safety panel with provenance + maintenance status + license risk",
             "agent: multi-language polyglot reviewer that catches cross-language API drift",
         ],
         "domains_to_cross": [
-            "Claude Code", "MCP", "agentic workflows", "terminal automation",
-            "engineering managers", "DevSecOps", "incident response",
-            "platform engineering", "data engineering", "ML research",
-            "product management", "design systems", "education",
-            "developer experience", "open source maintainers",
+            "Claude Code",
+            "MCP",
+            "agentic workflows",
+            "terminal automation",
+            "engineering managers",
+            "DevSecOps",
+            "incident response",
+            "platform engineering",
+            "data engineering",
+            "ML research",
+            "product management",
+            "design systems",
+            "education",
+            "developer experience",
+            "open source maintainers",
         ],
     },
     IdeaCategory.AI_MARKETPLACE: {
@@ -773,12 +782,21 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "negotiating-agent marketplace: agents that bid for tasks based on capability + cost + speed",
         ],
         "domains_to_cross": [
-            "platform companies", "VC scouts", "indie skill authors",
-            "engineering org leads", "compliance officers",
-            "AI researchers", "DevRel teams", "educators",
-            "agent-platform engineers", "marketplace designers",
-            "open-source communities", "regulated industries",
-            "long-tail buyers", "consumer AI", "developer tools",
+            "platform companies",
+            "VC scouts",
+            "indie skill authors",
+            "engineering org leads",
+            "compliance officers",
+            "AI researchers",
+            "DevRel teams",
+            "educators",
+            "agent-platform engineers",
+            "marketplace designers",
+            "open-source communities",
+            "regulated industries",
+            "long-tail buyers",
+            "consumer AI",
+            "developer tools",
         ],
     },
     IdeaCategory.CREATOR_TOOLS: {
@@ -823,6 +841,379 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "comic artists",
             "indie educators",
             "fan communities",
+        ],
+    },
+    # ----------------------------------------------------------------- #
+    # v0.16 money-bot expansion: fundable product shapes (paid SaaS,
+    # vertical software, seller ops, finance ops) the original
+    # content/automation categories didn't cover.
+    # ----------------------------------------------------------------- #
+    IdeaCategory.MICRO_SAAS: {
+        "description": (
+            "Tiny, single-purpose SaaS a solo founder can ship in weeks "
+            "and charge for from day one. One job, one paying buyer, "
+            "recurring revenue. Not a platform — a sharp tool with a "
+            "Stripe button. Excludes anything needing a sales team or a "
+            "year of runway."
+        ),
+        "seed_concepts": [
+            "screenshot-to-changelog generator with a hosted public page",
+            "uptime monitor that posts incident updates to a branded status page",
+            "webhook debugger + replay service with per-endpoint retention",
+            "scheduled-export tool that ships any SaaS report to S3/email/Slack",
+            "form-backend-as-a-service with spam scoring and Zapier out",
+            "favicon + OG-image generator API priced per 1k renders",
+            "cron-as-a-service with failure alerting and run history",
+            "PDF-fill API that maps JSON onto template PDFs",
+            "short-link service with team workspaces and click analytics",
+            "transactional-email template tester across 30 clients",
+            "feature-request board with public roadmap and changelog",
+            "API uptime + latency badge embeddable in any README",
+            "screenshot API that respects cookie banners and lazy-load",
+            "recurring-invoice reminder bot for solo consultants",
+            "single-table CRM with a shareable pipeline link",
+            "license-key issuing + validation API for indie desktop apps",
+            "wait-list manager with referral ranking and email drip",
+            "CSV-to-API instant backend with auth and rate limits",
+            "calendar-availability link with timezone-safe booking",
+            "feature-flag service scoped to one product, flat monthly price",
+        ],
+        "domains_to_cross": [
+            "indie hackers",
+            "solo founders",
+            "bootstrappers",
+            "freelance developers",
+            "no-code builders",
+            "agencies",
+            "open-source maintainers",
+            "small SaaS teams",
+            "consultants",
+            "side-project builders",
+            "API-first startups",
+            "micro-ISVs",
+        ],
+    },
+    IdeaCategory.VERTICAL_SAAS: {
+        "description": (
+            "Industry-specific software for an underserved niche the big "
+            "horizontal vendors ignore — dentists, gyms, trades, clinics, "
+            "studios. Deep workflow fit beats broad features. High ARPU, "
+            "sticky, word-of-mouth distribution inside the trade."
+        ),
+        "seed_concepts": [
+            "scheduling + reminders + payments for independent dental practices",
+            "membership + class-booking + waiver system for boutique gyms",
+            "job-quoting + invoicing + scheduling for HVAC contractors",
+            "case-intake + deadline tracker for solo immigration lawyers",
+            "patient-recall + no-show predictor for veterinary clinics",
+            "menu-engineering + food-cost tracker for independent restaurants",
+            "client-management + before/after gallery for tattoo studios",
+            "route + proof-of-service + billing for residential cleaners",
+            "inventory + consignment ledger for vintage/resale boutiques",
+            "session notes + outcomes tracker for private therapists",
+            "estimate-to-cash workflow for landscaping crews",
+            "lesson scheduling + progress reports for music teachers",
+            "compliance + inspection log for childcare centers",
+            "tee-time + lesson + pro-shop POS for small golf courses",
+            "donor + grant + volunteer tracker for small nonprofits",
+            "appointment + treatment-plan tracker for med spas",
+            "fleet maintenance + DOT compliance for small trucking firms",
+            "tasting-room reservations + club shipments for small wineries",
+            "permit + bid + change-order tracker for specialty subcontractors",
+            "rent-roll + maintenance-request app for small landlords",
+        ],
+        "domains_to_cross": [
+            "dental practices",
+            "boutique fitness",
+            "home services / trades",
+            "veterinary",
+            "legal (solo/small firm)",
+            "restaurants",
+            "personal care / beauty",
+            "therapists / counselors",
+            "education / tutoring",
+            "childcare",
+            "nonprofits",
+            "property management",
+            "specialty retail",
+            "healthcare clinics",
+        ],
+    },
+    IdeaCategory.ECOMMERCE_TOOLS: {
+        "description": (
+            "Operational software for people who sell physical or digital "
+            "goods online — the back-office stack: inventory, fulfillment, "
+            "returns, pricing, multichannel sync, post-purchase. Not "
+            "'start a store' content — tools that save margin for sellers "
+            "already doing volume."
+        ),
+        "seed_concepts": [
+            "multichannel inventory sync across Shopify, Amazon, eBay, Etsy",
+            "dynamic repricer that respects margin floors and MAP rules",
+            "returns-reduction analyzer tying SKUs to return reasons",
+            "bundle + kitting profitability calculator per SKU",
+            "supplier lead-time tracker with reorder-point alerts",
+            "post-purchase upsell page builder with one-click acceptance",
+            "shipping-rate shopper that picks the cheapest valid carrier",
+            "fake-review + listing-hijack detector for Amazon sellers",
+            "landed-cost calculator (duties, freight, FX) per unit",
+            "abandoned-cart recovery with inventory-aware messaging",
+            "product-photo background batch-cleaner with brand templates",
+            "chargeback + dispute evidence auto-assembler",
+            "demand forecaster that flags stockouts before peak season",
+            "review-request timing optimizer keyed to delivery events",
+            "marketplace-fee reconciler that catches overcharges",
+            "UGC + influencer affiliate link tracker with payout ledger",
+            "warehouse pick-path optimizer for small 3PL operations",
+            "cross-border tax + VAT registration threshold monitor",
+            "wholesale order portal with tiered pricing for B2B sellers",
+            "subscription-box churn predictor tied to delivery friction",
+        ],
+        "domains_to_cross": [
+            "Shopify sellers",
+            "Amazon FBA sellers",
+            "Etsy sellers",
+            "DTC brands",
+            "subscription boxes",
+            "dropshippers graduating to brands",
+            "wholesale / B2B sellers",
+            "print-on-demand",
+            "digital-product sellers",
+            "small 3PL / warehouses",
+            "marketplace arbitrage sellers",
+            "handmade / craft sellers",
+        ],
+    },
+    IdeaCategory.FINTECH_TOOLS: {
+        "description": (
+            "Money-operations software for small businesses and individuals "
+            "— invoicing, expenses, budgeting, tax prep, subscription "
+            "management, cash-flow visibility. Tooling and automation only. "
+            "Excludes financial/investment advice, trading signals, lending, "
+            "and anything requiring a money-transmitter license."
+        ),
+        "seed_concepts": [
+            "invoice + late-fee automation for freelancers with read receipts",
+            "subscription-spend auditor that flags zombie SaaS charges",
+            "mileage + receipt capture with IRS-category auto-tagging",
+            "quarterly-estimated-tax calculator for 1099 contractors",
+            "cash-flow forecaster from bank feeds for small businesses",
+            "expense-policy linter that flags out-of-policy charges pre-submit",
+            "multi-currency reconciliation for remote-first small teams",
+            "client-retainer burn-down tracker with top-up alerts",
+            "shared-household budgeting with consented spend categories",
+            "1099 + W-9 collection + filing prep for gig platforms",
+            "recurring-revenue (MRR/ARR) dashboard from Stripe + invoices",
+            "vendor-payment scheduler that optimizes for early-pay discounts",
+            "sales-tax nexus monitor that warns before you owe in a state",
+            "receipt-to-bookkeeping exporter for QuickBooks/Xero",
+            "personal net-worth tracker that aggregates accounts read-only",
+            "deductible-finder that scans transactions for missed write-offs",
+            "founder-payroll + owner-draw planner for single-member LLCs",
+            "FX-fee analyzer for cross-border contractor payouts",
+            "budget-vs-actual variance alerter for project-based shops",
+            "subscription price-hike watcher that emails before renewals",
+        ],
+        "domains_to_cross": [
+            "freelancers",
+            "small businesses",
+            "1099 contractors",
+            "remote teams",
+            "agencies",
+            "households / couples",
+            "solo-member LLCs",
+            "bookkeepers",
+            "e-commerce sellers",
+            "creators with business income",
+            "consultants",
+            "startups (pre-finance-hire)",
+        ],
+    },
+    # ----------------------------------------------------------------- #
+    # v0.16 Claude Lab expansion: the agent-ecosystem axes beyond
+    # skills + marketplace — the runtime, the evals, the security, the
+    # memory. Ambition-scored, artifact-rotated (skill / sub-agent /
+    # mcp-server / hook / slash-command / workflow / protocol / ability).
+    # ----------------------------------------------------------------- #
+    IdeaCategory.AGENT_INFRA: {
+        "description": (
+            "The runtime and orchestration layer that runs agents at scale "
+            "— scheduling, multi-agent coordination, sandboxing, cost + "
+            "token budgeting, durable execution, retries, and state. Not "
+            "the agent itself; the platform that keeps a fleet of them "
+            "alive, cheap, and reproducible."
+        ),
+        "seed_concepts": [
+            "durable agent runtime with checkpoint + resume across crashes",
+            "token-budget governor that hard-caps spend per task across a fleet",
+            "multi-agent scheduler with priority queues and fair-share limits",
+            "agent sandbox with per-tool capability grants and egress allowlists",
+            "deterministic replay engine for any agent run from its event log",
+            "cross-model router that picks the cheapest model meeting a quality bar",
+            "agent work-queue with backpressure and dead-letter handling",
+            "shared-context bus so fanned-out sub-agents avoid redundant work",
+            "cost attribution ledger splitting spend across teams and tasks",
+            "warm-pool of pre-initialized agents to kill cold-start latency",
+            "idempotency layer so re-fired agent steps don't double-act",
+            "agent autoscaler keyed to queue depth and per-task token cost",
+            "structured-output validator that retries until the schema matches",
+            "long-running agent supervisor with heartbeat + auto-restart",
+            "rate-limit-aware orchestrator that smooths bursty tool calls",
+            "blue/green agent deploys with shadow-traffic comparison",
+            "per-agent circuit breaker that trips on repeated tool failures",
+            "context-window packer that fits max signal under a token ceiling",
+            "agent run journal that makes any workflow resumable from any step",
+            "secrets broker that leases short-lived tool credentials to agents",
+        ],
+        "domains_to_cross": [
+            "Claude Code",
+            "MCP",
+            "agent platforms",
+            "platform engineering",
+            "data engineering",
+            "ML infrastructure",
+            "DevOps",
+            "serverless",
+            "multi-tenant SaaS",
+            "high-throughput pipelines",
+            "regulated industries",
+            "cost-sensitive startups",
+        ],
+    },
+    IdeaCategory.CLAUDE_EVALS: {
+        "description": (
+            "Evaluation, benchmarking, and quality measurement for agents "
+            "and LLM features — golden datasets, regression detection, "
+            "LLM-as-judge harnesses, eval CI gates, and trustworthy quality "
+            "signals. The question is always 'how do we KNOW it works', not "
+            "'does it feel like it works'."
+        ),
+        "seed_concepts": [
+            "eval CI gate that blocks merges on quality regressions",
+            "LLM-as-judge harness with bias controls and inter-judge agreement",
+            "golden-dataset builder that mines real traces into test cases",
+            "regression detector that diffs agent behavior across model versions",
+            "rubric-graded scoring for open-ended agent outputs",
+            "flaky-eval detector separating model variance from real change",
+            "pairwise A/B preference collector with statistical significance",
+            "hallucination-rate meter grounded against a source corpus",
+            "tool-call correctness scorer (right tool, right args, right order)",
+            "cost-vs-quality Pareto frontier explorer across models + prompts",
+            "synthetic adversarial case generator targeting known weak spots",
+            "eval-coverage map showing which capabilities are untested",
+            "rubric drift tracker that flags when graders disagree over time",
+            "trace-replay eval that re-scores production runs offline",
+            "prompt-change impact previewer before you ship a prompt edit",
+            "calibration tester for model confidence vs actual correctness",
+            "multi-turn conversation eval with goal-completion scoring",
+            "eval leaderboard ranked by user-validated outcomes, not vibes",
+            "red-team eval suite for jailbreak + prompt-injection resistance",
+            "latency + token budget assertions as first-class eval checks",
+        ],
+        "domains_to_cross": [
+            "Claude Code",
+            "MCP",
+            "ML research",
+            "AI product teams",
+            "DevSecOps",
+            "platform engineering",
+            "regulated industries",
+            "education",
+            "data science",
+            "QA engineering",
+            "agent platforms",
+            "model providers",
+        ],
+    },
+    IdeaCategory.AGENT_SECURITY: {
+        "description": (
+            "Security and safety for agentic systems — prompt-injection "
+            "defense, tool-permission sandboxing, agent red-teaming, output "
+            "verification, and supply-chain integrity for skills, MCP "
+            "servers, and sub-agents. Treats the agent as an attack surface "
+            "and the agent's authors + tools as a supply chain."
+        ),
+        "seed_concepts": [
+            "prompt-injection firewall that scans untrusted content before it hits the model",
+            "MCP server provenance + signature verifier before install",
+            "least-privilege tool broker that grants capabilities per task, not per session",
+            "egress monitor that flags agents exfiltrating data to new domains",
+            "skill supply-chain scanner (who authored it, what it reads, what it sends)",
+            "agent red-team harness that fuzzes tools with adversarial inputs",
+            "secrets-in-context detector that redacts keys before they reach the model",
+            "output-integrity verifier that proves an action matches the approved plan",
+            "indirect-injection sandbox for web/file content the agent ingests",
+            "human-in-the-loop gate for high-blast-radius tool calls",
+            "agent audit log with tamper-evident hashing for forensics",
+            "permission-creep detector for agents accumulating tool access over time",
+            "MCP tool-poisoning detector (description says X, behavior does Y)",
+            "confused-deputy guard for agents acting on another user's behalf",
+            "rollback + blast-radius estimator before an agent touches prod",
+            "signed-skill registry with revocation for compromised entries",
+            "data-classification-aware policy that blocks PII from leaving a boundary",
+            "jailbreak-resistance regression suite wired into CI",
+            "agent identity + attestation so downstream tools can trust the caller",
+            "kill-switch + quarantine for agents exhibiting anomalous tool patterns",
+        ],
+        "domains_to_cross": [
+            "Claude Code",
+            "MCP",
+            "DevSecOps",
+            "enterprise security",
+            "regulated industries",
+            "PKI / signing",
+            "supply-chain security",
+            "incident response",
+            "zero-trust architectures",
+            "compliance",
+            "platform engineering",
+            "fintech",
+        ],
+    },
+    IdeaCategory.CONTEXT_MEMORY: {
+        "description": (
+            "Memory and knowledge primitives that give agents continuity "
+            "across turns, sessions, and projects — persistent memory, "
+            "context compaction, retrieval beyond naive RAG, and shared "
+            "team knowledge. The frontier question: how does an agent "
+            "remember the right thing at the right moment without drowning "
+            "in its own history."
+        ),
+        "seed_concepts": [
+            "persistent project memory that survives across sessions and machines",
+            "context compactor that summarizes a long session without losing decisions",
+            "time-aware memory ('what did the codebase look like 3 months ago')",
+            "memory conflict resolver when stored facts contradict current reality",
+            "relevance-ranked recall that surfaces only memories the task needs",
+            "shared team memory with access control and provenance per fact",
+            "decision graph compiled from meeting transcripts and PRs",
+            "memory garbage collector that expires stale or superseded facts",
+            "retrieval layer that blends structured DB + vector + recent edits",
+            "memory write-policy that asks 'is this worth remembering' before storing",
+            "per-fact freshness verifier that re-checks memories before recommending",
+            "episodic memory of past agent runs to avoid repeating failed approaches",
+            "cross-repo knowledge linker that connects related code + docs + issues",
+            "context-budget allocator that fits the most signal under a token ceiling",
+            "memory diff viewer showing what an agent learned this session",
+            "user-preference memory that personalizes agent behavior over time",
+            "citation-backed memory so every recalled fact links to its source",
+            "memory namespace isolation so client A's facts never leak to client B",
+            "long-horizon task memory that tracks multi-day goals and subgoals",
+            "semantic dedup so the same fact isn't stored ten slightly different ways",
+        ],
+        "domains_to_cross": [
+            "Claude Code",
+            "MCP",
+            "agent platforms",
+            "knowledge management",
+            "developer experience",
+            "ML research",
+            "consulting (multi-client)",
+            "personal productivity",
+            "team collaboration",
+            "regulated industries",
+            "education",
+            "data engineering",
         ],
     },
 }

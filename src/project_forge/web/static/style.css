@@ -109,11 +109,13 @@ a:hover { color: var(--accent); }
    underline color when active. Inactive state is essentially identical to
    plain nav links — the dot is the only visual difference. */
 .nav-link-money,
-.nav-link-frontier {
+.nav-link-frontier,
+.nav-link-snipe {
     padding-left: 1.45rem;
 }
 .nav-link-money::before,
-.nav-link-frontier::before {
+.nav-link-frontier::before,
+.nav-link-snipe::before {
     content: '';
     position: absolute;
     left: 0.85rem;
@@ -131,8 +133,29 @@ a:hover { color: var(--accent); }
     background: var(--purple);
     box-shadow: 0 0 6px rgba(167, 139, 250, 0.35);
 }
+.nav-link-snipe::before {
+    background: #ef5b6e;
+    box-shadow: 0 0 6px rgba(239, 91, 110, 0.35);
+}
 .nav-link-money.active::after { background: #f7c64a; }
 .nav-link-frontier.active::after { background: var(--purple); }
+.nav-link-snipe.active::after { background: #ef5b6e; }
+
+/* Sniper board accents — the "vs. incumbent" line, the snipe angle pill,
+   and the Snipe-Now button tint. */
+.snipe-vs {
+    font-size: 0.78rem;
+    color: var(--text-muted, #9aa0aa);
+    margin-bottom: 0.2rem;
+}
+.snipe-vs strong { color: #ef5b6e; }
+.mode-pill.mode-snipe {
+    background: rgba(239, 91, 110, 0.14);
+    color: #ef5b6e;
+}
+.btn-churn-snipe {
+    background: linear-gradient(135deg, #ef5b6e, #c93b56);
+}
 .nav-search { margin-left: auto; }
 .search-input {
     background: var(--surface);
@@ -1546,3 +1569,69 @@ body.picker-mode, body.picker-mode * { cursor: crosshair !important; }
 .artifact-pill.artifact-workflow      { color: var(--purple); border-color: rgba(167,139,250,0.35); }
 .artifact-pill.artifact-protocol      { color: #fbbf24; border-color: rgba(251,191,36,0.3); }
 .artifact-pill.artifact-ability       { color: var(--red); border-color: rgba(239,68,68,0.35); }
+
+/* --- v0.17 avenue pages: shared table + list + labs hub styling --- */
+.data-table, .atlas-table, .pulse-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.5rem 0 1.5rem;
+    font-size: 0.9rem;
+}
+.data-table th, .atlas-table th, .pulse-table th,
+.data-table td, .atlas-table td, .pulse-table td {
+    text-align: left;
+    padding: 0.55rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+}
+.data-table th, .atlas-table th, .pulse-table th {
+    color: var(--text-muted, #9aa0aa);
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.data-table tbody tr:hover, .atlas-table tbody tr:hover, .pulse-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+.recs-list { line-height: 1.7; padding-left: 1.1rem; }
+.recs-list li { margin-bottom: 0.4rem; }
+
+.labs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+.labs-card {
+    display: block;
+    padding: 1.1rem 1.2rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s, transform 0.15s;
+}
+.labs-card:hover { border-color: var(--purple); transform: translateY(-2px); }
+.labs-card h3 { margin: 0 0 0.35rem; font-size: 1.05rem; }
+.labs-card p { margin: 0; color: var(--text-muted, #9aa0aa); font-size: 0.88rem; line-height: 1.5; }
+.labs-card .labs-verb { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--purple); }
+.nav-link-labs::before { background: #34d399; box-shadow: 0 0 6px rgba(52,211,153,0.35); }
+.nav-link-labs.active::after { background: #34d399; }
+.nav-link-labs { padding-left: 1.45rem; }
+
+/* v0.17 idea-detail engine tools */
+.engine-tools-result {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    max-height: 420px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+p.muted, .muted { color: var(--text-muted, #5a6478); font-size: 0.88rem; }

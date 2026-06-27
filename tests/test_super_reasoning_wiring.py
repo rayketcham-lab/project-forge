@@ -26,8 +26,7 @@ from project_forge.models import Idea, IdeaCategory
 from project_forge.storage.db import Database
 
 
-def _idea(name: str, *, category: IdeaCategory = IdeaCategory.SECURITY_TOOL,
-          score: float = 0.85) -> Idea:
+def _idea(name: str, *, category: IdeaCategory = IdeaCategory.SECURITY_TOOL, score: float = 0.85) -> Idea:
     return Idea(
         name=name,
         tagline=f"{name.lower()}: {name.lower()} solution",
@@ -66,9 +65,7 @@ class TestSignatureEmbedding:
         si = synthesize_super_idea(_cluster(ideas))
 
         sig = cluster_signature(ideas)
-        assert sig in si.description, (
-            f"Expected [CLUSTER:{sig}] in description, got: {si.description[:200]}"
-        )
+        assert sig in si.description, f"Expected [CLUSTER:{sig}] in description, got: {si.description[:200]}"
 
     def test_signature_is_deterministic_across_synthesize_calls(self):
         ideas = [_idea("X"), _idea("Y")]
@@ -201,9 +198,7 @@ class TestSignatureBasedDedup:
         # cluster the wizard would form. Without the bug fix, this
         # blocks any new super that touches "certificate transparency".
         existing = _idea("[SUPER] Old Super", score=0.9)
-        existing.tagline = (
-            "certificate transparency log abuse detector + post-quantum migration"
-        )
+        existing.tagline = "certificate transparency log abuse detector + post-quantum migration"
         await db.save_idea(existing)
 
         gen = SuperIdeaGenerator(db)
@@ -237,9 +232,7 @@ class TestSignatureBasedDedup:
         """
         monkeypatch.setenv("FORGE_SUPER_REASONING", "1")
 
-        names = iter(
-            ["Cluster A Concept", "Cluster B Concept", "Cluster C Concept"]
-        )
+        names = iter(["Cluster A Concept", "Cluster B Concept", "Cluster C Concept"])
 
         def fake_llm(prompt: str) -> str:  # noqa: ARG001
             return f'{{"name": "{next(names)}"}}'
@@ -253,23 +246,29 @@ class TestSignatureBasedDedup:
         # form. The TOP cluster's signature is then pre-covered to force
         # the iteration to walk past.
         for i in range(8):
-            await db.save_idea(_idea(
-                f"Crypto Tool {i}",
-                category=IdeaCategory.CRYPTO_INFRASTRUCTURE,
-                score=0.95 - i * 0.005,
-            ))
+            await db.save_idea(
+                _idea(
+                    f"Crypto Tool {i}",
+                    category=IdeaCategory.CRYPTO_INFRASTRUCTURE,
+                    score=0.95 - i * 0.005,
+                )
+            )
         for i in range(8):
-            await db.save_idea(_idea(
-                f"PQC Tool {i}",
-                category=IdeaCategory.PQC_CRYPTOGRAPHY,
-                score=0.92 - i * 0.005,
-            ))
+            await db.save_idea(
+                _idea(
+                    f"PQC Tool {i}",
+                    category=IdeaCategory.PQC_CRYPTOGRAPHY,
+                    score=0.92 - i * 0.005,
+                )
+            )
         for i in range(8):
-            await db.save_idea(_idea(
-                f"Standards Tool {i}",
-                category=IdeaCategory.NIST_STANDARDS,
-                score=0.90 - i * 0.005,
-            ))
+            await db.save_idea(
+                _idea(
+                    f"Standards Tool {i}",
+                    category=IdeaCategory.NIST_STANDARDS,
+                    score=0.90 - i * 0.005,
+                )
+            )
 
         gen = SuperIdeaGenerator(db)
         first = await gen.generate_seeded(slot=0)

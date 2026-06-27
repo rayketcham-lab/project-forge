@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Sniper - Project Forge{% endblock %}
+
+{% block content %}
+<div id="sniper-root" data-category-filter="{{ category_filter or '' }}"></div>
+<section class="page-header">
+    <div class="container">
+        <h1>&#127919; Sniper</h1>
+        <p class="page-subtitle">
+            {{ total }} competitive-displacement plays, sorted by
+            <strong>snipe score</strong>. Each one wedges into a
+            <strong>market-proven</strong> incumbent &mdash; demand already
+            de-risked by real dollars &mdash; grounded in live Hacker News +
+            GitHub signal. Figures marked <code>[approx]</code> are the
+            engine's estimate; verify before betting on them.
+        </p>
+        <div class="churn-row">
+            <button id="snipe-churn-btn" class="btn btn-primary btn-churn btn-churn-snipe" type="button">
+                <span class="churn-icon">&#127919;</span>
+                <span class="churn-label">Snipe Now</span>
+            </button>
+            <div id="snipe-churn-status" class="churn-status"></div>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+
+        <div class="filters-bar">
+            <div class="filter-row">
+                <span class="filter-row-label">Hunting ground</span>
+                <div class="filter-chips">
+                    <a href="/sniper" class="chip {% if not category_filter %}chip-active{% endif %}">All</a>
+                    {% for cat in categories %}
+                    <a href="/sniper?category={{ cat }}"
+                       class="chip {% if category_filter == cat %}chip-active{% endif %}">
+                        {{ cat }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        {% if ideas %}
+        <div class="moneybot-grid">
+            {% for idea in ideas %}
+            <div class="moneybot-card" data-idea-id="{{ idea.id }}"
+                 data-idea-name="{{ idea.name }}"
+                 data-idea-tagline="{{ idea.tagline }}"
+                 data-snipe-score="{{ idea.snipe_score or '' }}"
+                 data-feasibility-score="{{ idea.feasibility_score }}">
+                <button class="idea-reject-btn" type="button" title="Reject this idea">&times;</button>
+                <div class="moneybot-card-body-wrap">
+                    <div class="moneybot-card-head">
+                        <span class="fundability-badge fundability-{{ ((idea.snipe_score or 0) * 10) | int }}">
+                            &#127919; {{ "%.2f"|format(idea.snipe_score or 0) }}
+                        </span>
+                        <span class="status-pill status-{{ idea.status }}">{{ idea.status }}</span>
+                    </div>
+                    <div class="moneybot-card-body">
+                        {% if idea.target_incumbent %}
+                        <div class="snipe-vs">vs. <strong>{{ idea.target_incumbent }}</strong></div>
+                        {% endif %}
+                        <div class="moneybot-name">{{ idea.name }}</div>
+                        <div class="moneybot-tagline">{{ idea.tagline }}</div>
+                    </div>
+                </div>
+                <div class="moneybot-card-foot">
+                    <code class="cat-tag">{{ idea.category.value }}</code>
+                    {% if idea.artifact_type %}
+                        <span class="mode-pill mode-snipe">{{ idea.artifact_type }}</span>
+                    {% endif %}
+                    <a href="/ideas/{{ idea.id }}" class="moneybot-issue">details &#8594;</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No snipes yet. Hit <strong>Snipe Now</strong> above &mdash; the engine
+            picks a real incumbent, pulls live demand signal, and finds the wedge.</p>
+        </div>
+        {% endif %}
+
+    </div>
+</section>
+
+<script src="/static/sniper.js?v=1"></script>
+{% endblock %}

@@ -81,13 +81,8 @@ CREATE TABLE IF NOT EXISTS verdict_audits (
     created_at TEXT NOT NULL
 );
 """
-_INDEX_SOURCE = (
-    "CREATE INDEX IF NOT EXISTS idx_audits_source "
-    "ON verdict_audits(source_type, source_id);"
-)
-_INDEX_IDEA = (
-    "CREATE INDEX IF NOT EXISTS idx_audits_idea ON verdict_audits(idea_id);"
-)
+_INDEX_SOURCE = "CREATE INDEX IF NOT EXISTS idx_audits_source ON verdict_audits(source_type, source_id);"
+_INDEX_IDEA = "CREATE INDEX IF NOT EXISTS idx_audits_idea ON verdict_audits(idea_id);"
 
 
 async def _ensure_table(db: Database) -> None:
@@ -118,7 +113,10 @@ def _flip_tone(tone: str) -> str:
 
 
 async def _re_evaluate_challenge(
-    idea, question: str, original_verdict: str, original_tone: str,
+    idea,
+    question: str,
+    original_verdict: str,
+    original_tone: str,
 ) -> dict[str, Any]:
     """Re-run the challenge with a flipped tone via the resolved backend.
 
@@ -280,13 +278,15 @@ async def run_verdict_audit_cycle(
         )
         if d >= divergence_threshold:
             divergences += 1
-        results.append({
-            "challenge_id": cand["id"],
-            "idea_id": cand["idea_id"],
-            "original": cand["verdict"],
-            "audit": outcome["verdict"],
-            "divergence": d,
-        })
+        results.append(
+            {
+                "challenge_id": cand["id"],
+                "idea_id": cand["idea_id"],
+                "original": cand["verdict"],
+                "audit": outcome["verdict"],
+                "divergence": d,
+            }
+        )
 
     return {
         "audited": len(results),

@@ -22,15 +22,14 @@ import pytest
 import pytest_asyncio
 
 from project_forge.engine.llm_generator import (
-    ARTIFACT_TYPES,
     _ARTIFACT_PROMPTS,
+    ARTIFACT_TYPES,
     _build_prompt,
     generate_idea_llm,
     pick_least_used_artifact,
 )
 from project_forge.models import Idea, IdeaCategory
 from project_forge.storage.db import Database
-
 
 _OK_PAYLOAD = {
     "name": "Reproducibility Ledger",
@@ -81,8 +80,14 @@ class TestArtifactCatalog:
 
     def test_known_types_present(self):
         for t in (
-            "skill", "sub-agent", "mcp-server", "hook",
-            "slash-command", "workflow", "protocol", "ability",
+            "skill",
+            "sub-agent",
+            "mcp-server",
+            "hook",
+            "slash-command",
+            "workflow",
+            "protocol",
+            "ability",
         ):
             assert t in ARTIFACT_TYPES
 
@@ -100,7 +105,6 @@ class TestPickLeastUsedArtifact:
 
     @pytest.mark.asyncio
     async def test_skips_the_saturated_type(self, db):
-        from project_forge.models import Idea
 
         for i in range(3):
             idea = Idea(

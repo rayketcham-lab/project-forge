@@ -32,8 +32,10 @@ class TestBuilderPrompt:
         from project_forge.engine.idea_builder import build_step_prompt
 
         p = build_step_prompt(
-            step=1, fragment="A SBOM diff tool.",
-            answers=[], category_hint=None,
+            step=1,
+            fragment="A SBOM diff tool.",
+            answers=[],
+            category_hint=None,
         )
         # Step 1 prompt focuses on the core problem
         assert "1" in p or "Discover" in p or "core problem" in p.lower()
@@ -44,8 +46,10 @@ class TestBuilderPrompt:
 
         answers = [{"question": "Who hits this?", "answer": "Security engineers."}]
         p = build_step_prompt(
-            step=2, fragment="A SBOM diff tool.",
-            answers=answers, category_hint=None,
+            step=2,
+            fragment="A SBOM diff tool.",
+            answers=answers,
+            category_hint=None,
         )
         assert "Security engineers" in p
 
@@ -53,7 +57,8 @@ class TestBuilderPrompt:
         from project_forge.engine.idea_builder import build_step_prompt
 
         p = build_step_prompt(
-            step=5, fragment="A SBOM diff tool.",
+            step=5,
+            fragment="A SBOM diff tool.",
             answers=[
                 {"question": "Who?", "answer": "Sec engineers"},
                 {"question": "Diff?", "answer": "tree compare"},
@@ -69,7 +74,10 @@ class TestBuilderPrompt:
 
         for step in (1, 2, 3, 4):
             p = build_step_prompt(
-                step=step, fragment="x", answers=[], category_hint=None,
+                step=step,
+                fragment="x",
+                answers=[],
+                category_hint=None,
             )
             assert "questions" in p.lower()
 

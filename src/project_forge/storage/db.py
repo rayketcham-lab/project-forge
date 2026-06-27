@@ -13,6 +13,7 @@ from pathlib import Path
 import aiosqlite
 
 from project_forge.models import (
+    MONEY_CATEGORIES,
     Challenge,
     FilteredIdea,
     GenerationRun,
@@ -174,6 +175,32 @@ CREATE TABLE IF NOT EXISTS route_decisions (
     confidence REAL NOT NULL,
     decided_at TEXT NOT NULL
 );
+
+-- v0.17 Scoreboard: realized outcome signals for the engine's bets, so
+-- build_calibration can check predicted-vs-realized per axis/category.
+CREATE TABLE IF NOT EXISTS outcome_signals (
+    id TEXT PRIMARY KEY,
+    idea_id TEXT,
+    axis TEXT NOT NULL,
+    predicted REAL,
+    metric TEXT NOT NULL,
+    value REAL NOT NULL,
+    entity_ref TEXT,
+    captured_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_outcome_idea ON outcome_signals(idea_id);
+CREATE INDEX IF NOT EXISTS idx_outcome_axis ON outcome_signals(axis);
+
+-- v0.17 Scoreboard auto-tune: learned per-(category, axis) score nudges,
+-- applied by the heuristic scorers when present. Empty by default.
+CREATE TABLE IF NOT EXISTS calibration_weights (
+    category TEXT NOT NULL,
+    axis TEXT NOT NULL,
+    nudge REAL NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (category, axis)
+);
 """
 
 
@@ -191,6 +218,7 @@ class Database:
         # busy-timeout territory. Acquired by the `_write_serialized`
         # helper; safe methods (reads) skip it.
         import asyncio
+
         self._write_lock = asyncio.Lock()
 
     async def connect(self):
@@ -253,6 +281,11 @@ class Database:
             # Claude Lab categories rotate through 8 types; everything else
             # stays NULL (= default project-pitch shape).
             "ALTER TABLE ideas ADD COLUMN artifact_type TEXT",
+            # v0.16 — Sniper board: competitive-displacement axis (parallel
+            # to fundability/ambition) and the named incumbent the wedge
+            # targets. Both NULL for non-snipe ideas. Sorted DESC on /sniper.
+            "ALTER TABLE ideas ADD COLUMN snipe_score REAL",
+            "ALTER TABLE ideas ADD COLUMN target_incumbent TEXT",
         ):
             try:
                 await self._db.execute(stmt)
@@ -322,8 +355,8 @@ class Database:
                  feasibility_score, mvp_scope, tech_stack, generated_at, status,
                  github_issue_url, project_repo_url, content_hash, source_url,
                  generation_mode, fundability_score, auto_promoted_at, ambition_score,
-                artifact_type)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                artifact_type, snipe_score, target_incumbent)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     idea.id,
                     idea.name,
@@ -345,6 +378,8 @@ class Database:
                     auto_ts.isoformat() if auto_ts is not None else None,
                     getattr(idea, "ambition_score", None),
                     getattr(idea, "artifact_type", None),
+                    getattr(idea, "snipe_score", None),
+                    getattr(idea, "target_incumbent", None),
                 ),
             )
             await self.db.commit()
@@ -590,9 +625,7 @@ class Database:
         # alone is misleading because most rows are archived dedup victims.
         # The dashboard headline should be active.
         ARCHIVED_STATUSES = {"archived", "rejected"}
-        total_active = sum(
-            v for k, v in ideas_by_status.items() if k not in ARCHIVED_STATUSES
-        )
+        total_active = sum(v for k, v in ideas_by_status.items() if k not in ARCHIVED_STATUSES)
         total_archived = ideas_by_status.get("archived", 0)
         total_rejected = ideas_by_status.get("rejected", 0)
 
@@ -609,8 +642,7 @@ class Database:
         # Average feasibility over ACTIVE ideas only — archived rows would
         # drag the visible average toward historical noise.
         cursor = await self.db.execute(
-            "SELECT AVG(feasibility_score) FROM ideas "
-            "WHERE status NOT IN ('archived', 'rejected')",
+            "SELECT AVG(feasibility_score) FROM ideas WHERE status NOT IN ('archived', 'rejected')",
         )
         row = await cursor.fetchone()
         avg_feasibility_active = round(row[0], 2) if row and row[0] else 0.0
@@ -629,10 +661,9 @@ class Database:
         row = await cursor.fetchone()
         total_denials = row[0] if row else 0
 
-        # v0.14 money-bot tile signals.
-        money_cats = (
-            "automation-income", "creator-tools", "consumer-app", "productivity",
-        )
+        # v0.14 money-bot tile signals. Derived from the canonical grouping
+        # so the count always matches what /money-bots actually lists.
+        money_cats = tuple(c.value for c in MONEY_CATEGORIES)
         placeholders = ",".join("?" * len(money_cats))
         cursor = await self.db.execute(
             f"SELECT COUNT(*) FROM ideas WHERE category IN ({placeholders}) "  # noqa: S608
@@ -695,7 +726,8 @@ class Database:
 
     async def get_challenge(self, challenge_id: str) -> Challenge | None:
         cursor = await self.db.execute(
-            "SELECT * FROM challenges WHERE id = ?", (challenge_id,),
+            "SELECT * FROM challenges WHERE id = ?",
+            (challenge_id,),
         )
         row = await cursor.fetchone()
         if not row:
@@ -725,7 +757,8 @@ class Database:
     async def is_challenge_applied(self, challenge_id: str) -> bool:
         """True if the challenge has already been applied via mark_challenge_applied."""
         cursor = await self.db.execute(
-            "SELECT applied_at FROM challenges WHERE id = ?", (challenge_id,),
+            "SELECT applied_at FROM challenges WHERE id = ?",
+            (challenge_id,),
         )
         row = await cursor.fetchone()
         return bool(row and row["applied_at"])
@@ -738,7 +771,9 @@ class Database:
         await self.db.commit()
 
     async def apply_idea_field_updates(
-        self, idea_id: str, updates: dict[str, str | float | list],
+        self,
+        idea_id: str,
+        updates: dict[str, str | float | list],
     ) -> Idea | None:
         """Apply a dict of field→new_value updates to an idea.
 
@@ -746,8 +781,12 @@ class Database:
         tagline, feasibility_score, tech_stack. Returns the refreshed Idea.
         """
         ALLOWED = {
-            "mvp_scope", "description", "market_analysis",
-            "tagline", "feasibility_score", "tech_stack",
+            "mvp_scope",
+            "description",
+            "market_analysis",
+            "tagline",
+            "feasibility_score",
+            "tech_stack",
         }
         clean: dict[str, object] = {}
         for k, v in updates.items():
@@ -1183,9 +1222,7 @@ class Database:
 
         # 3. Super-idea base-name collisions among active supers
         cursor = await self.db.execute(
-            "SELECT id, name FROM ideas "
-            "WHERE name LIKE '[SUPER]%' "
-            "AND status NOT IN ('rejected', 'archived')",
+            "SELECT id, name FROM ideas WHERE name LIKE '[SUPER]%' AND status NOT IN ('rejected', 'archived')",
         )
         rows = await cursor.fetchall()
         seen: dict[str, list[str]] = {}
@@ -1392,29 +1429,21 @@ class Database:
             github_issue_url=row["github_issue_url"],
             project_repo_url=row["project_repo_url"],
             source_url=row["source_url"] if "source_url" in keys else None,
-            generation_mode=(
-                row["generation_mode"] if "generation_mode" in keys else None
-            ),
-            fundability_score=(
-                row["fundability_score"] if "fundability_score" in keys else None
-            ),
+            generation_mode=(row["generation_mode"] if "generation_mode" in keys else None),
+            fundability_score=(row["fundability_score"] if "fundability_score" in keys else None),
             auto_promoted_at=(
                 datetime.fromisoformat(row["auto_promoted_at"]).replace(tzinfo=UTC)
-                if "auto_promoted_at" in keys
-                and row["auto_promoted_at"]
-                and "+" not in row["auto_promoted_at"]
+                if "auto_promoted_at" in keys and row["auto_promoted_at"] and "+" not in row["auto_promoted_at"]
                 else (
                     datetime.fromisoformat(row["auto_promoted_at"])
                     if "auto_promoted_at" in keys and row["auto_promoted_at"]
                     else None
                 )
             ),
-            ambition_score=(
-                row["ambition_score"] if "ambition_score" in keys else None
-            ),
-            artifact_type=(
-                row["artifact_type"] if "artifact_type" in keys else None
-            ),
+            ambition_score=(row["ambition_score"] if "ambition_score" in keys else None),
+            artifact_type=(row["artifact_type"] if "artifact_type" in keys else None),
+            snipe_score=(row["snipe_score"] if "snipe_score" in keys else None),
+            target_incumbent=(row["target_incumbent"] if "target_incumbent" in keys else None),
         )
 
     # === RESOURCE CRUD ===
