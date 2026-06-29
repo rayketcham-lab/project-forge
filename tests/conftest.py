@@ -11,7 +11,7 @@ import pytest_asyncio
 from project_forge.storage.db import Database
 
 
-@pytest.hookimpl(wrapper=True)
+@pytest.hookimpl(wrapper=True, tryfirst=True)
 def pytest_sessionfinish(session, exitstatus):
     """Let pytest finish reporting, then force a clean exit.
 
