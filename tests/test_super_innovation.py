@@ -10,6 +10,7 @@ Fix:
 3. Build specific taglines from component concept terms
 """
 
+from pathlib import Path
 from project_forge.engine.super_ideas import (
     _build_super_tagline,
     _dynamic_cluster_name,
@@ -18,6 +19,8 @@ from project_forge.engine.super_ideas import (
     synthesize_super_idea,
 )
 from project_forge.models import Idea, IdeaCategory
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _make_idea(
@@ -304,7 +307,7 @@ class TestStatCardIntegrity:
         This tests the template logic — stats.super_ideas (from DB COUNT query)
         must be what feeds the stat-number element, not ns.active_super.
         """
-        template_path = "/opt/vmdata/project-forge/src/project_forge/web/templates/dashboard.html"
+        template_path = PROJECT_ROOT / "src/project_forge/web/templates/dashboard.html"
         with open(template_path) as f:
             content = f.read()
         # The stat-number for Super Ideas must use stats.super_ideas
@@ -316,7 +319,7 @@ class TestStatCardIntegrity:
 
     def test_js_updates_contributed_not_avg_score_at_index_4(self):
         """JS numbers[4] must update the Contributed card, not Avg Score."""
-        js_path = "/opt/vmdata/project-forge/src/project_forge/web/static/app.js"
+        js_path = PROJECT_ROOT / "src/project_forge/web/static/app.js"
         with open(js_path) as f:
             content = f.read()
         # numbers[4] must reference contributed, not avg_feasibility_score
@@ -328,7 +331,7 @@ class TestStatCardIntegrity:
 
     def test_js_updates_avg_score_at_index_5(self):
         """JS must update the Avg Score card at numbers[5]."""
-        js_path = "/opt/vmdata/project-forge/src/project_forge/web/static/app.js"
+        js_path = PROJECT_ROOT / "src/project_forge/web/static/app.js"
         with open(js_path) as f:
             content = f.read()
         assert "numbers[5].textContent = stats.avg_feasibility_score" in content, (
