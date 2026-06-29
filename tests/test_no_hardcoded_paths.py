@@ -32,9 +32,7 @@ def _collect_violations() -> list[str]:
     for test_file in sorted(TESTS_DIR.glob("*.py")):
         text = test_file.read_text(encoding="utf-8")
         for lineno, line in enumerate(text.splitlines(), start=1):
-            if _ABS_PATH_PATTERN.search(line) and not any(
-                ctx in line for ctx in _MOCK_CONTEXTS
-            ):
+            if _ABS_PATH_PATTERN.search(line) and not any(ctx in line for ctx in _MOCK_CONTEXTS):
                 violations.append(f"{test_file.name}:{lineno}: {line.strip()}")
     return violations
 
@@ -48,6 +46,5 @@ def test_no_hardcoded_absolute_paths_in_tests():
     """
     violations = _collect_violations()
     assert not violations, (
-        "Hardcoded absolute paths found in test files — use PROJECT_ROOT-relative paths:\n"
-        + "\n".join(violations)
+        "Hardcoded absolute paths found in test files — use PROJECT_ROOT-relative paths:\n" + "\n".join(violations)
     )
