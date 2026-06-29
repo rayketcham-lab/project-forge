@@ -5,10 +5,16 @@
 #44: Extract dedup logic out of Database.save_idea()
 """
 
+from pathlib import Path
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from project_forge.models import Idea, IdeaCategory
+
+# Anchor file reads to THIS file, never the current working directory, so the
+# tests read the checked-out source on any machine (incl. the CI runner).
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _make_idea(name: str, **kw) -> Idea:
@@ -34,9 +40,7 @@ class TestNoTokenInHTML:
 
     def test_base_template_has_no_api_token_meta(self):
         """base.html must not contain a meta tag that injects the API token."""
-        from pathlib import Path
-
-        base_html = Path("src/project_forge/web/templates/base.html").read_text()
+        base_html = (_REPO_ROOT / "src/project_forge/web/templates/base.html").read_text()
         assert "api-token" not in base_html, (
             "base.html must not contain api-token meta tag — it exposes the bearer token to every page visitor"
         )
@@ -51,9 +55,7 @@ class TestNoTokenInHTML:
 
     def test_app_js_uses_csrf_not_bearer(self):
         """app.js must not read a bearer token from meta tags."""
-        from pathlib import Path
-
-        app_js = Path("src/project_forge/web/static/app.js").read_text()
+        app_js = (_REPO_ROOT / "src/project_forge/web/static/app.js").read_text()
         assert 'meta[name="api-token"]' not in app_js, "app.js must not read bearer token from meta tags"
 
     @pytest.mark.asyncio

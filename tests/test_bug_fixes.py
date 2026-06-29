@@ -14,6 +14,9 @@ import pytest_asyncio
 from project_forge.models import Idea, IdeaCategory
 from project_forge.storage.db import Database
 
+# Anchor file reads to THIS file, not the current working directory.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
 
 @pytest_asyncio.fixture
 async def db(tmp_path: Path):
@@ -133,7 +136,7 @@ class TestBug17BrowserPostAuth:
     @pytest.mark.asyncio
     async def test_app_js_uses_auth_headers(self):
         """app.js must call getAuthHeaders() for all POST requests."""
-        js_path = Path("src/project_forge/web/static/app.js")
+        js_path = _REPO_ROOT / "src/project_forge/web/static/app.js"
         content = js_path.read_text()
 
         # Every fetch POST should use getAuthHeaders
@@ -228,10 +231,11 @@ class TestBug30NoApiKey:
 
         from project_forge.web.routes import _challenge_idea
 
-        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": ""}, clear=False):
-            with patch("project_forge.web.routes.settings") as mock_settings:
-                mock_settings.anthropic_api_key = ""
-                result = await _challenge_idea(idea, "Is this idea feasible?")
+        # Force the no-backend path deterministically. Clearing the API key
+        # isn't enough on a host with the `claude` CLI on PATH (resolve_backend
+        # would still find it), which made this test non-reciprocal dev-vs-CI.
+        with patch("project_forge.web.routes.resolve_backend", return_value=None):
+            result = await _challenge_idea(idea, "Is this idea feasible?")
 
         # Should return a meaningful response, not just "unavailable"
         assert result["response"], "Challenge should return a non-empty response"

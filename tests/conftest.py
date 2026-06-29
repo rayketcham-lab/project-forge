@@ -11,22 +11,28 @@ import pytest_asyncio
 from project_forge.storage.db import Database
 
 
-@pytest.hookimpl(trylast=True)
+@pytest.hookimpl(wrapper=True)
 def pytest_sessionfinish(session, exitstatus):
-    """Exit hard once all tests + reporting + coverage are done.
+    """Let pytest finish reporting, then force a clean exit.
 
-    The session-scoped asyncio loop + aiosqlite worker threads can leave a
-    non-daemon thread that hangs interpreter teardown indefinitely on some
-    environments (the dev box with the `claude` CLI on PATH, and the
-    self-hosted CI runner). Everything that matters — results, the terminal
-    summary, and the coverage fail-under gate — has already run by the time
-    this `trylast` hook fires, so we flush and exit with pytest's computed
-    status instead of waiting on the broken cleanup. Honour the exit code so
-    a real failure (or a coverage miss) still reds the build.
+    The session-scoped asyncio loop + aiosqlite worker threads leave a
+    non-daemon thread that hangs interpreter teardown on this host (and the
+    self-hosted CI runner that shares it). A `wrapper` hook lets every inner
+    sessionfinish run FIRST — so the terminal summary, the coverage report,
+    and the `--cov-fail-under` gate all print and finalize `session.exitstatus`
+    — then we flush and `os._exit` with that final status, skipping the hang.
+    Unlike the old `trylast` version, this no longer swallows the summary, so
+    CI failures are fully visible (legit), not silently truncated.
     """
-    sys.stdout.flush()
-    sys.stderr.flush()
-    os._exit(int(exitstatus))
+    result = yield
+    # Only force-exit after a REAL test run. Collection-only (CI's test-count
+    # metric runs `pytest --collect-only`) never spins up the async loop, so
+    # there's nothing to hang on — let it exit normally with full output.
+    if not session.config.getoption("collectonly", False):
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(int(session.exitstatus))
+    return result
 
 
 @pytest.fixture(autouse=True)
@@ -58,6 +64,28 @@ def _isolate_test_env():
         _rate_limit_store.clear()
     except ImportError:
         pass
+
+
+@pytest.fixture(autouse=True)
+def _isolate_module_caches():
+    """Clear runtime module-level caches around every test.
+
+    These globals accumulate state during a run and were NOT reset, so a
+    test's result could depend on what ran before it (order-dependent =
+    non-reciprocal CI). Clearing them on both sides of every test makes the
+    suite deterministic regardless of execution order or which subset runs:
+      - verticals._INFER_CACHE  — vertical-inference memoization
+      - scoreboard._NUDGE_CACHE — learned auto-tune nudges (would silently
+        shift fundability/ambition/snipe heuristic scores in later tests)
+    """
+    from project_forge.engine.scoreboard import _NUDGE_CACHE
+    from project_forge.engine.verticals import _INFER_CACHE
+
+    _INFER_CACHE.clear()
+    _NUDGE_CACHE.clear()
+    yield
+    _INFER_CACHE.clear()
+    _NUDGE_CACHE.clear()
 
 
 @pytest.fixture(scope="session")
