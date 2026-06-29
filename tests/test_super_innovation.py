@@ -11,6 +11,7 @@ Fix:
 """
 
 from pathlib import Path
+
 from project_forge.engine.super_ideas import (
     _build_super_tagline,
     _dynamic_cluster_name,
