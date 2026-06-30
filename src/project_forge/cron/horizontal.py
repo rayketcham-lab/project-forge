@@ -37,14 +37,20 @@ async def pick_cross_category_pair(
 
     pairs = await db.get_least_explored_pairs(limit=66)
 
+    # Self-improvement ideas come ONLY from the introspection engine (concrete,
+    # grounded code tasks). Never let cross-category generation bridge into it —
+    # that produced garbled "Dashboard UX Improvements for Performance" noise.
+    si = IdeaCategory.SELF_IMPROVEMENT.value
     for cat_a_val, cat_b_val, _count in pairs:
+        if si in (cat_a_val, cat_b_val):
+            continue
         pair = (cat_a_val, cat_b_val)
         if pair in excluded_normalized:
             continue
         return IdeaCategory(cat_a_val), IdeaCategory(cat_b_val)
 
     # Fallback: random pair (should never reach here with 66 pairs)
-    cats = list(IdeaCategory)
+    cats = [c for c in IdeaCategory if c != IdeaCategory.SELF_IMPROVEMENT]
     a, b = random.sample(cats, 2)
     return a, b
 

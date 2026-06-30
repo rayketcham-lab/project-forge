@@ -379,7 +379,9 @@ def generate_local_idea(
     used = used_tuples or set()
 
     if category is None:
-        category = random.choice(list(IdeaCategory))
+        # SELF_IMPROVEMENT is generated only by the introspection engine, never
+        # by the generic combinatoric path (which produces garbled SI names).
+        category = random.choice([c for c in IdeaCategory if c != IdeaCategory.SELF_IMPROVEMENT])
 
     seeds = CATEGORY_SEEDS[category]
     concepts = seeds["seed_concepts"]

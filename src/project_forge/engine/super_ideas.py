@@ -668,6 +668,10 @@ class SuperIdeaGenerator:
     async def generate(self, count: int = 5) -> list[SuperIdea]:
         """Generate super ideas by clustering and synthesizing all ideas."""
         all_ideas = await self.db.list_ideas(limit=1000)
+        # Self-improvement ideas are concrete code tasks, NOT products to
+        # cluster/bundle. Including them produced floaty "[SUPER] X + Y
+        # synthesized into one platform" noise that flooded the Think Tank.
+        all_ideas = [i for i in all_ideas if i.category != IdeaCategory.SELF_IMPROVEMENT]
         if len(all_ideas) < 10:
             logger.warning(
                 "Not enough ideas for super synthesis (need 10+, have %d)",
@@ -709,6 +713,10 @@ class SuperIdeaGenerator:
         label = rotation["label"]
 
         all_ideas = await self.db.list_ideas(limit=1000)
+        # Self-improvement ideas are concrete code tasks, NOT products to
+        # cluster/bundle. Including them produced floaty "[SUPER] X + Y
+        # synthesized into one platform" noise that flooded the Think Tank.
+        all_ideas = [i for i in all_ideas if i.category != IdeaCategory.SELF_IMPROVEMENT]
         if len(all_ideas) < 10:
             return None
 
