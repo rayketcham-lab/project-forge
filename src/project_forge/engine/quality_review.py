@@ -32,10 +32,11 @@ _BUZZWORDS = [
     "cutting-edge",
 ]
 
-# SI-specific: signals that it's a new project, not a code improvement
+# SI-specific: signals that it's a new project, not a code improvement.
+# NOTE: bare "phase 1/2" removed — the mvp_scope schema requests phased scope,
+# so rejecting on it punished ideas for following their instructions. Genuine
+# new-project tells (ship to, early adopters, SaaS, pricing, …) remain.
 _NEW_PROJECT_SIGNALS = [
-    "phase 1",
-    "phase 2",
     "ship to",
     "early adopters",
     "multi-tenant",

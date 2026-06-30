@@ -50,12 +50,11 @@ _TECH_PATTERNS = [
     r"\b(OpenSSL|Vault|Kubernetes|Docker|Prometheus|Grafana)\b",
 ]
 
-# Overambition signals
+# Overambition signals. NOTE: bare "phase 1/2/3" are deliberately NOT here — the
+# generation schema asks ideas to write mvp_scope as "Phase 1, Phase 2, Phase 3",
+# so docking them punished ideas for obeying their own instructions. Real
+# over-scope signals (multi-tenant, enterprise SSO, …) stay.
 _OVERAMBITION_SIGNALS = [
-    "phase 1",
-    "phase 2",
-    "phase 3",
-    "phase 4",
     "multi-tenant",
     "enterprise sso",
     "saas platform",

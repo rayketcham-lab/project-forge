@@ -218,6 +218,15 @@ async def seconds_until_next_snipe(db: Database, interval: timedelta) -> float:
     return _delay_from_watermark(row[0] if row else None, interval)
 
 
+async def seconds_until_next_pulse(db: Database, interval: timedelta) -> float:
+    """Delay until the next pulse fire. Watermark = MAX(generated_at) over
+    pulse-mode ideas only — NOT the global watermark, which the hourly expand
+    cadence keeps perpetually fresh (that left the Pulse avenue effectively dead)."""
+    cursor = await db.db.execute("SELECT MAX(generated_at) FROM ideas WHERE generation_mode = 'pulse'")
+    row = await cursor.fetchone()
+    return _delay_from_watermark(row[0] if row else None, interval)
+
+
 async def seconds_until_next_review(db: Database, interval: timedelta) -> float:
     """Delay until the next review-cycle fire.
 
@@ -495,6 +504,10 @@ async def _fire_pulse(db: Database) -> None:
         if result is None:
             logger.info("Pulse cycle: no idea produced")
             return
+        # Tag as 'pulse' so seconds_until_next_pulse can track this cadence's own
+        # watermark. Without it the cadence keyed off the global expand watermark,
+        # which the hourly expand cadence kept perpetually fresh -> pulse ~never fired.
+        result.idea.generation_mode = "pulse"
         result.idea.fundability_score = await score_fundability(result.idea)
         _saved, ok, _reason = await filter_and_save(result.idea, db)
         logger.info("Pulse cycle: %s (seed=%s)", "saved" if ok else "rejected", bool(seed))
@@ -711,7 +724,7 @@ def default_cadences() -> list[Cadence]:
             name="pulse",
             interval=PULSE_INTERVAL,
             runner=_fire_pulse,
-            delay_query=seconds_until_next_expand,
+            delay_query=seconds_until_next_pulse,
             tick_interval=1800.0,
             initial_delay=initial,
         ),
