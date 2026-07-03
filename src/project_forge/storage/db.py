@@ -21,6 +21,7 @@ from project_forge.models import (
     IdeaCategory,
     IdeaDenial,
     IdeaStatus,
+    Mission,
     RepoEntry,
     Resource,
     SelectionRound,
@@ -201,6 +202,19 @@ CREATE TABLE IF NOT EXISTS calibration_weights (
     updated_at TEXT NOT NULL,
     PRIMARY KEY (category, axis)
 );
+
+-- v0.18 Missions (#84): operator directives the think tank generates
+-- against. last_generated_at is the mission cadence's watermark.
+CREATE TABLE IF NOT EXISTS missions (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    brief TEXT NOT NULL,
+    urls TEXT NOT NULL DEFAULT '[]',
+    category TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL,
+    last_generated_at TEXT
+);
 """
 
 
@@ -286,6 +300,9 @@ class Database:
             # targets. Both NULL for non-snipe ideas. Sorted DESC on /sniper.
             "ALTER TABLE ideas ADD COLUMN snipe_score REAL",
             "ALTER TABLE ideas ADD COLUMN target_incumbent TEXT",
+            # v0.18 — Missions (#84): link an idea to the operator directive
+            # it was generated against. NULL for the engine's own rotation.
+            "ALTER TABLE ideas ADD COLUMN mission_id TEXT",
         ):
             try:
                 await self._db.execute(stmt)
@@ -355,8 +372,8 @@ class Database:
                  feasibility_score, mvp_scope, tech_stack, generated_at, status,
                  github_issue_url, project_repo_url, content_hash, source_url,
                  generation_mode, fundability_score, auto_promoted_at, ambition_score,
-                artifact_type, snipe_score, target_incumbent)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                artifact_type, snipe_score, target_incumbent, mission_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     idea.id,
                     idea.name,
@@ -380,6 +397,7 @@ class Database:
                     getattr(idea, "artifact_type", None),
                     getattr(idea, "snipe_score", None),
                     getattr(idea, "target_incumbent", None),
+                    getattr(idea, "mission_id", None),
                 ),
             )
             await self.db.commit()
@@ -1444,6 +1462,7 @@ class Database:
             artifact_type=(row["artifact_type"] if "artifact_type" in keys else None),
             snipe_score=(row["snipe_score"] if "snipe_score" in keys else None),
             target_incumbent=(row["target_incumbent"] if "target_incumbent" in keys else None),
+            mission_id=(row["mission_id"] if "mission_id" in keys else None),
         )
 
     # === RESOURCE CRUD ===
@@ -1506,4 +1525,118 @@ class Database:
             added_at=datetime.fromisoformat(row["added_at"]).replace(tzinfo=UTC)
             if "+" not in row["added_at"]
             else datetime.fromisoformat(row["added_at"]),
+        )
+
+    # === MISSION CRUD (v0.18, #84) ===
+
+    async def save_mission(self, mission: Mission) -> Mission:
+        async with self._write_lock:
+            await self.db.execute(
+                """INSERT OR REPLACE INTO missions
+                (id, title, brief, urls, category, status, created_at, last_generated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    mission.id,
+                    mission.title,
+                    mission.brief,
+                    json.dumps(mission.urls),
+                    mission.category.value if mission.category else None,
+                    mission.status,
+                    mission.created_at.isoformat(),
+                    mission.last_generated_at.isoformat() if mission.last_generated_at else None,
+                ),
+            )
+            await self.db.commit()
+        return mission
+
+    async def get_mission(self, mission_id: str) -> Mission | None:
+        cursor = await self.db.execute("SELECT * FROM missions WHERE id = ?", (mission_id,))
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return self._row_to_mission(row)
+
+    async def list_missions(self, status: str | None = None) -> list[Mission]:
+        if status:
+            cursor = await self.db.execute(
+                "SELECT * FROM missions WHERE status = ? ORDER BY created_at DESC",
+                (status,),
+            )
+        else:
+            cursor = await self.db.execute("SELECT * FROM missions ORDER BY created_at DESC")
+        rows = await cursor.fetchall()
+        return [self._row_to_mission(row) for row in rows]
+
+    async def update_mission_status(self, mission_id: str, status: str) -> None:
+        async with self._write_lock:
+            await self.db.execute(
+                "UPDATE missions SET status = ? WHERE id = ?",
+                (status, mission_id),
+            )
+            await self.db.commit()
+
+    async def touch_mission_generated(self, mission_id: str) -> None:
+        """Advance the mission cadence watermark. Called on every generation
+        attempt — saved OR dedup-rejected — so rejection streaks don't let
+        the cadence hammer the LLM backend."""
+        async with self._write_lock:
+            await self.db.execute(
+                "UPDATE missions SET last_generated_at = ? WHERE id = ?",
+                (datetime.now(UTC).isoformat(), mission_id),
+            )
+            await self.db.commit()
+
+    async def pick_next_mission(self) -> Mission | None:
+        """Round-robin picker for the mission cadence: never-generated
+        missions first, then the one generated against longest ago."""
+        cursor = await self.db.execute(
+            "SELECT * FROM missions WHERE status = 'active' "
+            "ORDER BY last_generated_at IS NOT NULL, last_generated_at ASC, created_at ASC "
+            "LIMIT 1"
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return self._row_to_mission(row)
+
+    async def count_ideas_by_mission(self) -> dict[str, int]:
+        cursor = await self.db.execute(
+            "SELECT mission_id, COUNT(*) AS n FROM ideas WHERE mission_id IS NOT NULL GROUP BY mission_id"
+        )
+        rows = await cursor.fetchall()
+        return {row["mission_id"]: row["n"] for row in rows}
+
+    async def list_mission_ideas(self, mission_id: str | None = None, limit: int = 60) -> list[Idea]:
+        """Ideas linked to a mission (or all mission-linked ideas when
+        mission_id is None), newest first."""
+        if mission_id:
+            cursor = await self.db.execute(
+                "SELECT * FROM ideas WHERE mission_id = ? ORDER BY generated_at DESC LIMIT ?",
+                (mission_id, limit),
+            )
+        else:
+            cursor = await self.db.execute(
+                "SELECT * FROM ideas WHERE mission_id IS NOT NULL ORDER BY generated_at DESC LIMIT ?",
+                (limit,),
+            )
+        rows = await cursor.fetchall()
+        return [self._row_to_idea(row) for row in rows]
+
+    @staticmethod
+    def _row_to_mission(row) -> Mission:
+        def _ts(value: str | None) -> datetime | None:
+            if not value:
+                return None
+            parsed = datetime.fromisoformat(value)
+            return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
+
+        return Mission(
+            id=row["id"],
+            title=row["title"],
+            brief=row["brief"],
+            urls=json.loads(row["urls"] or "[]"),
+            category=IdeaCategory(row["category"]) if row["category"] else None,
+            status=row["status"],
+            created_at=_ts(row["created_at"]),
+            last_generated_at=_ts(row["last_generated_at"]),
         )

@@ -67,6 +67,9 @@ SCOREBOARD_INTERVAL = _interval_from_env("FORGE_SCOREBOARD_INTERVAL_HOURS", 24.0
 CARTOGRAPHER_INTERVAL = _interval_from_env("FORGE_CARTOGRAPHER_INTERVAL_HOURS", 168.0)
 # v0.17 — Pulse: event-driven generation seeded by live HN/GitHub signal.
 PULSE_INTERVAL = _interval_from_env("FORGE_PULSE_INTERVAL_HOURS", 3.0)
+# v0.18 — Missions (#84): operator-directed generation, round-robin over
+# active missions.
+MISSION_INTERVAL = _interval_from_env("FORGE_MISSION_INTERVAL_HOURS", 4.0)
 
 
 def _seconds_from_env(var: str, default_seconds: float) -> timedelta:
@@ -225,6 +228,23 @@ async def seconds_until_next_pulse(db: Database, interval: timedelta) -> float:
     cursor = await db.db.execute("SELECT MAX(generated_at) FROM ideas WHERE generation_mode = 'pulse'")
     row = await cursor.fetchone()
     return _delay_from_watermark(row[0] if row else None, interval)
+
+
+async def seconds_until_next_mission(db: Database, interval: timedelta) -> float:
+    """Delay until the next mission fire.
+
+    Watermark = MAX(missions.last_generated_at) over ACTIVE missions —
+    advanced on every generation attempt (saved or dedup-rejected), so
+    uvicorn reloads and rejection streaks don't re-fire it. With zero
+    active missions there is nothing to do: report a full interval so the
+    tick skips quietly instead of firing a no-op runner every pass.
+    """
+    cursor = await db.db.execute("SELECT COUNT(*), MAX(last_generated_at) FROM missions WHERE status = 'active'")
+    row = await cursor.fetchone()
+    active_count = row[0] if row else 0
+    if not active_count:
+        return interval.total_seconds()
+    return _delay_from_watermark(row[1], interval)
 
 
 async def seconds_until_next_review(db: Database, interval: timedelta) -> float:
@@ -515,6 +535,28 @@ async def _fire_pulse(db: Database) -> None:
         logger.exception("pulse cycle failed")
 
 
+async def _fire_mission(db: Database) -> None:
+    """One operator-directed generation: pick the active mission that has
+    waited longest, anchor a generation to its brief + grounding URLs.
+    Touches no GitHub state, so a stray re-fire is benign."""
+    from project_forge.engine import mission as mission_engine
+
+    picked = await db.pick_next_mission()
+    if picked is None:
+        logger.info("Mission cycle: no active missions")
+        return
+    result = await mission_engine.generate_mission_idea(db, picked)
+    if result is None:
+        logger.info("Mission cycle: no idea produced for %s", picked.title)
+        return
+    logger.info(
+        "Mission cycle: %s for mission %r (%s)",
+        "saved" if result.saved else f"rejected ({result.reason})",
+        picked.title,
+        result.idea.name,
+    )
+
+
 async def _fire_feed_refresh(db: Database) -> None:
     """Refresh NVD / arXiv / IETF caches that feed prompt-seed material.
 
@@ -725,6 +767,18 @@ def default_cadences() -> list[Cadence]:
             interval=PULSE_INTERVAL,
             runner=_fire_pulse,
             delay_query=seconds_until_next_pulse,
+            tick_interval=1800.0,
+            initial_delay=initial,
+        ),
+        Cadence(
+            # v0.18 — Missions (#84): operator-directed generation, round-
+            # robin over active missions. Watermark = missions.last_generated_at
+            # (advanced on every attempt) so reloads don't re-fire; skips
+            # quietly when no missions are active. No GH state touched.
+            name="mission",
+            interval=MISSION_INTERVAL,
+            runner=_fire_mission,
+            delay_query=seconds_until_next_mission,
             tick_interval=1800.0,
             initial_delay=initial,
         ),

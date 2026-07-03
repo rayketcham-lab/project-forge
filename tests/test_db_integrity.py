@@ -113,6 +113,7 @@ EXPECTED_TABLES = frozenset(
         "route_decisions",
         "outcome_signals",  # v0.17 Scoreboard
         "calibration_weights",  # v0.17 Scoreboard auto-tune
+        "missions",  # v0.18 Missions (#84) — operator directives
     }
 )
 

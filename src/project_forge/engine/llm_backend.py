@@ -229,10 +229,16 @@ def resolve_cheap_backend() -> LLMBackend | None:
     if haiku_via_api is not None and isinstance(haiku_via_api, AnthropicAPIBackend):
         return haiku_via_api
 
+    # Honour the explicit kill-switch. Without this, FORGE_LLM_BACKEND=
+    # static/none disabled the main generators but the cheap path (scorers,
+    # dedup verification) still shelled out to the claude CLI.
+    forced = os.environ.get("FORGE_LLM_BACKEND", "")
+    if forced in ("static", "none"):
+        return None
+
     # CLI path: no per-call cost on Pro Max. Use the most capable model
     # the user has access to. Default Opus; FORGE_CLI_MODEL overrides
     # ("sonnet" / "haiku" / etc.) for users who want a different tradeoff.
-    forced = os.environ.get("FORGE_LLM_BACKEND", "")
     if forced != "api" and _has_claude_cli():
         cli_model = os.environ.get("FORGE_CLI_MODEL", "opus")
         return ClaudeCodeBackend(model=cli_model)

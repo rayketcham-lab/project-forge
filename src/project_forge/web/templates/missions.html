@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Missions - Project Forge{% endblock %}
+
+{% block content %}
+<div id="missions-root"></div>
+<section class="page-header">
+    <div class="container">
+        <h1>&#129517; Missions</h1>
+        <p class="page-subtitle">
+            Point the think tank at something. A mission is <strong>your</strong>
+            directive &mdash; a problem space that matters to you, plus optional
+            grounding links &mdash; and the engine generates ideas anchored to it:
+            on demand below, and autonomously on the mission cadence.
+        </p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="url-ingest-panel">
+            <h2>New mission</h2>
+            <p class="url-ingest-desc">Describe the target. Frustrations, market gaps, a domain you know cold &mdash; the more specific the brief, the sharper the ideas.</p>
+            <input type="text" id="mission-title" class="search-input url-input-field" maxlength="120"
+                   placeholder="Mission title, e.g. 'Certificate lifecycle pain in mid-size shops'">
+            <textarea id="mission-brief" class="text-input-field" rows="4" maxlength="4000"
+                      placeholder="What matters and why. Example: PKI teams drown in expiring certs across vaults, load balancers and k8s. Find product wedges that a solo engineer could ship."></textarea>
+            <textarea id="mission-urls" class="text-input-field" rows="2"
+                      placeholder="Optional grounding URLs, one per line (max 3) — articles, docs, competitor pages"></textarea>
+            <div class="url-ingest-row" style="margin-top:0.75rem">
+                <select id="mission-category" class="url-category-select">
+                    <option value="">Any category (engine picks)</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat }}">{{ cat }}</option>
+                    {% endfor %}
+                </select>
+                <button id="mission-create-btn" class="btn btn-primary">Create Mission</button>
+            </div>
+            <div id="mission-create-status" class="churn-status"></div>
+        </div>
+
+        {% if missions %}
+        <div class="moneybot-grid" style="margin-top:1.5rem">
+            {% for m in missions %}
+            <div class="moneybot-card mission-card" data-mission-id="{{ m.id }}" data-mission-status="{{ m.status }}">
+                <div class="moneybot-card-body-wrap">
+                    <div class="moneybot-card-head">
+                        <span class="status-pill status-{{ 'approved' if m.status == 'active' else ('archived' if m.status == 'archived' else 'new') }}">{{ m.status }}</span>
+                        <span class="fundability-badge">{{ idea_counts.get(m.id, 0) }} ideas</span>
+                    </div>
+                    <div class="moneybot-card-body">
+                        <div class="moneybot-name">{{ m.title }}</div>
+                        <div class="moneybot-tagline">{{ m.brief[:180] }}{% if m.brief|length > 180 %}&hellip;{% endif %}</div>
+                        {% if m.category %}<code class="cat-tag">{{ m.category.value }}</code>{% endif %}
+                    </div>
+                </div>
+                <div class="moneybot-card-foot">
+                    {% if m.status != 'archived' %}
+                    <button class="btn btn-primary btn-sm" data-action="generate" data-mission-id="{{ m.id }}">Generate Now</button>
+                    {% endif %}
+                    {% if m.status == 'active' %}
+                    <button class="btn btn-outline btn-sm" data-action="paused" data-mission-id="{{ m.id }}">Pause</button>
+                    {% elif m.status == 'paused' %}
+                    <button class="btn btn-outline btn-sm" data-action="active" data-mission-id="{{ m.id }}">Resume</button>
+                    {% endif %}
+                    {% if m.status != 'archived' %}
+                    <button class="btn btn-outline btn-sm" data-action="archived" data-mission-id="{{ m.id }}">Archive</button>
+                    {% else %}
+                    <button class="btn btn-outline btn-sm" data-action="active" data-mission-id="{{ m.id }}">Reactivate</button>
+                    {% endif %}
+                    <a href="/missions?mission={{ m.id }}" class="moneybot-issue">ideas &#8594;</a>
+                </div>
+                <div class="churn-status mission-card-status"></div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No missions yet. This is where <strong>you</strong> aim the engine
+            &mdash; write a brief above and the think tank starts working your
+            problem instead of its own.</p>
+        </div>
+        {% endif %}
+
+        {% if ideas %}
+        <h2 style="margin-top:2rem">
+            {% if selected_mission %}Ideas for this mission{% else %}Mission-generated ideas{% endif %}
+        </h2>
+        <div class="moneybot-grid">
+            {% for idea in ideas %}
+            <div class="moneybot-card" data-idea-id="{{ idea.id }}">
+                <button class="idea-reject-btn" type="button" title="Reject this idea">&times;</button>
+                <div class="moneybot-card-body-wrap">
+                    <div class="moneybot-card-head">
+                        <span class="fundability-badge fundability-{{ ((idea.fundability_score or 0) * 10) | int }}">
+                            &#128176; {{ "%.2f"|format(idea.fundability_score or 0) }}
+                        </span>
+                        <span class="status-pill status-{{ idea.status }}">{{ idea.status }}</span>
+                    </div>
+                    <div class="moneybot-card-body">
+                        <div class="moneybot-name">{{ idea.name }}</div>
+                        <div class="moneybot-tagline">{{ idea.tagline }}</div>
+                    </div>
+                </div>
+                <div class="moneybot-card-foot">
+                    <code class="cat-tag">{{ idea.category.value }}</code>
+                    <a href="/ideas/{{ idea.id }}" class="moneybot-issue">details &#8594;</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+    </div>
+</section>
+
+<script src="/static/missions.js?v=1"></script>
+{% endblock %}

@@ -150,6 +150,89 @@ class Idea(BaseModel):
     # (powers the "vs. X" badge). Both None for non-snipe ideas.
     snipe_score: float | None = None
     target_incumbent: str | None = None
+    # v0.18 Missions (#84) — which operator directive this idea was
+    # generated against. None for everything the engine dreamt up on its
+    # own rotation. Powers the per-mission grids on /missions.
+    mission_id: str | None = None
+
+
+MissionStatus = Literal["active", "paused", "archived"]
+
+
+class _MissionFields(BaseModel):
+    """Validated fields shared by Mission and MissionCreateRequest, so the
+    API boundary and the persisted model can't drift on what a legal
+    directive looks like."""
+
+    title: str
+    brief: str
+    urls: list[str] = Field(default_factory=list)
+
+    @field_validator("title")
+    @classmethod
+    def _title_bounds(cls, v: str) -> str:
+        stripped = (v or "").strip()
+        if not stripped:
+            raise ValueError("title cannot be empty")
+        if len(stripped) > 120:
+            raise ValueError(f"title too long ({len(stripped)} chars; max 120)")
+        return stripped
+
+    @field_validator("brief")
+    @classmethod
+    def _brief_bounds(cls, v: str) -> str:
+        stripped = (v or "").strip()
+        if len(stripped) < 10:
+            raise ValueError("brief must be at least 10 characters — say what actually matters")
+        if len(stripped) > 4000:
+            raise ValueError(f"brief too long ({len(stripped)} chars; max 4000)")
+        return stripped
+
+    @field_validator("urls")
+    @classmethod
+    def _urls_valid(cls, v: list[str]) -> list[str]:
+        if len(v) > 3:
+            raise ValueError(f"at most 3 grounding URLs ({len(v)} given)")
+        for url in v:
+            parsed = urlparse(url)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                raise ValueError(f"Invalid URL: {url!r} — must be http(s)")
+        return v
+
+
+class Mission(_MissionFields):
+    """v0.18 (#84) — an operator directive the think tank generates against.
+
+    Where every other generation path picks its own target (category
+    rotation, incumbent seeds, live signals), a Mission is the human
+    pointing: 'ideas in THIS problem space matter to me'. The brief plus
+    fetched URL excerpts ride the `seed` anchor in `generate_idea_llm`.
+    """
+
+    id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    category: IdeaCategory | None = None
+    status: MissionStatus = "active"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    # Watermark for the mission cadence — advanced on every generation
+    # attempt (saved OR dedup-rejected) so reloads/rejection streaks don't
+    # hammer the backend. NULL = never generated against, fires first.
+    last_generated_at: datetime | None = None
+
+
+class MissionCreateRequest(_MissionFields):
+    """POST /api/missions body. Category arrives as a plain string from the
+    dashboard select; validated against IdeaCategory here so the route 422s
+    instead of 500ing on garbage."""
+
+    category: str | None = None
+
+    @field_validator("category")
+    @classmethod
+    def _category_known(cls, v: str | None) -> str | None:
+        if not v:
+            return None
+        IdeaCategory(v)  # raises ValueError on unknown values
+        return v
 
 
 class Resource(BaseModel):

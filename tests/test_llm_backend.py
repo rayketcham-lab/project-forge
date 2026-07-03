@@ -90,6 +90,18 @@ class TestResolveBackend:
         monkeypatch.setenv("FORGE_LLM_BACKEND", "none")
         assert resolve_backend() is None
 
+    def test_cheap_backend_honours_static_kill_switch(self, monkeypatch):
+        """Regression (found during #84): FORGE_LLM_BACKEND=static/none
+        disabled the main generators but resolve_cheap_backend still shelled
+        out to the claude CLI for scorers + dedup verification."""
+        from project_forge.engine.llm_backend import resolve_cheap_backend
+
+        with patch("shutil.which", return_value="/home/x/bin/claude"):
+            monkeypatch.setenv("FORGE_LLM_BACKEND", "static")
+            assert resolve_cheap_backend() is None
+            monkeypatch.setenv("FORGE_LLM_BACKEND", "none")
+            assert resolve_cheap_backend() is None
+
     def test_force_claude_code_returns_claude_when_available(self, monkeypatch):
         from project_forge.engine.llm_backend import (
             ClaudeCodeBackend,

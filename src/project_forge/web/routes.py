@@ -26,6 +26,8 @@ from project_forge.models import (
     IdeaCategory,
     IdeaDenial,
     IdeaStatus,
+    Mission,
+    MissionCreateRequest,
     Resource,
     SelectionRound,
     TextIngestRequest,
@@ -1617,6 +1619,111 @@ async def add_idea_to_project(
 async def api_search(q: str = Query(min_length=1), limit: int = Query(default=20, ge=1, le=100)):
     ideas = await db.search_ideas(q, limit=limit)
     return {"ideas": [i.model_dump() for i in ideas], "total": len(ideas)}
+
+
+# === MISSIONS (v0.18, #84) ===
+
+
+class MissionStatusRequest(BaseModel):
+    status: Literal["active", "paused", "archived"]
+
+
+@router.get("/missions", response_class=HTMLResponse)
+async def missions_page(request: Request, mission: str | None = None):
+    """Missions — point the think tank at a target that matters to you."""
+    missions = await db.list_missions()
+    counts = await db.count_ideas_by_mission()
+    selected = mission if any(m.id == mission for m in missions) else None
+    ideas = await db.list_mission_ideas(mission_id=selected)
+    return templates.TemplateResponse(
+        request,
+        "missions.html",
+        {
+            "missions": missions,
+            "idea_counts": counts,
+            "ideas": ideas,
+            "selected_mission": selected,
+            "categories": [c.value for c in IdeaCategory],
+            "total": len(missions),
+        },
+    )
+
+
+@router.get("/api/missions")
+async def api_list_missions():
+    missions = await db.list_missions()
+    counts = await db.count_ideas_by_mission()
+    out = []
+    for m in missions:
+        data = m.model_dump(mode="json")
+        data["idea_count"] = counts.get(m.id, 0)
+        out.append(data)
+    return {"missions": out}
+
+
+@router.post("/api/missions")
+async def api_create_mission(request_body: MissionCreateRequest):
+    mission = Mission(
+        title=request_body.title,
+        brief=request_body.brief,
+        urls=request_body.urls,
+        category=IdeaCategory(request_body.category) if request_body.category else None,
+    )
+    await db.save_mission(mission)
+    return mission.model_dump(mode="json")
+
+
+@router.post("/api/missions/{mission_id}/status")
+async def api_mission_status(mission_id: str, request_body: MissionStatusRequest):
+    mission = await db.get_mission(mission_id)
+    if mission is None:
+        raise HTTPException(status_code=404, detail="Unknown mission")
+    await db.update_mission_status(mission_id, request_body.status)
+    return {"id": mission_id, "status": request_body.status}
+
+
+@router.post("/api/missions/{mission_id}/generate")
+async def api_mission_generate(mission_id: str, request: Request):
+    """Generate one idea anchored to the mission's brief + grounding URLs.
+
+    LLM-cost-bearing, so it rides the same rate limiter as the ingest
+    endpoints (fix #76). Resolves the engine through its module so tests
+    can monkeypatch generate_mission_idea.
+    """
+    from project_forge.engine import mission as mission_engine
+
+    mission = await db.get_mission(mission_id)
+    if mission is None:
+        raise HTTPException(status_code=404, detail="Unknown mission")
+    if mission.status == "archived":
+        raise HTTPException(status_code=409, detail="Mission is archived — reactivate it first")
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"mission:{client_ip}")
+
+    result = await mission_engine.generate_mission_idea(db, mission)
+    if result is None:
+        return {"idea": None, "message": "LLM backend returned no idea; try again."}
+    return {
+        "idea": {
+            "id": result.idea.id,
+            "name": result.idea.name,
+            "tagline": result.idea.tagline,
+            "category": result.idea.category.value,
+            "fundability_score": result.idea.fundability_score,
+        },
+        "saved": result.saved,
+        "reason": result.reason,
+        "mission_id": mission_id,
+    }
+
+
+@router.get("/api/missions/{mission_id}/ideas")
+async def api_mission_ideas(mission_id: str, limit: int = Query(default=60, ge=1, le=200)):
+    mission = await db.get_mission(mission_id)
+    if mission is None:
+        raise HTTPException(status_code=404, detail="Unknown mission")
+    ideas = await db.list_mission_ideas(mission_id=mission_id, limit=limit)
+    return {"ideas": [i.model_dump(mode="json") for i in ideas]}
 
 
 # === URL INGESTION & RESOURCE ROUTES ===
