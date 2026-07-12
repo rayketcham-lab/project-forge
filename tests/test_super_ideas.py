@@ -129,6 +129,37 @@ class TestSuperIdeaGenerator:
             assert stored is not None
 
     @pytest.mark.asyncio
+    async def test_generate_excludes_filtered_supers(self, db, monkeypatch):
+        """generate() must not return super ideas the dedup filter refused to store (#85).
+
+        _store_super saves via dedup.filter_and_save, which can reject the
+        idea as a duplicate — a rejected idea must not appear in the return
+        value, otherwise callers see ideas that don't exist in the DB.
+        """
+        from project_forge.engine import dedup
+
+        async def reject_all(idea, database):
+            return idea, False, "duplicate:test"
+
+        monkeypatch.setattr(dedup, "filter_and_save", reject_all)
+        gen = SuperIdeaGenerator(db)
+        supers = await gen.generate(count=5)
+        assert supers == [], "filtered super ideas must not be returned as generated"
+
+    @pytest.mark.asyncio
+    async def test_generate_seeded_returns_none_when_filtered(self, db, monkeypatch):
+        """generate_seeded() must return None when the dedup filter rejects the idea (#85)."""
+        from project_forge.engine import dedup
+
+        async def reject_all(idea, database):
+            return idea, False, "duplicate:test"
+
+        monkeypatch.setattr(dedup, "filter_and_save", reject_all)
+        gen = SuperIdeaGenerator(db)
+        si = await gen.generate_seeded(slot=0)
+        assert si is None, "a super idea the filter refused to store must not be returned"
+
+    @pytest.mark.asyncio
     async def test_super_ideas_are_unique(self, db):
         gen = SuperIdeaGenerator(db)
         supers = await gen.generate(count=5)

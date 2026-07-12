@@ -647,8 +647,13 @@ class SuperIdeaGenerator:
     def __init__(self, db: Database):
         self.db = db
 
-    async def _store_super(self, si: SuperIdea) -> None:
-        """Store a super idea as a regular idea in the DB."""
+    async def _store_super(self, si: SuperIdea) -> bool:
+        """Store a super idea as a regular idea in the DB.
+
+        Returns True only when the idea was actually saved —
+        dedup.filter_and_save may reject it as a duplicate, and callers
+        must not report rejected ideas as generated (#85).
+        """
         idea = Idea(
             id=si.id,
             name=f"[SUPER] {si.name}",
@@ -663,7 +668,8 @@ class SuperIdeaGenerator:
         )
         from project_forge.engine.dedup import filter_and_save
 
-        await filter_and_save(idea, self.db)
+        _, saved, _ = await filter_and_save(idea, self.db)
+        return saved
 
     async def generate(self, count: int = 5) -> list[SuperIdea]:
         """Generate super ideas by clustering and synthesizing all ideas."""
@@ -690,7 +696,8 @@ class SuperIdeaGenerator:
             if si.name in used_names:
                 continue
             used_names.add(si.name)
-            await self._store_super(si)
+            if not await self._store_super(si):
+                continue
             supers.append(si)
             logger.info(
                 "Super idea: %s (impact: %.2f, %d components)",
@@ -827,7 +834,8 @@ class SuperIdeaGenerator:
                 return None
             # Reasoning path uses signature-only dedup — skip the legacy gates
             # below and proceed to store.
-            await self._store_super(si)
+            if not await self._store_super(si):
+                return None
             logger.info(
                 "Seeded super [%s] (reasoning): %s (impact: %.2f, %d components)",
                 label,
@@ -869,7 +877,8 @@ class SuperIdeaGenerator:
             )
             return None
 
-        await self._store_super(si)
+        if not await self._store_super(si):
+            return None
         logger.info(
             "Seeded super [%s]: %s (impact: %.2f, %d components)",
             label,
