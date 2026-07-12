@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
+from project_forge import __version__
 from project_forge.config import settings
 from project_forge.storage.db import Database
 from project_forge.web.auth import BearerTokenMiddleware
@@ -140,7 +141,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Project Forge",
     description="Autonomous IT project think-tank engine",
-    version="0.1.0",
+    version=__version__,
     lifespan=lifespan,
 )
 

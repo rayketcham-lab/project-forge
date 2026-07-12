@@ -8,6 +8,7 @@ Ensures project-forge ships as a precompiled product:
 - Built wheel installs cleanly in a fresh venv
 """
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -32,6 +33,13 @@ class TestPackageBuild:
         assert len(wheels) == 1, f"Expected 1 wheel, found {len(wheels)}: {wheels}"
         assert wheels[0].stat().st_size > 0, "Wheel file is empty"
 
+        # The wheel filename must carry the real package version — proves the
+        # dynamic version resolution in pyproject.toml works end-to-end.
+        from project_forge import __version__
+
+        expected = f"project_forge-{__version__}-py3-none-any.whl"
+        assert wheels[0].name == expected, f"Wheel {wheels[0].name} != expected {expected}"
+
     def test_sdist_builds_successfully(self, tmp_path):
         """python -m build --sdist must produce a .tar.gz file."""
         result = subprocess.run(
@@ -49,17 +57,23 @@ class TestPackageBuild:
 class TestPackageMetadata:
     """Package metadata must be correct and complete."""
 
-    def test_version_in_pyproject(self):
-        """pyproject.toml must declare a version."""
+    def test_version_single_source_of_truth(self):
+        """pyproject.toml must derive its version from project_forge.__version__.
+
+        No hardcoded version literal is allowed in pyproject.toml — the one
+        canonical declaration lives in src/project_forge/__init__.py.
+        """
         import tomllib
 
         with open(PROJECT_ROOT / "pyproject.toml", "rb") as f:
             config = tomllib.load(f)
-        version = config["project"]["version"]
-        assert version, "No version in pyproject.toml"
-        # Must be a valid semver-ish string
-        parts = version.split(".")
-        assert len(parts) >= 2, f"Version '{version}' should have at least major.minor"
+        assert "version" not in config["project"], (
+            "pyproject.toml hardcodes a version — it must use dynamic = ['version'] "
+            "resolved from project_forge.__version__"
+        )
+        assert "version" in config["project"].get("dynamic", []), "version missing from [project] dynamic"
+        attr = config["tool"]["setuptools"]["dynamic"]["version"]["attr"]
+        assert attr == "project_forge.__version__", f"dynamic version reads {attr!r}"
 
     def test_package_name_correct(self):
         import tomllib
@@ -104,6 +118,38 @@ class TestPackageMetadata:
             config = tomllib.load(f)
         license_text = config["project"].get("license", {}).get("text", "")
         assert license_text, "No license in pyproject.toml"
+
+
+class TestVersionConsistency:
+    """Every surface that states a version must agree with __version__.
+
+    Guards issue #82: the package sat at 0.1.0 while the product shipped
+    v0.17 because nothing compared the declared versions to each other.
+    """
+
+    def test_version_is_semver(self):
+        from project_forge import __version__
+
+        assert re.fullmatch(r"\d+\.\d+\.\d+", __version__), f"__version__ {__version__!r} is not X.Y.Z"
+
+    def test_readme_badge_matches_version(self):
+        """The README shields.io badge must show __version__'s major.minor."""
+        from project_forge import __version__
+
+        readme = (PROJECT_ROOT / "README.md").read_text()
+        m = re.search(r"img\.shields\.io/badge/version-(\d+(?:\.\d+)*)-", readme)
+        assert m, "README.md has no version badge"
+        major_minor = ".".join(__version__.split(".")[:2])
+        assert m.group(1) == major_minor, (
+            f"README badge says version-{m.group(1)} but package is {major_minor} — bump the badge"
+        )
+
+    def test_fastapi_app_version_matches(self):
+        """The dashboard's FastAPI metadata must derive from __version__."""
+        from project_forge import __version__
+        from project_forge.web.app import app
+
+        assert app.version == __version__, f"FastAPI app.version {app.version!r} != __version__ {__version__!r}"
 
 
 class TestCLIEntryPoints:

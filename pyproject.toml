@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "project-forge"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Autonomous IT project think-tank engine"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -58,6 +58,9 @@ asyncio_mode = "auto"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "project_forge.__version__"}
 
 [tool.setuptools.package-data]
 project_forge = [
