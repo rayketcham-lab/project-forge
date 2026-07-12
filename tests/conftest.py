@@ -88,6 +88,22 @@ def _isolate_module_caches():
     _NUDGE_CACHE.clear()
 
 
+@pytest.fixture(autouse=True)
+def _disable_semantic_dedup(monkeypatch):
+    """Force the heuristic dedup verdict — never call a live LLM from tests.
+
+    should_accept's borderline band asks the cheap backend whether two ideas
+    are the same concept, so the model's answer (or the backend's mere
+    reachability) would flip dedup assertions nondeterministically and add a
+    network wait per borderline pair (#88). Tests pin the heuristic contract;
+    a test for the tie-breaker itself should re-enable the flag and mock the
+    backend.
+    """
+    from project_forge.engine import dedup
+
+    monkeypatch.setattr(dedup, "SEMANTIC_DEDUP_ENABLED", False)
+
+
 @pytest.fixture(scope="session")
 def event_loop():
     loop = asyncio.new_event_loop()
