@@ -277,13 +277,43 @@ class TestValidateChanges:
 # ---------------------------------------------------------------------------
 
 
+def _fake_run_cmd_factory(calls, branch="self-improve-42", fail_on=None):
+    """Build a _run_cmd stub that records git calls and simulates success.
+
+    fail_on: substring — any command containing it returns rc 1.
+    """
+
+    def fake_run_cmd(cmd, cwd=None):
+        calls.append(cmd)
+        joined = " ".join(cmd)
+        if fail_on and fail_on in joined:
+            return 1, f"simulated failure: {joined}"
+        if cmd[:3] == ["git", "rev-parse", "--abbrev-ref"]:
+            return 0, branch
+        return 0, ""
+
+    return fake_run_cmd
+
+
 class TestCreatePr:
-    """create_improvement_pr creates a branch, commits, and opens a PR."""
+    """create_improvement_pr creates a branch, commits, and opens a PR.
+
+    _run_cmd MUST be mocked here — these tests previously ran real git
+    against the dev checkout and committed unrelated dirty files onto
+    main under the SI message (#87).
+    """
 
     def test_creates_pr_and_returns_url(self):
         from project_forge.cron.self_improve_runner import create_improvement_pr
 
-        with patch("project_forge.cron.self_improve_runner._run_gh") as mock_gh:
+        calls = []
+        with (
+            patch(
+                "project_forge.cron.self_improve_runner._run_cmd",
+                side_effect=_fake_run_cmd_factory(calls),
+            ),
+            patch("project_forge.cron.self_improve_runner._run_gh") as mock_gh,
+        ):
             mock_gh.return_value = "https://github.com/rayketcham-lab/project-forge/pull/7"
             url = create_improvement_pr(
                 issue_number=42,
@@ -297,21 +327,147 @@ class TestCreatePr:
         from project_forge.cron.self_improve_runner import create_improvement_pr
 
         calls = []
-
-        def capture_gh(args):
-            calls.append(args)
-            return "https://github.com/rayketcham-lab/project-forge/pull/7"
-
-        with patch("project_forge.cron.self_improve_runner._run_gh", side_effect=capture_gh):
+        with (
+            patch(
+                "project_forge.cron.self_improve_runner._run_cmd",
+                side_effect=_fake_run_cmd_factory(calls),
+            ),
+            patch(
+                "project_forge.cron.self_improve_runner._run_gh",
+                return_value="https://github.com/rayketcham-lab/project-forge/pull/7",
+            ),
+        ):
             create_improvement_pr(
                 issue_number=42,
                 summary="Add rate limiting",
                 changed_files=["app.py"],
             )
 
-        # At least one call should reference the branch name with issue number
-        all_args = " ".join(str(a) for a in calls)
+        all_args = " ".join(" ".join(c) for c in calls)
         assert "self-improve-42" in all_args
+
+    def test_reuses_stale_branch_with_checkout_dash_capital_b(self):
+        """A leftover branch from a previous cycle must not break branching (#87)."""
+        from project_forge.cron.self_improve_runner import create_improvement_pr
+
+        calls = []
+        with (
+            patch(
+                "project_forge.cron.self_improve_runner._run_cmd",
+                side_effect=_fake_run_cmd_factory(calls),
+            ),
+            patch(
+                "project_forge.cron.self_improve_runner._run_gh",
+                return_value="https://github.com/rayketcham-lab/project-forge/pull/7",
+            ),
+        ):
+            create_improvement_pr(issue_number=42, summary="s", changed_files=["app.py"])
+
+        checkout_calls = [c for c in calls if c[:2] == ["git", "checkout"]]
+        assert ["git", "checkout", "-B", "self-improve-42"] in checkout_calls
+
+    def test_aborts_before_commit_when_branch_creation_fails(self):
+        """A failed checkout must raise — never stage or commit on main (#87)."""
+        from project_forge.cron.self_improve_runner import create_improvement_pr
+
+        calls = []
+        with (
+            patch(
+                "project_forge.cron.self_improve_runner._run_cmd",
+                side_effect=_fake_run_cmd_factory(calls, fail_on="checkout -B"),
+            ),
+            patch("project_forge.cron.self_improve_runner._run_gh"),
+        ):
+            with pytest.raises(RuntimeError):
+                create_improvement_pr(issue_number=42, summary="s", changed_files=["app.py"])
+
+        commit_calls = [c for c in calls if c[:2] == ["git", "commit"]]
+        add_calls = [c for c in calls if c[:2] == ["git", "add"]]
+        assert commit_calls == [], "must not commit after a failed checkout"
+        assert add_calls == [], "must not stage after a failed checkout"
+
+    def test_aborts_when_still_on_main_after_checkout(self):
+        """Belt-and-braces: verify HEAD is the SI branch before committing (#87)."""
+        from project_forge.cron.self_improve_runner import create_improvement_pr
+
+        calls = []
+        with (
+            patch(
+                "project_forge.cron.self_improve_runner._run_cmd",
+                side_effect=_fake_run_cmd_factory(calls, branch="main"),
+            ),
+            patch("project_forge.cron.self_improve_runner._run_gh"),
+        ):
+            with pytest.raises(RuntimeError):
+                create_improvement_pr(issue_number=42, summary="s", changed_files=["app.py"])
+
+        commit_calls = [c for c in calls if c[:2] == ["git", "commit"]]
+        assert commit_calls == [], "must not commit while on main"
+
+
+class TestCreatePrRealRepoIsolation:
+    """Adversarial end-to-end check in a throwaway git repo (#87).
+
+    Seeds an unrelated dirty file, then verifies the SI commit contains
+    ONLY the SI-changed file, main is untouched, and the operator's
+    dirty file stays dirty and uncommitted.
+    """
+
+    @pytest.fixture
+    def tmp_repo(self, tmp_path):
+        import subprocess
+
+        def git(*args, cwd):
+            subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, timeout=30)
+
+        origin = tmp_path / "origin.git"
+        origin.mkdir()
+        git("init", "--bare", cwd=origin)
+
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        git("init", "-b", "main", cwd=repo)
+        git("config", "user.email", "test@test", cwd=repo)
+        git("config", "user.name", "Test", cwd=repo)
+        git("remote", "add", "origin", str(origin), cwd=repo)
+        (repo / "operator_file.txt").write_text("original\n")
+        (repo / "si_target.txt").write_text("original\n")
+        git("add", "-A", cwd=repo)
+        git("commit", "-m", "init", cwd=repo)
+        git("push", "-u", "origin", "main", cwd=repo)
+        return repo
+
+    def test_commit_contains_only_si_files(self, tmp_repo, monkeypatch):
+        import subprocess
+
+        from project_forge.cron import self_improve_runner as sir
+
+        monkeypatch.setattr(sir, "_PROJECT_ROOT", tmp_repo)
+        monkeypatch.setattr(sir, "_run_gh", lambda args: "https://example.com/pull/1")
+
+        # Operator has uncommitted work; SI edits its own target file
+        (tmp_repo / "operator_file.txt").write_text("operator WIP — must not be committed\n")
+        (tmp_repo / "si_target.txt").write_text("si change\n")
+
+        url = sir.create_improvement_pr(issue_number=7, summary="s", changed_files=["si_target.txt"])
+        assert "pull/1" in url
+
+        def git_out(*args):
+            return subprocess.run(
+                ["git", *args], cwd=tmp_repo, check=True, capture_output=True, text=True, timeout=30
+            ).stdout
+
+        # Back on main afterwards, and main gained no commits
+        assert git_out("rev-parse", "--abbrev-ref", "HEAD").strip() == "main"
+        assert git_out("log", "--oneline", "main").count("\n") == 1
+
+        # The SI branch commit contains exactly the SI file
+        committed = git_out("show", "--name-only", "--format=", "self-improve-7").split()
+        assert committed == ["si_target.txt"]
+
+        # Operator's dirty file is still dirty, still uncommitted
+        assert "operator WIP" in (tmp_repo / "operator_file.txt").read_text()
+        assert "operator_file.txt" in git_out("status", "--porcelain")
 
 
 # ---------------------------------------------------------------------------
@@ -366,6 +522,7 @@ class TestRunSelfImproveCycle:
                 return_value={"code_stats": {}, "test_count": 10},
             ),
             patch("project_forge.cron.self_improve_runner._call_claude") as mock_claude,
+            patch("project_forge.cron.self_improve_runner._git_dirty_paths", return_value=set()),
             patch("project_forge.cron.self_improve_runner.apply_changes"),
             patch(
                 "project_forge.cron.self_improve_runner.validate_changes",
@@ -400,6 +557,7 @@ class TestRunSelfImproveCycle:
                 return_value={"code_stats": {}, "test_count": 10},
             ),
             patch("project_forge.cron.self_improve_runner._call_claude") as mock_claude,
+            patch("project_forge.cron.self_improve_runner._git_dirty_paths", return_value=set()),
             patch("project_forge.cron.self_improve_runner.apply_changes"),
             patch(
                 "project_forge.cron.self_improve_runner.validate_changes",
@@ -432,6 +590,7 @@ class TestRunSelfImproveCycle:
                 return_value={"code_stats": {}, "test_count": 10},
             ),
             patch("project_forge.cron.self_improve_runner._call_claude") as mock_claude,
+            patch("project_forge.cron.self_improve_runner._git_dirty_paths", return_value=set()),
             patch("project_forge.cron.self_improve_runner.apply_changes"),
             patch(
                 "project_forge.cron.self_improve_runner.validate_changes",
@@ -447,3 +606,76 @@ class TestRunSelfImproveCycle:
             await run_self_improve_cycle()
 
         mock_revert.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_skips_issue_when_target_files_already_dirty(self):
+        """The cycle must not touch files the operator has uncommitted work in (#87)."""
+        from project_forge.cron.self_improve_runner import run_self_improve_cycle
+
+        with (
+            patch(
+                "project_forge.cron.self_improve_runner.fetch_ci_queue_issues",
+                return_value=[FAKE_ISSUE],
+            ),
+            patch(
+                "project_forge.cron.self_improve_runner.gather_self_context",
+                return_value={"code_stats": {}, "test_count": 10},
+            ),
+            patch("project_forge.cron.self_improve_runner._call_claude") as mock_claude,
+            patch(
+                "project_forge.cron.self_improve_runner._git_dirty_paths",
+                return_value={"src/project_forge/web/app.py"},
+            ),
+            patch("project_forge.cron.self_improve_runner.apply_changes") as mock_apply,
+            patch("project_forge.cron.self_improve_runner.create_improvement_pr") as mock_pr,
+            patch("project_forge.cron.self_improve_runner.close_issue") as mock_close,
+            patch("project_forge.cron.self_improve_runner.settings") as mock_settings,
+        ):
+            mock_settings.anthropic_api_key = "fake-key"
+            mock_settings.anthropic_model = "claude-sonnet-4-20250514"
+            mock_claude.return_value = json.dumps(FAKE_CLAUDE_RESPONSE)
+            result = await run_self_improve_cycle()
+
+        mock_apply.assert_not_called()
+        mock_pr.assert_not_called()
+        mock_close.assert_not_called()
+        assert result["results"][0]["status"] == "dirty_tree"
+
+    @pytest.mark.asyncio
+    async def test_proceeds_when_dirty_files_do_not_overlap_targets(self):
+        """Unrelated dirty files must not block the cycle — only overlapping ones (#87)."""
+        from project_forge.cron.self_improve_runner import run_self_improve_cycle
+
+        with (
+            patch(
+                "project_forge.cron.self_improve_runner.fetch_ci_queue_issues",
+                return_value=[FAKE_ISSUE],
+            ),
+            patch(
+                "project_forge.cron.self_improve_runner.gather_self_context",
+                return_value={"code_stats": {}, "test_count": 10},
+            ),
+            patch("project_forge.cron.self_improve_runner._call_claude") as mock_claude,
+            patch(
+                "project_forge.cron.self_improve_runner._git_dirty_paths",
+                return_value={"docs/unrelated.md"},
+            ),
+            patch("project_forge.cron.self_improve_runner.apply_changes") as mock_apply,
+            patch(
+                "project_forge.cron.self_improve_runner.validate_changes",
+                return_value={"passed": True, "detail": ""},
+            ),
+            patch(
+                "project_forge.cron.self_improve_runner.create_improvement_pr",
+                return_value="https://example.com/pull/9",
+            ),
+            patch("project_forge.cron.self_improve_runner.close_issue"),
+            patch("project_forge.cron.self_improve_runner.settings") as mock_settings,
+        ):
+            mock_settings.anthropic_api_key = "fake-key"
+            mock_settings.anthropic_model = "claude-sonnet-4-20250514"
+            mock_claude.return_value = json.dumps(FAKE_CLAUDE_RESPONSE)
+            result = await run_self_improve_cycle()
+
+        mock_apply.assert_called_once()
+        assert result["results"][0]["status"] == "success"
