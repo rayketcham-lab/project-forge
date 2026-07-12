@@ -22,6 +22,7 @@ def _seed_rng():
     """
     random.seed(20260712)
 
+
 PQC_SECURITY_CATEGORIES = {
     IdeaCategory.PQC_CRYPTOGRAPHY,
     IdeaCategory.NIST_STANDARDS,
