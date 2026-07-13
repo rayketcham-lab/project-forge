@@ -158,6 +158,61 @@ class TestSISpecificReview:
         assert result.passed is True
 
 
+class TestPersonaSuffixGate:
+    """Template-junk taglines like 'X: test engineering' must hard-fail (#90).
+
+    The legacy template generator appended the persona to the tagline; three
+    such items survived into the Think Tank until the 2026-07-13 curation.
+    """
+
+    def test_persona_suffix_tagline_hard_fails(self):
+        from project_forge.engine.quality_review import review_idea
+
+        idea = _idea(
+            category=IdeaCategory.SELF_IMPROVEMENT,
+            tagline="self-hosted runner health monitoring: test engineering",
+            description=(
+                "Monitor the self-hosted runner in src/project_forge/cron/ so a "
+                "stuck runner is detected before it stalls the whole CI pipeline."
+            ),
+            mvp_scope="Add a health probe to src/project_forge/cron/runner.py with tests.",
+        )
+        result = review_idea(idea)
+        assert result.passed is False
+        assert any("persona" in r.lower() for r in result.reasons)
+
+    def test_developer_experience_suffix_hard_fails(self):
+        from project_forge.engine.quality_review import review_idea
+
+        idea = _idea(
+            category=IdeaCategory.SELF_IMPROVEMENT,
+            tagline="automated test coverage enforcement for untested modules: developer experience",
+            description=(
+                "Enforce coverage on the modules in src/project_forge/engine/ that "
+                "currently have no dedicated test file, failing CI when they regress."
+            ),
+            mvp_scope="Add coverage config to pyproject.toml and tests for engine modules.",
+        )
+        result = review_idea(idea)
+        assert result.passed is False
+
+    def test_ordinary_colon_tagline_not_flagged(self):
+        from project_forge.engine.quality_review import review_idea
+
+        idea = _idea(
+            category=IdeaCategory.SELF_IMPROVEMENT,
+            tagline="Scheduler boot guard: never crash import on a bad env var",
+            description=(
+                "FORGE_SCHED_INITIAL_DELAY_SEC is parsed at import time in "
+                "src/project_forge/web/lifespan_scheduler.py and a bad value "
+                "crashes uvicorn. Wrap the parse with a safe fallback."
+            ),
+            mvp_scope="Guard the env parse in lifespan_scheduler.py and add tests.",
+        )
+        result = review_idea(idea)
+        assert result.passed is True
+
+
 # ===================================================================
 # 4. Score reflects quality
 # ===================================================================

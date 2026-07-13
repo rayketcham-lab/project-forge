@@ -7,7 +7,12 @@ import sys
 
 from project_forge.config import settings
 from project_forge.engine.dedup import filter_and_save
-from project_forge.engine.introspect import build_introspection_prompt, gather_self_context
+from project_forge.engine.introspect import (
+    build_introspection_prompt,
+    gather_generation_signals,
+    gather_self_context,
+    validate_generation_patch,
+)
 from project_forge.engine.quality_review import review_idea
 from project_forge.models import IdeaCategory
 from project_forge.storage.db import Database
@@ -17,6 +22,39 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def _recent_commit_subjects(limit: int = 50) -> list[str]:
+    """Recent commit subjects for the Think Tank reconciler; [] on any failure."""
+    import subprocess
+    from pathlib import Path
+
+    try:
+        out = subprocess.run(
+            ["git", "log", "--format=%s", f"-{limit}"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            cwd=str(Path(__file__).parents[3]),
+        )
+    except Exception:
+        return []
+    if out.returncode != 0:
+        return []
+    return [line for line in out.stdout.splitlines() if line.strip()]
+
+
+def _pick_introspect_mode(recent_si: list) -> str:
+    """Alternate code-fix and generation modes across fires (#90).
+
+    The generation-mode prompt carries engine telemetry (saturation,
+    filter rate, novelty, coverage gaps) that the code-fix prompt lacks;
+    flipping on the latest idea's stamp gives strict alternation with no
+    extra state.
+    """
+    if recent_si and recent_si[0].generation_mode == "introspect-code-fix":
+        return "generation"
+    return "code-fix"
 
 
 async def run_introspect_cycle(db: Database, generator=None) -> "Idea":  # noqa: F821
@@ -47,13 +85,25 @@ async def run_introspect_cycle(db: Database, generator=None) -> "Idea":  # noqa:
     recent_si = await db.list_ideas(category=IdeaCategory.SELF_IMPROVEMENT, limit=10)
     recent_names = [i.name for i in recent_si]
 
+    mode = _pick_introspect_mode(recent_si)
     context = gather_self_context()
-    prompt = build_introspection_prompt(context, recent_names)
+    generation_signals = await gather_generation_signals(db) if mode == "generation" else None
+    prompt = build_introspection_prompt(
+        context,
+        recent_names,
+        mode=mode,
+        generation_signals=generation_signals,
+    )
 
     idea = await generator.generate(
         category=IdeaCategory.SELF_IMPROVEMENT,
         prompt_override=prompt,
     )
+    idea.generation_mode = f"introspect-{mode}"
+
+    if mode == "generation" and not validate_generation_patch(idea):
+        logger.warning("Rejected generation-mode SI idea '%s': failed patch validation", idea.name)
+        return None
 
     # Quality review: reject low-quality or new-project proposals
     result = review_idea(idea)

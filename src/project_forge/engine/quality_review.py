@@ -54,6 +54,15 @@ _NEW_PROJECT_SIGNALS = [
 _MIN_DESCRIPTION_LEN = 50
 _MIN_MVP_SCOPE_LEN = 20
 
+# The legacy template generator appended the persona to the tagline
+# ("runner health monitoring: test engineering") — a pure junk shape that
+# survived into the Think Tank until the 2026-07-13 curation (#90).
+_PERSONA_SUFFIX_RE = re.compile(
+    r":\s*(?:(?:test|security|performance|reliability|platform|infrastructure|site\s+reliability)\s+engineering"
+    r"|developer\s+experience|devsecops)\s*$",
+    re.IGNORECASE,
+)
+
 
 @dataclass
 class ReviewResult:
@@ -142,7 +151,12 @@ def review_idea(idea) -> ReviewResult:
     else:
         scores.append(1.0 - (bw_count * 0.3))
 
-    # --- Check 4: SI-specific: new-project signals ---
+    # --- Check 4: template-junk tagline (persona suffix) ---
+    if _PERSONA_SUFFIX_RE.search(idea.tagline or ""):
+        reasons.append("Template-junk tagline: persona suffix")
+        scores.append(0.0)
+
+    # --- Check 5: SI-specific: new-project signals ---
     if idea.category == IdeaCategory.SELF_IMPROVEMENT:
         if _has_new_project_signals(full_text):
             reasons.append("Self-improvement idea contains new-project language")

@@ -1,5 +1,6 @@
 """Tests for the introspection cron runner and schedule messaging."""
 
+from contextlib import ExitStack
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -139,6 +140,166 @@ class TestIntrospectRunner:
         mock_prompt.assert_called_once()
         recent_names = mock_prompt.call_args[0][1]
         assert "Old improvement" in recent_names
+
+
+class TestIntrospectModeRotation:
+    """The introspect cycle alternates code-fix and generation modes (#90).
+
+    The telemetry-grounded generation-mode prompt existed but was dead code —
+    no caller ever passed mode="generation", so saturation/filter-rate/novelty
+    signals never reached the LLM.
+    """
+
+    def _si_idea(self, name: str, generation_mode: str | None = None) -> Idea:
+        return Idea(
+            name=name,
+            tagline="a concrete improvement",
+            description="A specific fix in src/project_forge/engine/ with tests to match.",
+            category=IdeaCategory.SELF_IMPROVEMENT,
+            market_analysis="Target metric: filter rate. Improves generation quality.",
+            feasibility_score=0.8,
+            mvp_scope="Patch src/project_forge/engine/llm_generator.py and add tests.",
+            tech_stack=["python"],
+            generation_mode=generation_mode,
+        )
+
+    def _patches(self, mode_calls: dict):
+        """Common patch set capturing prompt kwargs and neutralizing I/O."""
+
+        async def _mock_filter_and_save(idea, db):
+            await db.save_idea(idea)
+            return idea, True, None
+
+        def capture_prompt(context, recent_names, **kwargs):
+            mode_calls.update(kwargs)
+            return "fake prompt"
+
+        passing_review = MagicMock()
+        passing_review.passed = True
+        passing_review.reasons = []
+
+        return (
+            patch(
+                "project_forge.cron.introspect_runner.gather_self_context",
+                return_value={
+                    "open_issues": [],
+                    "recent_commits": [],
+                    "test_count": 1,
+                    "lint_status": "",
+                    "code_stats": {},
+                },
+            ),
+            patch(
+                "project_forge.cron.introspect_runner.build_introspection_prompt",
+                side_effect=capture_prompt,
+            ),
+            patch(
+                "project_forge.cron.introspect_runner.filter_and_save",
+                side_effect=_mock_filter_and_save,
+            ),
+            patch(
+                "project_forge.cron.introspect_runner.review_idea",
+                return_value=passing_review,
+            ),
+        )
+
+    @pytest.mark.asyncio
+    async def test_pick_mode_pure_function(self):
+        from project_forge.cron.introspect_runner import _pick_introspect_mode
+
+        assert _pick_introspect_mode([]) == "code-fix"
+        assert _pick_introspect_mode([self._si_idea("a", None)]) == "code-fix"
+        assert _pick_introspect_mode([self._si_idea("a", "introspect-code-fix")]) == "generation"
+        assert _pick_introspect_mode([self._si_idea("a", "introspect-generation")]) == "code-fix"
+
+    @pytest.mark.asyncio
+    async def test_defaults_to_code_fix_with_no_history(self):
+        from project_forge.cron.introspect_runner import run_introspect_cycle
+        from project_forge.storage.db import Database
+
+        mock_db = AsyncMock(spec=Database)
+        mock_db.list_ideas = AsyncMock(return_value=[])
+        mock_db.save_idea = AsyncMock()
+        mock_generator = MagicMock()
+        mock_generator.generate = AsyncMock(return_value=self._si_idea("New fix"))
+
+        captured: dict = {}
+        with ExitStack() as stack:
+            for p in self._patches(captured):
+                stack.enter_context(p)
+            mock_signals = stack.enter_context(patch("project_forge.cron.introspect_runner.gather_generation_signals"))
+            idea = await run_introspect_cycle(mock_db, mock_generator)
+
+        assert captured.get("mode", "code-fix") == "code-fix"
+        mock_signals.assert_not_called()
+        assert idea.generation_mode == "introspect-code-fix"
+
+    @pytest.mark.asyncio
+    async def test_alternates_to_generation_after_code_fix(self):
+        from project_forge.cron.introspect_runner import run_introspect_cycle
+        from project_forge.storage.db import Database
+
+        mock_db = AsyncMock(spec=Database)
+        mock_db.list_ideas = AsyncMock(return_value=[self._si_idea("Prev", "introspect-code-fix")])
+        mock_db.save_idea = AsyncMock()
+        mock_generator = MagicMock()
+        mock_generator.generate = AsyncMock(return_value=self._si_idea("Grounded fix"))
+
+        captured: dict = {}
+        sentinel_signals = {"filter_rate_by_category": {"security-tool": 0.9}}
+        with ExitStack() as stack:
+            for p in self._patches(captured):
+                stack.enter_context(p)
+            mock_signals = stack.enter_context(
+                patch(
+                    "project_forge.cron.introspect_runner.gather_generation_signals",
+                    new=AsyncMock(return_value=sentinel_signals),
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "project_forge.cron.introspect_runner.validate_generation_patch",
+                    return_value=True,
+                )
+            )
+            idea = await run_introspect_cycle(mock_db, mock_generator)
+
+        mock_signals.assert_awaited_once()
+        assert captured["mode"] == "generation"
+        assert captured["generation_signals"] == sentinel_signals
+        assert idea.generation_mode == "introspect-generation"
+
+    @pytest.mark.asyncio
+    async def test_generation_idea_failing_patch_validation_is_dropped(self):
+        from project_forge.cron.introspect_runner import run_introspect_cycle
+        from project_forge.storage.db import Database
+
+        mock_db = AsyncMock(spec=Database)
+        mock_db.list_ideas = AsyncMock(return_value=[self._si_idea("Prev", "introspect-code-fix")])
+        mock_db.save_idea = AsyncMock()
+        mock_generator = MagicMock()
+        mock_generator.generate = AsyncMock(return_value=self._si_idea("Vague patch"))
+
+        captured: dict = {}
+        with ExitStack() as stack:
+            for p in self._patches(captured):
+                stack.enter_context(p)
+            stack.enter_context(
+                patch(
+                    "project_forge.cron.introspect_runner.gather_generation_signals",
+                    new=AsyncMock(return_value={}),
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "project_forge.cron.introspect_runner.validate_generation_patch",
+                    return_value=False,
+                )
+            )
+            idea = await run_introspect_cycle(mock_db, mock_generator)
+
+        assert idea is None
+        mock_db.save_idea.assert_not_called()
 
 
 # --- Empty state message tests ---
