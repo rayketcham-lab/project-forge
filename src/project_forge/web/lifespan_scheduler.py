@@ -312,7 +312,18 @@ async def _fire_introspect(db: Database) -> None:
     Replicates the cron `_run()` entrypoint without its `sys.exit(1)` so
     a failure doesn't crash uvicorn.
     """
-    from project_forge.cron.introspect_runner import run_introspect_cycle
+    from project_forge.cron.introspect_runner import (
+        _recent_commit_subjects,
+        run_introspect_cycle,
+    )
+    from project_forge.engine.thinktank_reconcile import reconcile_thinktank
+
+    # Self-clean before generating: mark suggestions whose work already
+    # shipped so they leave the board and the avoid-duplicates list (#91).
+    subjects = await asyncio.to_thread(_recent_commit_subjects)
+    report = await reconcile_thinktank(db, subjects)
+    if report["implemented"]:
+        logger.info("Think Tank reconciler marked %d items implemented", len(report["implemented"]))
 
     generator = _resolve_generator()
     if generator is None:
