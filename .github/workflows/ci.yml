@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# Least privilege: gh CLI steps use the runner host's ambient auth (no
+# GH_TOKEN env) and tolerate failure, so the workflow token needs only read.
+permissions:
+  contents: read
+
 env:
   # Each job detects Python locally to handle multi-runner setups
   FIND_PY: |
