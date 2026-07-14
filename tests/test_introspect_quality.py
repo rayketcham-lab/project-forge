@@ -75,6 +75,63 @@ class TestIntrospectionPromptQuality:
         assert "routes.py" in prompt or "file_tree" in prompt.lower()
 
 
+class TestEvidenceGroundedPrompt:
+    """The prompt must demand measurable targets and carry hard evidence (#92)."""
+
+    _CTX = {
+        "open_issues": [],
+        "recent_commits": [],
+        "test_count": 10,
+        "lint_status": "clean",
+        "code_stats": {},
+    }
+
+    def test_prompt_requires_target_metric(self):
+        from project_forge.engine.introspect import build_introspection_prompt
+
+        prompt = build_introspection_prompt(dict(self._CTX), [])
+        assert "Target metric" in prompt
+
+    def test_prompt_includes_untested_modules_section(self):
+        from project_forge.engine.introspect import build_introspection_prompt
+
+        context = dict(self._CTX)
+        context["untested_modules"] = ["src/project_forge/engine/premortem.py"]
+        prompt = build_introspection_prompt(context, [])
+        assert "Untested" in prompt
+        assert "premortem.py" in prompt
+
+    def test_gather_context_reports_untested_modules(self):
+        from project_forge.engine.introspect import gather_self_context
+
+        context = gather_self_context()
+        assert "untested_modules" in context
+        assert isinstance(context["untested_modules"], list)
+
+    def test_generation_prompt_shows_db_query_health(self):
+        from project_forge.engine.introspect import build_introspection_prompt
+
+        signals = {
+            "filter_rate_by_category": {},
+            "saturation_per_concept": [],
+            "novelty_trend": [],
+            "diversity_lever_usage": {},
+            "coverage_gaps": [],
+            "db_query_stats": {"total_queries": 500, "avg_ms": 1.2, "max_ms": 250.0, "slow_count": 3},
+        }
+        prompt = build_introspection_prompt(dict(self._CTX), [], mode="generation", generation_signals=signals)
+        assert "query" in prompt.lower()
+        assert "250.0" in prompt
+
+    @pytest.mark.asyncio
+    async def test_gather_generation_signals_includes_query_stats(self, db):
+        from project_forge.engine.introspect import gather_generation_signals
+
+        signals = await gather_generation_signals(db)
+        assert "db_query_stats" in signals
+        assert "total_queries" in signals["db_query_stats"]
+
+
 # ===================================================================
 # 2. SI idea validation: reject new-project proposals
 # ===================================================================

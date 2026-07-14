@@ -158,6 +158,65 @@ class TestSISpecificReview:
         assert result.passed is True
 
 
+class TestRealPathScopeGate:
+    """SI ideas must reference at least one file that actually exists in this repo (#92).
+
+    Referencing a real path is the mechanical definition of on-mission —
+    an idea about anything other than this codebase cannot name one.
+    """
+
+    def test_si_idea_with_no_repo_path_fails(self):
+        from project_forge.engine.quality_review import review_idea
+
+        idea = _idea(
+            category=IdeaCategory.SELF_IMPROVEMENT,
+            description=(
+                "Improve the overall architecture to be more robust, maintainable "
+                "and observable over time so contributors can move faster."
+            ),
+            mvp_scope="Refactor the main components carefully and add safeguards.",
+        )
+        result = review_idea(idea)
+        assert result.passed is False
+        assert any("repo file" in r.lower() for r in result.reasons)
+
+    def test_si_idea_with_fake_path_fails(self):
+        from project_forge.engine.quality_review import review_idea
+
+        idea = _idea(
+            category=IdeaCategory.SELF_IMPROVEMENT,
+            description=(
+                "The flux engine in src/project_forge/engine/quantum_flux.py mishandles "
+                "retries and should back off exponentially on repeated failures."
+            ),
+            mvp_scope="Patch src/project_forge/engine/quantum_flux.py and its tests.",
+        )
+        result = review_idea(idea)
+        assert result.passed is False
+        assert any("repo file" in r.lower() for r in result.reasons)
+
+    def test_si_idea_with_real_path_passes(self):
+        from project_forge.engine.quality_review import review_idea
+
+        idea = _idea(
+            category=IdeaCategory.SELF_IMPROVEMENT,
+            description=(
+                "The dedup gate in src/project_forge/engine/dedup.py recomputes token "
+                "sets for every candidate pair; cache them per idea to cut latency."
+            ),
+            mvp_scope="Patch src/project_forge/engine/dedup.py and extend tests/test_dedup_system.py.",
+        )
+        result = review_idea(idea)
+        assert result.passed is True
+
+    def test_non_si_idea_needs_no_path(self):
+        from project_forge.engine.quality_review import review_idea
+
+        idea = _idea(category=IdeaCategory.SECURITY_TOOL)
+        result = review_idea(idea)
+        assert not any("repo file" in r.lower() for r in result.reasons)
+
+
 class TestPersonaSuffixGate:
     """Template-junk taglines like 'X: test engineering' must hard-fail (#90).
 

@@ -12,6 +12,7 @@ For self-improvement ideas: must reference project-forge internals, not new proj
 import logging
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from project_forge.models import IdeaCategory
 
@@ -53,6 +54,22 @@ _NEW_PROJECT_SIGNALS = [
 
 _MIN_DESCRIPTION_LEN = 50
 _MIN_MVP_SCOPE_LEN = 20
+
+# Mission lock (#92): a self-improvement idea must reference at least one
+# file that actually exists in this repo. Referencing a real path is the
+# mechanical definition of on-mission — an idea about anything else can't
+# name one, and an LLM hallucinating plausible paths fails the existence
+# check.
+_REPO_ROOT = Path(__file__).parents[3]
+_REPO_PATH_RE = re.compile(r"\b(?:src|tests)/[\w./-]+")
+
+
+def _references_real_path(text: str) -> bool:
+    for match in _REPO_PATH_RE.findall(text):
+        if (_REPO_ROOT / match.rstrip(".,;:")).exists():
+            return True
+    return False
+
 
 # The legacy template generator appended the persona to the tagline
 # ("runner health monitoring: test engineering") — a pure junk shape that
@@ -156,13 +173,16 @@ def review_idea(idea) -> ReviewResult:
         reasons.append("Template-junk tagline: persona suffix")
         scores.append(0.0)
 
-    # --- Check 5: SI-specific: new-project signals ---
+    # --- Check 5: SI-specific: new-project signals + real-path scope lock ---
     if idea.category == IdeaCategory.SELF_IMPROVEMENT:
         if _has_new_project_signals(full_text):
             reasons.append("Self-improvement idea contains new-project language")
             scores.append(0.0)
         else:
             scores.append(0.8)
+        if not _references_real_path(full_text):
+            reasons.append("No existing repo file referenced — off-mission for self-improvement (#92)")
+            scores.append(0.0)
 
     # --- Compute final score ---
     final_score = sum(scores) / len(scores) if scores else 0.0

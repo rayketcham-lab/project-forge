@@ -125,6 +125,15 @@ def gather_self_context() -> dict:
             str(p.relative_to(_PROJECT_ROOT)) for p in src_dir.rglob("*.py") if "__pycache__" not in str(p)
         )
 
+    # --- Untested modules (evidence pack, #92) ---
+    untested_modules: list[str] = []
+    try:
+        from project_forge.engine.static_introspect import find_untested_modules
+
+        untested_modules = [f["path"] for f in find_untested_modules(_PROJECT_ROOT)][:10]
+    except Exception as exc:
+        logger.warning("Could not scan untested modules: %s", exc)
+
     return {
         "open_issues": open_issues,
         "recent_commits": recent_commits,
@@ -132,6 +141,7 @@ def gather_self_context() -> dict:
         "lint_status": lint_status,
         "code_stats": code_stats,
         "file_tree": file_tree,
+        "untested_modules": untested_modules,
     }
 
 
@@ -147,6 +157,7 @@ CRITICAL RULES:
 - Your description MUST reference specific files in src/project_forge/ that need changing
 - Your mvp_scope MUST name the exact files to modify or create within this repo
 - Your affected_files MUST list real paths that exist (or will be created) in this project
+- Your market_analysis MUST include a line "Target metric: <what measurably improves and how it is observed>"
 
 ## Project Health Snapshot
 
@@ -161,6 +172,9 @@ CRITICAL RULES:
 
 ### Test Suite
 - Test files: {test_count}
+
+### Untested Modules (no matching test file — strong candidates)
+{untested_section}
 
 ### Lint Status
 {lint_status}
@@ -183,7 +197,7 @@ Respond with ONLY valid JSON in this exact format:
     "tagline": "One-sentence description (under 100 chars)",
     "description": "What the problem is, which files are affected, what the fix is",
     "category": "self-improvement",
-    "market_analysis": "Why this matters for Project Forge reliability or usability",
+    "market_analysis": "Why this matters. Target metric: <the number that improves>",
     "feasibility_score": 0.85,
     "mvp_scope": "Exact files to change: src/project_forge/... and tests/...",
     "tech_stack": ["python", "pytest"],
@@ -209,6 +223,7 @@ async def gather_generation_signals(db: Database) -> dict:
         "novelty_trend": await telemetry.novelty_trend(db, days=14),
         "diversity_lever_usage": await telemetry.diversity_lever_usage(db, days=7),
         "coverage_gaps": await telemetry.coverage_gaps(db, threshold=20),
+        "db_query_stats": db.get_query_stats(),
     }
 
 
@@ -251,6 +266,15 @@ def _format_generation_signals(signals: dict) -> str:
         for cat in gaps:
             cat_val = cat.value if hasattr(cat, "value") else str(cat)
             lines.append(f"- {cat_val}")
+        lines.append("")
+
+    qstats = signals.get("db_query_stats", {})
+    if qstats:
+        lines.append("### DB query health (this process)")
+        lines.append(
+            f"- queries={qstats.get('total_queries', 0)}  avg_ms={qstats.get('avg_ms', 0.0)}  "
+            f"max_ms={qstats.get('max_ms', 0.0)}  slow_count={qstats.get('slow_count', 0)}"
+        )
         lines.append("")
 
     return "\n".join(lines) if lines else "(no signals yet)"
@@ -372,11 +396,16 @@ def build_introspection_prompt(
     file_tree = context.get("file_tree", [])
     file_tree_section = "\n".join(f"- {f}" for f in file_tree) if file_tree else "(not available)"
 
+    # Untested modules section (evidence pack, #92)
+    untested = context.get("untested_modules", [])
+    untested_section = "\n".join(f"- {m}" for m in untested) if untested else "(all modules have test files)"
+
     return _INTROSPECTION_PROMPT_TEMPLATE.format(
         issue_count=len(issues),
         issues_section=issues_lines,
         commits_section=commits_section,
         test_count=context.get("test_count", 0),
+        untested_section=untested_section,
         lint_status=context.get("lint_status", "unknown"),
         code_stats_section=code_stats_section,
         recent_improvements_section=recent_section,
@@ -424,6 +453,15 @@ def validate_self_improvement(idea) -> bool:
 
 
 _TARGET_METRIC_RE = re.compile(r"target\s*metric\s*:", re.IGNORECASE)
+
+
+def has_target_metric(idea: Idea) -> bool:
+    """True when the idea declares a 'Target metric:' line (#92).
+
+    Every LLM-generated self-improvement must say what measurably improves —
+    an improvement you can't observe isn't one.
+    """
+    return bool(_TARGET_METRIC_RE.search(idea.market_analysis or ""))
 
 
 def validate_generation_patch(idea: Idea) -> bool:

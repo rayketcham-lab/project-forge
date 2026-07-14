@@ -11,6 +11,7 @@ from project_forge.engine.introspect import (
     build_introspection_prompt,
     gather_generation_signals,
     gather_self_context,
+    has_target_metric,
     validate_generation_patch,
 )
 from project_forge.engine.quality_review import review_idea
@@ -103,6 +104,9 @@ async def run_introspect_cycle(db: Database, generator=None) -> "Idea":  # noqa:
 
     if mode == "generation" and not validate_generation_patch(idea):
         logger.warning("Rejected generation-mode SI idea '%s': failed patch validation", idea.name)
+        return None
+    if mode == "code-fix" and not has_target_metric(idea):
+        logger.warning("Rejected SI idea '%s': missing 'Target metric:' declaration (#92)", idea.name)
         return None
 
     # Quality review: reject low-quality or new-project proposals

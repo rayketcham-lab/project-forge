@@ -46,7 +46,7 @@ class TestIntrospectRunner:
                 "Add structlog with correlation IDs for better observability and debugging."
             ),
             category=IdeaCategory.SELF_IMPROVEMENT,
-            market_analysis="Improves debugging and observability of the forge engine.",
+            market_analysis="Improves debugging of the forge engine. Target metric: unexplained errors per week.",
             feasibility_score=0.85,
             mvp_scope="Add structlog to src/project_forge/engine/ and tests/test_logging.py.",
             tech_stack=["python", "structlog"],
