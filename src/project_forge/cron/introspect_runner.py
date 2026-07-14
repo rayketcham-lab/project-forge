@@ -58,6 +58,50 @@ def _pick_introspect_mode(recent_si: list) -> str:
     return "code-fix"
 
 
+# Tournament lenses (#93): each fire hunts through three distinct angles so
+# candidates compete on breadth, not sampling noise from one prompt.
+_TOURNAMENT_SIZE = 3
+_LENSES = (
+    "reliability and correctness of the engine, storage, and web layers",
+    "autonomy: learning loops, self-curation, and closing feedback signals",
+    "security hardening and performance of hot paths",
+)
+
+
+async def _generate_candidates(generator, prompt: str, mode: str) -> list:
+    """Generate up to _TOURNAMENT_SIZE candidates, one lens each (code-fix mode)."""
+    candidates = []
+    for i in range(_TOURNAMENT_SIZE):
+        candidate_prompt = prompt
+        if mode == "code-fix":
+            lens = _LENSES[i % len(_LENSES)]
+            candidate_prompt = f"{prompt}\n\nFor THIS proposal, hunt specifically through the lens of: {lens}."
+        try:
+            idea = await generator.generate(
+                category=IdeaCategory.SELF_IMPROVEMENT,
+                prompt_override=candidate_prompt,
+            )
+        except Exception as exc:
+            logger.warning("Tournament candidate %d failed to generate: %s", i + 1, exc)
+            continue
+        idea.generation_mode = f"introspect-{mode}"
+        candidates.append(idea)
+    return candidates
+
+
+def _passes_mode_gate(idea, mode: str) -> bool:
+    """Mode-specific validity: generation patches and metric declarations (#92)."""
+    if mode == "generation":
+        if not validate_generation_patch(idea):
+            logger.warning("Rejected generation-mode SI idea '%s': failed patch validation", idea.name)
+            return False
+        return True
+    if not has_target_metric(idea):
+        logger.warning("Rejected SI idea '%s': missing 'Target metric:' declaration (#92)", idea.name)
+        return False
+    return True
+
+
 async def run_introspect_cycle(db: Database, generator=None) -> "Idea":  # noqa: F821
     """Run one introspection cycle.
 
@@ -96,31 +140,27 @@ async def run_introspect_cycle(db: Database, generator=None) -> "Idea":  # noqa:
         generation_signals=generation_signals,
     )
 
-    idea = await generator.generate(
-        category=IdeaCategory.SELF_IMPROVEMENT,
-        prompt_override=prompt,
-    )
-    idea.generation_mode = f"introspect-{mode}"
+    # Tournament (#93): three lens candidates compete; only the best survives.
+    candidates = await _generate_candidates(generator, prompt, mode)
 
-    if mode == "generation" and not validate_generation_patch(idea):
-        logger.warning("Rejected generation-mode SI idea '%s': failed patch validation", idea.name)
-        return None
-    if mode == "code-fix" and not has_target_metric(idea):
-        logger.warning("Rejected SI idea '%s': missing 'Target metric:' declaration (#92)", idea.name)
-        return None
+    survivors = []
+    for idea in candidates:
+        if not _passes_mode_gate(idea, mode):
+            continue
+        result = review_idea(idea)
+        if not result.passed:
+            logger.warning("Rejected SI candidate '%s': %s", idea.name, "; ".join(result.reasons))
+            continue
+        survivors.append((result.score, idea))
 
-    # Quality review: reject low-quality or new-project proposals
-    result = review_idea(idea)
-    if not result.passed:
-        logger.warning("Rejected SI idea '%s': %s", idea.name, "; ".join(result.reasons))
-        return None
-
-    _, accepted, reason = await filter_and_save(idea, db)
-    if not accepted:
-        logger.info("Introspection idea '%s' filtered: %s", idea.name, reason)
-        return None
-    logger.info("Introspection generated: %s (score: %.2f)", idea.name, idea.feasibility_score)
-    return idea
+    survivors.sort(key=lambda t: (t[0], t[1].feasibility_score), reverse=True)
+    for _, idea in survivors:
+        _, accepted, reason = await filter_and_save(idea, db)
+        if accepted:
+            logger.info("Introspection tournament winner: %s (score: %.2f)", idea.name, idea.feasibility_score)
+            return idea
+        logger.info("Tournament candidate '%s' filtered: %s", idea.name, reason)
+    return None
 
 
 async def _run() -> None:

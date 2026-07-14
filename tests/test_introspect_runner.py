@@ -302,6 +302,192 @@ class TestIntrospectModeRotation:
         mock_db.save_idea.assert_not_called()
 
 
+class TestIntrospectionTournament:
+    """Each fire proposes 3 lens candidates; only the best survives (#93)."""
+
+    def _candidate(self, name: str, feasibility: float = 0.8) -> Idea:
+        return Idea(
+            name=name,
+            tagline="a concrete improvement",
+            description="A specific fix in src/project_forge/engine/dedup.py with tests to match.",
+            category=IdeaCategory.SELF_IMPROVEMENT,
+            market_analysis="Target metric: filter rate. Improves generation quality.",
+            feasibility_score=feasibility,
+            mvp_scope="Patch src/project_forge/engine/dedup.py and add tests.",
+            tech_stack=["python"],
+        )
+
+    def _review_result(self, score: float, passed: bool = True):
+        result = MagicMock()
+        result.passed = passed
+        result.score = score
+        result.reasons = []
+        return result
+
+    @pytest.mark.asyncio
+    async def test_best_of_three_by_review_score(self):
+        from project_forge.cron.introspect_runner import run_introspect_cycle
+        from project_forge.storage.db import Database
+
+        mock_db = AsyncMock(spec=Database)
+        mock_db.list_ideas = AsyncMock(return_value=[])
+        mock_db.save_idea = AsyncMock()
+
+        a, b, c = (self._candidate(n) for n in ("Alpha", "Beta", "Gamma"))
+        mock_generator = MagicMock()
+        mock_generator.generate = AsyncMock(side_effect=[a, b, c])
+
+        saved = []
+
+        async def _mock_filter_and_save(idea, db):
+            saved.append(idea.name)
+            return idea, True, None
+
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch(
+                    "project_forge.cron.introspect_runner.gather_self_context",
+                    return_value={"open_issues": [], "recent_commits": [], "test_count": 1},
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "project_forge.cron.introspect_runner.build_introspection_prompt",
+                    return_value="fake prompt",
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "project_forge.cron.introspect_runner.review_idea",
+                    side_effect=[
+                        self._review_result(0.5),
+                        self._review_result(0.9),
+                        self._review_result(0.7),
+                    ],
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "project_forge.cron.introspect_runner.filter_and_save",
+                    side_effect=_mock_filter_and_save,
+                )
+            )
+            winner = await run_introspect_cycle(mock_db, mock_generator)
+
+        assert winner is not None
+        assert winner.name == "Beta", "highest review score must win"
+        assert saved == ["Beta"], "only the winner reaches the store"
+        assert mock_generator.generate.await_count == 3
+
+    @pytest.mark.asyncio
+    async def test_lens_injection_varies_code_fix_prompts(self):
+        from project_forge.cron.introspect_runner import run_introspect_cycle
+        from project_forge.storage.db import Database
+
+        mock_db = AsyncMock(spec=Database)
+        mock_db.list_ideas = AsyncMock(return_value=[])
+        mock_db.save_idea = AsyncMock()
+
+        prompts: list[str] = []
+
+        async def capture_generate(category, prompt_override):
+            prompts.append(prompt_override)
+            return self._candidate(f"Idea {len(prompts)}")
+
+        mock_generator = MagicMock()
+        mock_generator.generate = AsyncMock(side_effect=capture_generate)
+
+        async def _mock_filter_and_save(idea, db):
+            return idea, True, None
+
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch(
+                    "project_forge.cron.introspect_runner.gather_self_context",
+                    return_value={"open_issues": [], "recent_commits": [], "test_count": 1},
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "project_forge.cron.introspect_runner.build_introspection_prompt",
+                    return_value="base prompt",
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "project_forge.cron.introspect_runner.review_idea",
+                    return_value=self._review_result(0.8),
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "project_forge.cron.introspect_runner.filter_and_save",
+                    side_effect=_mock_filter_and_save,
+                )
+            )
+            await run_introspect_cycle(mock_db, mock_generator)
+
+        assert len(prompts) == 3
+        assert len(set(prompts)) == 3, "each candidate must get a distinct lens"
+        assert all("lens" in p for p in prompts)
+
+    @pytest.mark.asyncio
+    async def test_dupe_winner_falls_through_to_next_survivor(self):
+        from project_forge.cron.introspect_runner import run_introspect_cycle
+        from project_forge.storage.db import Database
+
+        mock_db = AsyncMock(spec=Database)
+        mock_db.list_ideas = AsyncMock(return_value=[])
+        mock_db.save_idea = AsyncMock()
+
+        a, b, c = (self._candidate(n) for n in ("Alpha", "Beta", "Gamma"))
+        mock_generator = MagicMock()
+        mock_generator.generate = AsyncMock(side_effect=[a, b, c])
+
+        calls = []
+
+        async def _dupe_then_accept(idea, db):
+            calls.append(idea.name)
+            if len(calls) == 1:
+                return idea, False, "duplicate:test"
+            return idea, True, None
+
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch(
+                    "project_forge.cron.introspect_runner.gather_self_context",
+                    return_value={"open_issues": [], "recent_commits": [], "test_count": 1},
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "project_forge.cron.introspect_runner.build_introspection_prompt",
+                    return_value="fake prompt",
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "project_forge.cron.introspect_runner.review_idea",
+                    side_effect=[
+                        self._review_result(0.9),
+                        self._review_result(0.8),
+                        self._review_result(0.2),
+                    ],
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "project_forge.cron.introspect_runner.filter_and_save",
+                    side_effect=_dupe_then_accept,
+                )
+            )
+            winner = await run_introspect_cycle(mock_db, mock_generator)
+
+        assert calls == ["Alpha", "Beta"], "ranked order: best first, dupe falls through"
+        assert winner is not None
+        assert winner.name == "Beta"
+
+
 # --- Empty state message tests ---
 
 
