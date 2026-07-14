@@ -56,6 +56,7 @@ SELF_IMPROVE_INTERVAL = _interval_from_env("FORGE_SELF_IMPROVE_INTERVAL_HOURS", 
 CHALLENGE_INTERVAL = _interval_from_env("FORGE_CHALLENGE_INTERVAL_HOURS", 168.0)
 VERDICT_AUDIT_INTERVAL = _interval_from_env("FORGE_VERDICT_AUDIT_INTERVAL_HOURS", 24.0)
 FEED_REFRESH_INTERVAL = _interval_from_env("FORGE_FEED_REFRESH_INTERVAL_HOURS", 24.0)
+SIPHON_INTERVAL = _interval_from_env("FORGE_SIPHON_INTERVAL_HOURS", 168.0)
 FUNDABILITY_SCORE_INTERVAL = _interval_from_env("FORGE_FUNDABILITY_INTERVAL_HOURS", 24.0)
 AUTO_PROMOTE_INTERVAL = _interval_from_env("FORGE_AUTO_PROMOTE_INTERVAL_HOURS", 168.0)
 ISSUE_SYNC_INTERVAL = _interval_from_env("FORGE_ISSUE_SYNC_INTERVAL_HOURS", 1.0)
@@ -331,6 +332,20 @@ async def _fire_introspect(db: Database) -> None:
     else:
         logger.info("Introspect using backend: %s", type(generator).__name__)
     await run_introspect_cycle(db, generator)
+
+
+async def _fire_siphon(db: Database) -> None:
+    """Run one live siphon pass so the pool dedups itself weekly (#94).
+
+    The pool regrew to 3,294 active ideas before a manual trim archived
+    731 near-dupes; siphon_all is idempotent and archives restorably
+    (archived_reason + archived_at), so a live weekly pass is safe.
+    """
+    from project_forge.engine.siphon import siphon_all
+
+    report = await siphon_all(db, dry_run=False)
+    applied = sum(sub.get("applied_count", 0) for sub in report.values() if isinstance(sub, dict))
+    logger.info("Siphon cadence archived %d duplicate ideas", applied)
 
 
 async def _fire_expand(db: Database) -> None:
@@ -705,6 +720,16 @@ def default_cadences() -> list[Cadence]:
             # ticks it on schedule.
             delay_query=None,
             tick_interval=VERDICT_AUDIT_INTERVAL.total_seconds(),
+            initial_delay=initial,
+        ),
+        Cadence(
+            # #94 — weekly pool self-cleaning. Pure clock: siphon_all is
+            # idempotent and near-free when the pool is already clean.
+            name="siphon",
+            interval=SIPHON_INTERVAL,
+            runner=_fire_siphon,
+            delay_query=None,
+            tick_interval=SIPHON_INTERVAL.total_seconds(),
             initial_delay=initial,
         ),
         Cadence(
