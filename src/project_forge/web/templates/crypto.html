@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Crypto / Web3 - Project Forge{% endblock %}
+
+{% block content %}
+<div id="crypto-root" data-category-filter="{{ category_filter or '' }}"></div>
+<section class="page-header">
+    <div class="container">
+        <h1>&#129689; Crypto / Web3</h1>
+        <p class="page-subtitle">
+            {{ total }} <strong>fundable</strong> on-chain ideas across {{ categories|length }} categories &mdash;
+            security, infrastructure, DeFi tooling, stablecoin payment rails, and compliance &mdash;
+            sorted by fundability score. The honest crypto money map: picks-and-shovels and mandatory
+            spend, <em>not</em> speculative NFT-art minting.
+        </p>
+        <div class="churn-row">
+            <button id="churn-btn" class="btn btn-primary btn-churn" type="button">
+                <span class="churn-icon">&#9889;</span>
+                <span class="churn-label">Churn Now</span>
+            </button>
+            <div id="churn-status" class="churn-status"></div>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+
+        <div class="filters-bar">
+            <div class="filter-row">
+                <span class="filter-row-label">Category</span>
+                <div class="filter-chips">
+                    <a href="/crypto" class="chip {% if not category_filter %}chip-active{% endif %}">All</a>
+                    {% for cat in categories %}
+                    <a href="/crypto?category={{ cat }}"
+                       class="chip {% if category_filter == cat %}chip-active{% endif %}">
+                        {{ cat }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        {% if ideas %}
+        <div class="moneybot-grid">
+            {% for idea in ideas %}
+            <div class="moneybot-card" data-idea-id="{{ idea.id }}"
+                 data-idea-name="{{ idea.name }}"
+                 data-idea-tagline="{{ idea.tagline }}"
+                 data-fundability-score="{{ idea.fundability_score or '' }}"
+                 data-feasibility-score="{{ idea.feasibility_score }}"
+                 data-generation-mode="{{ idea.generation_mode or '' }}">
+                <button class="idea-reject-btn" type="button" title="Reject this idea">&times;</button>
+                <div class="moneybot-card-body-wrap">
+                    <div class="moneybot-card-head">
+                        <span class="fundability-badge fundability-{{ ((idea.fundability_score or 0) * 10) | int }}">
+                            {{ "%.2f"|format(idea.fundability_score or 0) }}
+                        </span>
+                        {% if idea.auto_promoted_at and idea.status == 'approved' %}
+                            <span class="status-pill status-promoted">&#10003; promoted</span>
+                        {% else %}
+                            <span class="status-pill status-{{ idea.status }}">{{ idea.status }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="moneybot-card-body">
+                        <div class="moneybot-name">{{ idea.name }}</div>
+                        <div class="moneybot-tagline">{{ idea.tagline }}</div>
+                    </div>
+                </div>
+                <div class="moneybot-card-foot">
+                    <code class="cat-tag">{{ idea.category.value }}</code>
+                    {% if idea.generation_mode %}
+                        <span class="mode-pill mode-{{ idea.generation_mode }}">{{ idea.generation_mode }}</span>
+                    {% else %}
+                        <span class="mode-pill mode-template">template</span>
+                    {% endif %}
+                    {% if idea.github_issue_url %}
+                        <a href="{{ idea.github_issue_url }}" target="_blank" rel="noopener" class="moneybot-issue">issue &#8599;</a>
+                    {% else %}
+                        <button class="promote-btn" data-idea-id="{{ idea.id }}" type="button" title="File a GitHub issue with the full MVP spec for this idea">Promote &#10142;</button>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No scored crypto ideas yet. The fundability scorer runs daily &mdash; or hit <strong>Churn Now</strong> above.</p>
+        </div>
+        {% endif %}
+
+    </div>
+</section>
+
+<script src="/static/crypto.js?v=1"></script>
+{% endblock %}

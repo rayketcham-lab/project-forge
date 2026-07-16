@@ -82,6 +82,14 @@ _CATEGORY_BONUS: dict[IdeaCategory, float] = {
     IdeaCategory.SECURITY_TOOL: 0.08,
     IdeaCategory.COMPLIANCE: 0.06,
     IdeaCategory.PRIVACY: 0.05,
+    # v0.19 Crypto/Web3 board — fundable on-chain infra/security/payments/
+    # compliance carry a monetization bias on par with the money categories
+    # (real enterprise + protocol budgets; compliance is mandatory spend).
+    IdeaCategory.STABLECOIN_PAYMENTS: 0.17,
+    IdeaCategory.ONCHAIN_SECURITY: 0.15,
+    IdeaCategory.WEB3_INFRA: 0.15,
+    IdeaCategory.CRYPTO_COMPLIANCE: 0.15,
+    IdeaCategory.DEFI_TOOLING: 0.13,
     # Everything else: 0 (still monetizable, just no bias).
 }
 

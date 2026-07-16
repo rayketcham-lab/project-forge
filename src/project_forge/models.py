@@ -52,6 +52,18 @@ class IdeaCategory(StrEnum):
     CLAUDE_EVALS = "claude-evals"
     AGENT_SECURITY = "agent-security"
     CONTEXT_MEMORY = "context-memory"
+    # v0.19 Crypto/Web3 money board — fundable on-chain opportunities. The
+    # honest crypto money map: infra, security, DeFi tooling, stablecoin
+    # payment rails, and compliance — where the real budgets are — NOT
+    # speculative NFT-art minting. Reuses fundability_score; surfaces on
+    # /crypto. The operator's PKI/security background is a first-class lens
+    # (onchain-security). Kept out of MONEY_CATEGORIES so /crypto is its
+    # own board.
+    ONCHAIN_SECURITY = "onchain-security"
+    WEB3_INFRA = "web3-infra"
+    DEFI_TOOLING = "defi-tooling"
+    STABLECOIN_PAYMENTS = "stablecoin-payments"
+    CRYPTO_COMPLIANCE = "crypto-compliance"
 
 
 # --------------------------------------------------------------------------- #
@@ -95,6 +107,20 @@ SNIPER_CATEGORIES: tuple["IdeaCategory", ...] = (
     IdeaCategory.COMPLIANCE,
     IdeaCategory.CRYPTO_INFRASTRUCTURE,
     IdeaCategory.PQC_CRYPTOGRAPHY,
+)
+
+# v0.19 Crypto/Web3 board — a 4th money board (Money-Bots pattern) that
+# surfaces FUNDABLE on-chain ideas, not speculative NFT-art minting.
+# Reuses fundability_score, so no schema/scheduler change: these auto-
+# generate on the expand rotation and auto-score on the fundability
+# back-fill cadence. Disjoint from MONEY_CATEGORIES so /crypto and
+# /money-bots stay clean, separate boards.
+CRYPTO_CATEGORIES: tuple["IdeaCategory", ...] = (
+    IdeaCategory.ONCHAIN_SECURITY,
+    IdeaCategory.WEB3_INFRA,
+    IdeaCategory.DEFI_TOOLING,
+    IdeaCategory.STABLECOIN_PAYMENTS,
+    IdeaCategory.CRYPTO_COMPLIANCE,
 )
 
 

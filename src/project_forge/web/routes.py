@@ -19,6 +19,7 @@ from project_forge.engine.llm_backend import resolve_backend
 from project_forge.engine.scorer import score_summary
 from project_forge.models import (
     CLAUDE_LAB_CATEGORIES,
+    CRYPTO_CATEGORIES,
     MONEY_CATEGORIES,
     SNIPER_CATEGORIES,
     Challenge,
@@ -216,6 +217,8 @@ _MONEY_CATEGORIES = tuple(c.value for c in MONEY_CATEGORIES)
 _CLAUDE_LAB_CATEGORIES = tuple(c.value for c in CLAUDE_LAB_CATEGORIES)
 
 _SNIPER_CATEGORIES = tuple(c.value for c in SNIPER_CATEGORIES)
+
+_CRYPTO_CATEGORIES = tuple(c.value for c in CRYPTO_CATEGORIES)
 
 
 @router.get("/claude-lab", response_class=HTMLResponse)
@@ -797,6 +800,7 @@ async def api_churn(request: Request):
     allowed = {
         "claude": _CLAUDE_LAB_CATEGORIES,
         "snipe": _SNIPER_CATEGORIES,
+        "crypto": _CRYPTO_CATEGORIES,
     }.get(lab, _MONEY_CATEGORIES)
 
     cat_str = (payload.get("category") or "").strip()
@@ -864,6 +868,81 @@ async def api_money_bots_top(limit: int = Query(default=10, ge=1, le=100)):
         f"AND fundability_score IS NOT NULL "
         f"ORDER BY fundability_score DESC, generated_at DESC LIMIT ?",
         (*_MONEY_CATEGORIES, limit),
+    )
+    rows = await cur.fetchall()
+    return [
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "tagline": r["tagline"],
+            "category": r["category"],
+            "fundability_score": r["fundability_score"],
+            "generation_mode": r["generation_mode"],
+            "status": r["status"],
+            "github_issue_url": r["github_issue_url"],
+            "auto_promoted_at": r["auto_promoted_at"],
+        }
+        for r in rows
+    ]
+
+
+@router.get("/crypto", response_class=HTMLResponse)
+async def crypto(
+    request: Request,
+    category: str | None = None,
+    limit: int = Query(default=30, ge=1, le=100),
+):
+    """Fundable crypto/web3 ideas across on-chain infra, security, DeFi
+    tooling, stablecoin payments, and compliance — sorted by
+    fundability_score DESC. Same shape as /money-bots (reuses that axis);
+    a separate board so the on-chain money map stays distinct from the
+    general money-bots. Optionally filter by a specific crypto category."""
+    cats = (category,) if category in _CRYPTO_CATEGORIES else _CRYPTO_CATEGORIES
+    placeholders = ",".join("?" * len(cats))
+    cur = await db.db.execute(
+        f"SELECT id FROM ideas "  # noqa: S608
+        f"WHERE category IN ({placeholders}) "
+        f"AND status NOT IN ('archived', 'rejected') "
+        f"AND fundability_score IS NOT NULL "
+        f"ORDER BY fundability_score DESC, generated_at DESC LIMIT ?",
+        (*cats, limit),
+    )
+    rows = await cur.fetchall()
+    ideas = []
+    for r in rows:
+        idea = await db.get_idea(r["id"])
+        if idea is not None:
+            ideas.append(idea)
+    cur = await db.db.execute(
+        f"SELECT COUNT(*) FROM ideas WHERE category IN ({placeholders}) "  # noqa: S608
+        f"AND status NOT IN ('archived', 'rejected')",
+        cats,
+    )
+    total = (await cur.fetchone())[0]
+    return templates.TemplateResponse(
+        request,
+        "crypto.html",
+        {
+            "ideas": ideas,
+            "total": total,
+            "categories": list(_CRYPTO_CATEGORIES),
+            "category_filter": category if category in _CRYPTO_CATEGORIES else None,
+        },
+    )
+
+
+@router.get("/api/crypto/top")
+async def api_crypto_top(limit: int = Query(default=10, ge=1, le=100)):
+    """JSON: top-N fundability-ranked crypto/web3 ideas."""
+    placeholders = ",".join("?" * len(_CRYPTO_CATEGORIES))
+    cur = await db.db.execute(
+        f"SELECT id, name, tagline, category, fundability_score, "  # noqa: S608
+        f"generation_mode, status, github_issue_url, auto_promoted_at "
+        f"FROM ideas WHERE category IN ({placeholders}) "
+        f"AND status NOT IN ('archived', 'rejected') "
+        f"AND fundability_score IS NOT NULL "
+        f"ORDER BY fundability_score DESC, generated_at DESC LIMIT ?",
+        (*_CRYPTO_CATEGORIES, limit),
     )
     rows = await cur.fetchall()
     return [

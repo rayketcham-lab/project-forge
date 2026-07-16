@@ -1216,6 +1216,239 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "data engineering",
         ],
     },
+    # --------------------------------------------------------------------- #
+    # v0.19 Crypto/Web3 board: FUNDABLE on-chain opportunities — infra,
+    # security, DeFi tooling, stablecoin payment rails, and compliance. The
+    # honest crypto money map (real budgets), explicitly NOT NFT-art
+    # minting. Security-weighted toward the operator's PKI background.
+    # --------------------------------------------------------------------- #
+    IdeaCategory.ONCHAIN_SECURITY: {
+        "description": (
+            "Security tooling for the on-chain world — smart-contract "
+            "auditing, wallet and key security (MPC, threshold signing, "
+            "HSM-backed approvals), transaction simulation, and real-time "
+            "threat detection. Enterprise and protocol budgets; mandatory "
+            "spend after every exploit. The operator's PKI/security "
+            "background is the edge here. Not token speculation — the "
+            "security layer that keeps funds from being drained."
+        ),
+        "seed_concepts": [
+            "continuous smart-contract audit bot that re-scans on every commit and flags new vuln classes",
+            "transaction-simulation firewall that previews a signing request's real balance impact before approval",
+            "MPC wallet-as-a-service with threshold signing and per-key policy controls for treasuries",
+            "token-allowance monitor that auto-alerts and one-click-revokes risky ERC-20 approvals",
+            "phishing-signature decoder that turns opaque wallet prompts into human-readable intent",
+            "on-chain honeypot and rugpull scanner that scores a token contract before a swap",
+            "key-ceremony and social-recovery toolkit for self-custodied protocol treasuries",
+            "runtime invariant monitor that pauses a protocol when an economic invariant breaks",
+            "signer-attestation service proving which hardware key approved a multisig transaction",
+            "bridge-exploit early-warning feed correlating anomalous cross-chain flows",
+            "audit-finding triage assistant that dedups and ranks scanner output by exploitability",
+            "post-quantum signing migration planner for long-lived on-chain identities",
+            "wallet-drainer signature database that blocks known malicious approval patterns in real time",
+            "formal-verification harness that proves invariants on a contract before mainnet deploy",
+            "multisig policy simulator that stress-tests signer thresholds against collusion scenarios",
+            "gas-griefing and reentrancy fuzzer that mutates calldata to surface unhandled paths",
+            "secrets-in-bytecode scanner that flags hardcoded keys and admin backdoors pre-deploy",
+            "cross-chain identity attestation so a signer proven on one chain is trusted on another",
+            "time-locked upgrade guard that enforces a review window before a proxy implementation swaps",
+            "oracle-manipulation monitor that flags price feeds diverging from spot across venues",
+        ],
+        "domains_to_cross": [
+            "DeFi protocol teams",
+            "DAO treasuries",
+            "crypto exchanges / custodians",
+            "audit firms",
+            "wallet vendors",
+            "institutional custody desks",
+            "bridge operators",
+            "security researchers",
+            "rollup / L2 teams",
+            "oracle providers",
+            "multisig platforms",
+            "regtech / insurers",
+        ],
+    },
+    IdeaCategory.WEB3_INFRA: {
+        "description": (
+            "The developer and operator infrastructure the on-chain economy "
+            "runs on — RPC and node services, indexers, oracles, data "
+            "availability, NFT provenance, and SDKs. Usage-metered revenue, "
+            "sticky once integrated, sold to every team building on-chain. "
+            "Picks-and-shovels, not tokens."
+        ),
+        "seed_concepts": [
+            "usage-metered RPC gateway with per-method rate limits and multi-provider failover",
+            "self-serve chain indexer that turns any contract's events into a queryable REST/GraphQL API",
+            "on-chain event webhook service with replay and delivery guarantees",
+            "multi-chain gas-price oracle with predictive fee estimation and spend caps",
+            "archival-node-as-a-service exposing historical state without running your own infrastructure",
+            "contract-ABI registry and typed client generator for any deployed address",
+            "reorg-safe event stream that only emits finalized on-chain data",
+            "decentralized-storage pinning API with SLA-backed availability for app assets",
+            "NFT provenance and royalty-enforcement API that verifies authenticity and pays creators on resale",
+            "cross-chain message-relay monitor with delivery-status dashboards",
+            "on-chain data warehouse sync that lands normalized events into Postgres or Snowflake",
+            "testnet faucet and ephemeral-fork service for CI pipelines",
+            "node-fleet autoscaler that right-sizes RPC capacity to live request load",
+            "mempool streaming API with pending-transaction filters for trading and monitoring",
+            "chain-agnostic wallet-connect relay with session management and analytics",
+            "smart-contract deployment pipeline with verification and multi-network promotion",
+            "log-and-trace explorer API that decodes internal calls for any transaction",
+            "account-abstraction bundler service with paymaster sponsorship controls",
+            "token-metadata and price API normalized across chains and DEXs",
+            "subgraph hosting with autoscaling and query-cost accounting",
+        ],
+        "domains_to_cross": [
+            "dapp developers",
+            "wallet teams",
+            "analytics providers",
+            "trading firms",
+            "infrastructure ops / SRE",
+            "L2 / rollup teams",
+            "NFT marketplaces",
+            "game studios building on-chain",
+            "oracle providers",
+            "DEX / AMM teams",
+            "custody providers",
+            "fintech integrators",
+        ],
+    },
+    IdeaCategory.DEFI_TOOLING: {
+        "description": (
+            "Analytics and operations software for people running real "
+            "money on-chain — risk and liquidation dashboards, portfolio "
+            "and P&L, tax and accounting, and treasury ops. Subscription "
+            "and per-seat revenue from funds, treasuries, and serious "
+            "individuals. Tools that protect margin, not yield-farming hype."
+        ),
+        "seed_concepts": [
+            "liquidation-risk monitor that alerts and auto-deleverages before a lending position is liquidated",
+            "impermanent-loss calculator and LP-position rebalancer across AMMs",
+            "on-chain P&L and cost-basis engine that reconciles every wallet into one ledger",
+            "crypto tax-lot accounting that exports filing-ready reports from raw transactions",
+            "DAO treasury dashboard with runway, diversification, and spend-policy alerts",
+            "MEV-aware order router that splits swaps to minimize sandwich exposure",
+            "yield-source risk scorer rating protocols by audit history and TVL concentration",
+            "stablecoin depeg early-warning monitor across pools and oracles",
+            "governance-proposal digest that summarizes and flags treasury-affecting votes",
+            "position-health API that funds embed into their own risk systems",
+            "cross-protocol exposure aggregator showing true collateral concentration",
+            "automated vesting and payroll streaming with accounting export",
+            "collateral-ratio autopilot that tops up or unwinds across lending markets on thresholds",
+            "backtesting engine for on-chain strategies against historical pool state",
+            "stablecoin yield comparison with risk-adjusted APY across protocols",
+            "airdrop and reward tracker that reconciles claims and tax lots automatically",
+            "gas-cost analyzer that attributes protocol interaction cost per strategy",
+            "protocol-parameter change monitor alerting LPs before rate or fee updates land",
+            "wallet-cohort analytics segmenting depositors by behavior and retention",
+            "on-chain accounting export with double-entry ledgers for auditors",
+        ],
+        "domains_to_cross": [
+            "crypto funds / trading desks",
+            "DAO treasuries",
+            "crypto accountants / CPAs",
+            "high-net-worth individuals",
+            "protocol governance teams",
+            "family offices",
+            "market makers",
+            "tax-prep firms",
+            "lending protocols",
+            "auditors",
+            "wealth managers",
+            "exchanges",
+        ],
+    },
+    IdeaCategory.STABLECOIN_PAYMENTS: {
+        "description": (
+            "Payment rails built on stablecoins — merchant settlement, "
+            "on/off-ramps, payroll, and agent-to-agent (x402) machine "
+            "payments. Real transaction-fee and SaaS revenue, riding the "
+            "one crypto use case with clear product-market fit. Money "
+            "movement, not speculation."
+        ),
+        "seed_concepts": [
+            "stablecoin checkout that settles to a merchant's bank while the buyer pays on-chain",
+            "cross-border contractor payroll paying stablecoins with automatic local off-ramp",
+            "agent-payment gateway implementing x402 so autonomous agents pay per API call",
+            "recurring-billing engine for stablecoin subscriptions with dunning and retries",
+            "on/off-ramp aggregator routing to the cheapest compliant provider per corridor",
+            "invoice and payment-link service that reconciles on-chain receipts to accounting",
+            "treasury sweep that auto-converts volatile receipts into a chosen stablecoin",
+            "point-of-sale SDK for stablecoin tap-to-pay with instant finality confirmation",
+            "escrow-as-a-service that releases stablecoin on verifiable delivery conditions",
+            "multi-currency stablecoin FX router with best-rate execution",
+            "signed-receipt refund protocol that avoids chargebacks",
+            "micro-payment metering for usage-based APIs settled in stablecoins",
+            "programmable payout splitter that routes one payment to many recipients on rules",
+            "subscription-churn recovery that retries stablecoin charges across chains",
+            "settlement reconciliation dashboard matching on-chain receipts to invoices",
+            "gasless payment relayer so buyers pay without holding native gas tokens",
+            "cross-chain stablecoin bridge with slippage-free 1:1 settlement guarantees",
+            "compliance-aware payment gate that blocks sanctioned counterparties pre-settlement",
+            "loyalty and rebate engine issuing stablecoin cashback on qualifying spend",
+            "treasury FX hedging that ladders stablecoin conversions to smooth volatility",
+        ],
+        "domains_to_cross": [
+            "e-commerce merchants",
+            "payment processors / PSPs",
+            "gig / marketplace platforms",
+            "remittance operators",
+            "AI agent builders",
+            "SaaS billing teams",
+            "cross-border payroll providers",
+            "fintech startups",
+            "neobanks",
+            "B2B SaaS vendors",
+            "content platforms",
+            "logistics / supply chain",
+        ],
+    },
+    IdeaCategory.CRYPTO_COMPLIANCE: {
+        "description": (
+            "The compliance layer regulated crypto businesses are legally "
+            "required to buy — KYC/AML, on-chain forensics, travel-rule "
+            "messaging, and regulatory reporting for VASPs and exchanges. "
+            "Mandatory, budgeted, recurring spend. Sells into fear of "
+            "enforcement, not appetite for risk."
+        ),
+        "seed_concepts": [
+            "wallet-screening API that scores addresses against sanctions and illicit-flow risk",
+            "travel-rule messaging bridge exchanging originator and beneficiary data between VASPs",
+            "transaction-monitoring engine with tunable typologies and case management",
+            "on-chain forensics tool tracing fund flows through mixers and bridges",
+            "KYC onboarding flow with liveness, document checks, and re-verification triggers",
+            "regulatory-report generator producing SAR and CTR filings from on-chain activity",
+            "proof-of-reserves attestation tool with Merkle-tree verification for exchanges",
+            "sanctions-list delta monitor that re-screens the existing customer base on updates",
+            "jurisdiction rule-engine mapping token activity to per-country licensing requirements",
+            "tamper-evident audit-trail vault for examiner requests",
+            "stablecoin-issuer reserve-composition reporting dashboard",
+            "credential-gated DeFi compliance wrapper that admits only attested wallets",
+            "smart-contract-address risk register mapping protocols to legal and sanctions exposure",
+            "counterparty due-diligence dossier assembling on-chain and off-chain KYB signals",
+            "automated regulatory-change tracker mapping new rules to product controls",
+            "privacy-preserving proof-of-personhood that satisfies KYC without storing raw PII",
+            "chain-analytics case builder exporting court-ready evidence packages",
+            "VASP licensing readiness checklist scored against each jurisdiction's regime",
+            "real-time sanctions oracle that gates on-chain transfers at the contract level",
+            "audit-log integrity monitor that detects tampering in compliance record stores",
+        ],
+        "domains_to_cross": [
+            "crypto exchanges",
+            "VASPs / custodians",
+            "stablecoin issuers",
+            "compliance officers",
+            "neobanks / fintechs",
+            "regtech / law firms",
+            "auditors",
+            "regulators / examiners",
+            "payment processors",
+            "insurers",
+            "law enforcement",
+            "accounting firms",
+        ],
+    },
 }
 
 

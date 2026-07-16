@@ -183,6 +183,39 @@ TECH_STACKS = {
         ["typescript", "@anthropic-ai/sdk", "pgvector", "prisma"],
         ["python", "anthropic", "lancedb", "duckdb"],
     ],
+    # v0.19 Crypto/Web3 board stacks — real on-chain tooling (web3 clients,
+    # audit/dev frameworks) so keyless local generation produces credible
+    # crypto ideas instead of the bland python/fastapi fallback.
+    IdeaCategory.ONCHAIN_SECURITY: [
+        ["python", "web3.py", "slither", "fastapi"],
+        ["rust", "foundry", "revm", "tokio"],
+        ["typescript", "ethers.js", "hardhat", "node"],
+        ["go", "go-ethereum", "grpc", "postgres"],
+    ],
+    IdeaCategory.WEB3_INFRA: [
+        ["typescript", "ethers.js", "node", "postgres"],
+        ["rust", "alloy", "tokio", "redis"],
+        ["go", "go-ethereum", "grpc", "kafka"],
+        ["python", "web3.py", "fastapi", "redis"],
+    ],
+    IdeaCategory.DEFI_TOOLING: [
+        ["python", "web3.py", "pandas", "fastapi"],
+        ["typescript", "next.js", "viem", "postgres"],
+        ["rust", "alloy", "axum", "postgres"],
+        ["python", "fastapi", "duckdb", "web3.py"],
+    ],
+    IdeaCategory.STABLECOIN_PAYMENTS: [
+        ["typescript", "next.js", "viem", "stripe"],
+        ["python", "fastapi", "web3.py", "stripe"],
+        ["go", "gin", "go-ethereum", "postgres"],
+        ["typescript", "node", "ethers.js", "postgres"],
+    ],
+    IdeaCategory.CRYPTO_COMPLIANCE: [
+        ["python", "fastapi", "web3.py", "postgres"],
+        ["typescript", "node", "ethers.js", "postgres"],
+        ["python", "pandas", "web3.py", "neo4j"],
+        ["go", "grpc", "go-ethereum", "postgres"],
+    ],
 }
 
 
@@ -457,9 +490,29 @@ async def run_auto_scan(db: Database, count: int = 5) -> list[Idea]:
     used_tuples = {_content_hash(r[0], r[1], r[2], r[3]) for r in rows}
 
     ideas = []
-    # Exclude SELF_IMPROVEMENT — that category is only for the introspection engine
+    # Round-robin over the categories. SELF_IMPROVEMENT is excluded — it's
+    # generated only by the introspection engine. The core security/PQC
+    # categories then get a second pass appended so the KEYLESS autonomous
+    # scan stays majority-security as the commercial boards (money, Claude Lab,
+    # crypto) expand the enum; every added category otherwise dilutes the
+    # security share of a flat round-robin (see #89, #95). The engine's
+    # security-first mission shouldn't erode just because we added more ways to
+    # make a dollar. The first full cycle stays all-distinct (the extra
+    # security slots come after), so short scans remain well-distributed.
+    security_core = {
+        IdeaCategory.PQC_CRYPTOGRAPHY,
+        IdeaCategory.NIST_STANDARDS,
+        IdeaCategory.RFC_SECURITY,
+        IdeaCategory.CRYPTO_INFRASTRUCTURE,
+        IdeaCategory.SECURITY_TOOL,
+        IdeaCategory.VULNERABILITY_RESEARCH,
+        IdeaCategory.COMPLIANCE,
+    }
     categories = [c for c in IdeaCategory if c != IdeaCategory.SELF_IMPROVEMENT]
     random.shuffle(categories)
+    security_extra = [c for c in categories if c in security_core]
+    random.shuffle(security_extra)
+    categories = categories + security_extra
 
     for i in range(count):
         cat = categories[i % len(categories)]
