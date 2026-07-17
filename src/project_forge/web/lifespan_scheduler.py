@@ -58,6 +58,8 @@ VERDICT_AUDIT_INTERVAL = _interval_from_env("FORGE_VERDICT_AUDIT_INTERVAL_HOURS"
 FEED_REFRESH_INTERVAL = _interval_from_env("FORGE_FEED_REFRESH_INTERVAL_HOURS", 24.0)
 SIPHON_INTERVAL = _interval_from_env("FORGE_SIPHON_INTERVAL_HOURS", 168.0)
 FUNDABILITY_SCORE_INTERVAL = _interval_from_env("FORGE_FUNDABILITY_INTERVAL_HOURS", 24.0)
+# v0.20 — Cashflow board (#96): keeps cashflow_score fresh for /cashflow.
+CASHFLOW_SCORE_INTERVAL = _interval_from_env("FORGE_CASHFLOW_INTERVAL_HOURS", 24.0)
 AUTO_PROMOTE_INTERVAL = _interval_from_env("FORGE_AUTO_PROMOTE_INTERVAL_HOURS", 168.0)
 ISSUE_SYNC_INTERVAL = _interval_from_env("FORGE_ISSUE_SYNC_INTERVAL_HOURS", 1.0)
 # v0.16 — grounded competitive-displacement generation for the Sniper board.
@@ -425,6 +427,19 @@ async def _fire_fundability_score(db: Database) -> None:
     logger.info("Fundability cycle scored %d ideas", result.get("scored", 0))
 
 
+async def _fire_cashflow_score(db: Database) -> None:
+    """Score recent unscored cashflow-board ideas for time-to-first-dollar.
+
+    Batch deliberately small (5) for the same SQLite writer-lock reason as
+    `_fire_fundability_score` — catch up over multiple ticks instead of
+    holding the writer for minutes.
+    """
+    from project_forge.engine.cashflow import score_pending_cashflow
+
+    result = await score_pending_cashflow(db, limit=5)
+    logger.info("Cashflow cycle scored %d ideas", result.get("scored", 0))
+
+
 async def _fire_auto_promote(db: Database) -> None:
     """Pick top-fundability money-bot idea, file a GH issue, flip to
     'approved'. The money-flipper loop."""
@@ -752,6 +767,17 @@ def default_cadences() -> list[Cadence]:
             runner=_fire_fundability_score,
             delay_query=None,
             tick_interval=FUNDABILITY_SCORE_INTERVAL.total_seconds(),
+            initial_delay=initial,
+        ),
+        Cadence(
+            # v0.20 — Cashflow board (#96): keeps cashflow_score fresh so
+            # /cashflow ranks keyless auto-generated ideas without operator
+            # action. Pure clock; the runner skips already-scored ideas.
+            name="cashflow_score",
+            interval=CASHFLOW_SCORE_INTERVAL,
+            runner=_fire_cashflow_score,
+            delay_query=None,
+            tick_interval=CASHFLOW_SCORE_INTERVAL.total_seconds(),
             initial_delay=initial,
         ),
         Cadence(

@@ -18,6 +18,7 @@ from project_forge.engine.dedup import filter_and_save
 from project_forge.engine.llm_backend import resolve_backend
 from project_forge.engine.scorer import score_summary
 from project_forge.models import (
+    CASHFLOW_CATEGORIES,
     CLAUDE_LAB_CATEGORIES,
     CRYPTO_CATEGORIES,
     MONEY_CATEGORIES,
@@ -219,6 +220,8 @@ _CLAUDE_LAB_CATEGORIES = tuple(c.value for c in CLAUDE_LAB_CATEGORIES)
 _SNIPER_CATEGORIES = tuple(c.value for c in SNIPER_CATEGORIES)
 
 _CRYPTO_CATEGORIES = tuple(c.value for c in CRYPTO_CATEGORIES)
+
+_CASHFLOW_CATEGORIES = tuple(c.value for c in CASHFLOW_CATEGORIES)
 
 
 @router.get("/claude-lab", response_class=HTMLResponse)
@@ -801,6 +804,7 @@ async def api_churn(request: Request):
         "claude": _CLAUDE_LAB_CATEGORIES,
         "snipe": _SNIPER_CATEGORIES,
         "crypto": _CRYPTO_CATEGORIES,
+        "cashflow": _CASHFLOW_CATEGORIES,
     }.get(lab, _MONEY_CATEGORIES)
 
     cat_str = (payload.get("category") or "").strip()
@@ -829,6 +833,10 @@ async def api_churn(request: Request):
         result.idea.ambition_score = await score_ambition(result.idea)
     elif lab == "snipe":
         result.idea.snipe_score = await score_snipe(result.idea)
+    elif lab == "cashflow":
+        from project_forge.engine.cashflow import score_cashflow
+
+        result.idea.cashflow_score = await score_cashflow(result.idea)
     else:
         result.idea.fundability_score = await score_fundability(result.idea)
 
@@ -848,6 +856,7 @@ async def api_churn(request: Request):
             "fundability_score": result.idea.fundability_score,
             "ambition_score": result.idea.ambition_score,
             "snipe_score": result.idea.snipe_score,
+            "cashflow_score": result.idea.cashflow_score,
             "target_incumbent": result.idea.target_incumbent,
             "generation_mode": result.mode,
             "artifact_type": result.artifact_type,
@@ -876,6 +885,81 @@ async def api_money_bots_top(limit: int = Query(default=10, ge=1, le=100)):
             "name": r["name"],
             "tagline": r["tagline"],
             "category": r["category"],
+            "fundability_score": r["fundability_score"],
+            "generation_mode": r["generation_mode"],
+            "status": r["status"],
+            "github_issue_url": r["github_issue_url"],
+            "auto_promoted_at": r["auto_promoted_at"],
+        }
+        for r in rows
+    ]
+
+
+@router.get("/cashflow", response_class=HTMLResponse)
+async def cashflow(
+    request: Request,
+    category: str | None = None,
+    limit: int = Query(default=30, ge=1, le=100),
+):
+    """Folding-cash ideas — capital-light systems with the shortest path
+    to actual dollars — sorted by cashflow_score DESC. Where /money-bots
+    ranks by fundability (can we sell it as a product), /cashflow ranks by
+    time-to-first-dollar. Optionally filter by a cashflow category."""
+    cats = (category,) if category in _CASHFLOW_CATEGORIES else _CASHFLOW_CATEGORIES
+    placeholders = ",".join("?" * len(cats))
+    cur = await db.db.execute(
+        f"SELECT id FROM ideas "  # noqa: S608
+        f"WHERE category IN ({placeholders}) "
+        f"AND status NOT IN ('archived', 'rejected') "
+        f"AND cashflow_score IS NOT NULL "
+        f"ORDER BY cashflow_score DESC, generated_at DESC LIMIT ?",
+        (*cats, limit),
+    )
+    rows = await cur.fetchall()
+    ideas = []
+    for r in rows:
+        idea = await db.get_idea(r["id"])
+        if idea is not None:
+            ideas.append(idea)
+    cur = await db.db.execute(
+        f"SELECT COUNT(*) FROM ideas WHERE category IN ({placeholders}) "  # noqa: S608
+        f"AND status NOT IN ('archived', 'rejected')",
+        cats,
+    )
+    total = (await cur.fetchone())[0]
+    return templates.TemplateResponse(
+        request,
+        "cashflow.html",
+        {
+            "ideas": ideas,
+            "total": total,
+            "categories": list(_CASHFLOW_CATEGORIES),
+            "category_filter": category if category in _CASHFLOW_CATEGORIES else None,
+        },
+    )
+
+
+@router.get("/api/cashflow/top")
+async def api_cashflow_top(limit: int = Query(default=10, ge=1, le=100)):
+    """JSON: top-N time-to-first-dollar-ranked folding-cash ideas."""
+    placeholders = ",".join("?" * len(_CASHFLOW_CATEGORIES))
+    cur = await db.db.execute(
+        f"SELECT id, name, tagline, category, cashflow_score, fundability_score, "  # noqa: S608
+        f"generation_mode, status, github_issue_url, auto_promoted_at "
+        f"FROM ideas WHERE category IN ({placeholders}) "
+        f"AND status NOT IN ('archived', 'rejected') "
+        f"AND cashflow_score IS NOT NULL "
+        f"ORDER BY cashflow_score DESC, generated_at DESC LIMIT ?",
+        (*_CASHFLOW_CATEGORIES, limit),
+    )
+    rows = await cur.fetchall()
+    return [
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "tagline": r["tagline"],
+            "category": r["category"],
+            "cashflow_score": r["cashflow_score"],
             "fundability_score": r["fundability_score"],
             "generation_mode": r["generation_mode"],
             "status": r["status"],

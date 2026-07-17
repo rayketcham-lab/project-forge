@@ -216,6 +216,38 @@ TECH_STACKS = {
         ["python", "pandas", "web3.py", "neo4j"],
         ["go", "grpc", "go-ethereum", "postgres"],
     ],
+    # v0.20 Cashflow board stacks — biased toward ship-this-week tooling:
+    # scrapers, report pipelines, storefronts, and payment links.
+    IdeaCategory.PRODUCTIZED_SERVICES: [
+        ["python", "fastapi", "stripe", "playwright"],
+        ["typescript", "next.js", "stripe", "postgres"],
+        ["python", "click", "jinja2", "weasyprint"],
+        ["python", "fastapi", "celery", "stripe"],
+    ],
+    IdeaCategory.DIGITAL_PRODUCTS: [
+        ["typescript", "next.js", "stripe", "vercel"],
+        ["python", "pillow", "ffmpeg", "gumroad"],
+        ["python", "fastapi", "stripe", "sqlite"],
+        ["typescript", "astro", "tailwind", "lemonsqueezy"],
+    ],
+    IdeaCategory.COMMERCE_OPS: [
+        ["python", "fastapi", "shopify-api", "celery"],
+        ["typescript", "node", "shopify-api", "postgres"],
+        ["python", "playwright", "pandas", "postgres"],
+        ["typescript", "next.js", "stripe", "redis"],
+    ],
+    IdeaCategory.LEAD_GENERATION: [
+        ["typescript", "astro", "tailwind", "postgres"],
+        ["python", "fastapi", "htmx", "sqlite"],
+        ["typescript", "next.js", "postgres", "twilio"],
+        ["python", "scrapy", "fastapi", "postgres"],
+    ],
+    IdeaCategory.FLIPPING_ARBITRAGE: [
+        ["python", "scrapy", "pandas", "sqlite"],
+        ["python", "playwright", "fastapi", "postgres"],
+        ["typescript", "node", "puppeteer", "postgres"],
+        ["python", "httpx", "duckdb", "click"],
+    ],
 }
 
 

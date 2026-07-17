@@ -110,12 +110,19 @@ class TestScoringBonuses:
 
 
 class TestRouteAndStatsWiring:
+    # Import app before routes in each test: importing routes cold trips the
+    # pre-existing app<->routes circular import when this file runs in
+    # isolation (the full suite masks it via import-order luck). Same
+    # pattern as test_crypto.py / test_cashflow.py.
+
     def test_routes_money_tuple_matches_canonical(self):
+        from project_forge.web import app as _app  # noqa: F401
         from project_forge.web import routes
 
         assert set(routes._MONEY_CATEGORIES) == {c.value for c in MONEY_CATEGORIES}
 
     def test_routes_claude_lab_tuple_matches_canonical(self):
+        from project_forge.web import app as _app  # noqa: F401
         from project_forge.web import routes
 
         assert set(routes._CLAUDE_LAB_CATEGORIES) == {c.value for c in CLAUDE_LAB_CATEGORIES}

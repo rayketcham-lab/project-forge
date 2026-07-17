@@ -1449,6 +1449,250 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "accounting firms",
         ],
     },
+    # --------------------------------------------------------------------- #
+    # v0.20 Cashflow board (#96): folding-cash plays — capital-light systems
+    # with the shortest path to actual dollars. Every concept is still a
+    # buildable software artifact; the cashflow axis scores how fast that
+    # artifact turns into an invoice or a first sale. Honest hustle only —
+    # no get-rich-quick shapes.
+    # --------------------------------------------------------------------- #
+    IdeaCategory.PRODUCTIZED_SERVICES: {
+        "description": (
+            "Fixed-scope, fixed-price expertise offers wrapped in software — "
+            "automated intake, delivery pipeline, client portal, invoicing. "
+            "The fastest legal path from a skill to folding cash: sell the "
+            "outcome, automate the delivery, invoice this week. Security and "
+            "PKI expertise productizes especially well (audits, reviews, "
+            "hardening packages)."
+        ),
+        "seed_concepts": [
+            "certificate-expiry audit service with automated scanner and fixed-price branded report",
+            "48-hour website-speed-audit service with an automated Lighthouse pipeline and PDF delivery",
+            "technical-SEO audit generator with crawler, prioritized fix roadmap, and client portal",
+            "TLS and security-header review package with auto-scan and remediation playbook",
+            "email-deliverability rescue service with DNS/DMARC analyzer and fix tracker",
+            "monthly bookkeeping-cleanup package with bank-feed reconciler and anomaly flags",
+            "podcast-editing subscription with automated leveling and transcription pipeline",
+            "resume-rewrite service with ATS-scoring engine and before/after diff view",
+            "UX teardown service with session-recording annotator and fixed-fee report",
+            "WCAG accessibility audit service with automated scan plus manual checklist portal",
+            "Google Business Profile optimization package for local shops with rank tracking",
+            "cloud-bill teardown service that finds savings and charges a share of month-one savings",
+            "dependency-upgrade service for legacy apps with automated CVE triage and PR queue",
+            "database health-check service with query-plan analyzer and tuning report",
+            "onboarding-email-sequence package with template engine and A/B result tracker",
+            "photo post-processing pipeline service with style-preset automation and batch delivery",
+            "store-setup-in-a-week package with themed checklist portal and launch QA",
+            "privacy-policy and GDPR readiness package with questionnaire-driven document generator",
+            "incident-response retainer with an on-call runbook portal for small SaaS teams",
+            "code-review-as-a-service with fixed per-PR pricing and automated pre-screen",
+            "penetration-test-lite package for small web apps with scoped scanner and findings portal",
+            "backup-and-restore verification service that proves recovery actually works quarterly",
+        ],
+        "domains_to_cross": [
+            "solo consultants",
+            "freelance developers",
+            "agencies",
+            "local businesses",
+            "small SaaS teams",
+            "e-commerce stores",
+            "podcasters and creators",
+            "law and accounting firms",
+            "healthcare clinics",
+            "nonprofits",
+            "real-estate brokers",
+            "IT and MSP shops",
+        ],
+    },
+    IdeaCategory.DIGITAL_PRODUCTS: {
+        "description": (
+            "Build-once, sell-forever digital assets — templates, packs, "
+            "mini-courses, printables, presets, boilerplates — plus the "
+            "storefront and delivery automation around them. First sale in "
+            "days on marketplaces with built-in demand (Etsy, Gumroad, KDP); "
+            "zero inventory, digital delivery, near-zero marginal cost."
+        ),
+        "seed_concepts": [
+            "Notion operating-system template pack for one trade with auto-duplication storefront",
+            "financial-model spreadsheet templates with input validation and scenario tabs",
+            "pitch-deck template system with brand-token theming engine",
+            "flashcard-deck generator for certification exams sold per exam track",
+            "procedurally generated coloring-book interior pipeline for KDP publishing",
+            "icon and texture bundle pipeline with auto-tagging and marketplace sync",
+            "email-sequence swipe-file library with merge-tag personalizer",
+            "wedding-planning template kit with vendor-tracker dashboards",
+            "freelancer contract template pack with clause configurator",
+            "audio sample-pack production pipeline with loop tagging and BPM metadata",
+            "micro-course builder that packages a repo plus video walkthroughs behind a paywall",
+            "resume and cover-letter template system with ATS-safe formatting checker",
+            "parametric 3D-printable model line with a customizer front-end",
+            "photo-preset packs with automated before/after preview generation",
+            "niche planner and calculator PDF generator with dynamic form fields",
+            "developer boilerplate starter kits with license-key issuing and update channel",
+            "homeschool worksheet packs with answer-key generator and grade-level tagging",
+            "social-media content-calendar template packs with auto-filled hook library",
+            "stream overlay pack pipeline with theme variants and animated versions",
+            "interview-prep question banks wrapped in a spaced-repetition web app",
+            "digital sticker and clipart pack pipeline with print-margin presets",
+            "budget-binder printable system with linked tracking spreadsheet",
+        ],
+        "domains_to_cross": [
+            "Etsy sellers",
+            "Gumroad creators",
+            "KDP self-publishers",
+            "indie hackers",
+            "teachers and homeschoolers",
+            "job seekers",
+            "wedding planners",
+            "music producers",
+            "streamers and creators",
+            "freelancers",
+            "students and exam takers",
+            "small agencies",
+        ],
+    },
+    IdeaCategory.COMMERCE_OPS: {
+        "description": (
+            "Actually running lean online commerce — dropshipping done "
+            "honestly, print-on-demand, digital goods, marketplace selling — "
+            "where the profit edge is software: demand validation before "
+            "capital commits, supplier vetting, margin guards, retention "
+            "automation. Not 'start a store' hype; the operating system that "
+            "keeps a small store profitable."
+        ),
+        "seed_concepts": [
+            "dropshipping demand validator that test-lists products and measures click-to-cart before any inventory",
+            "supplier-vetting pipeline that scores dropship suppliers on ship time and dispute history",
+            "margin-guard engine that auto-pauses SKUs when fees plus ads push contribution below floor",
+            "print-on-demand niche-design pipeline with trademark screening and auto-listing",
+            "one-product-store launcher with landing-page variants and A/B rotation",
+            "trend-to-product scanner that flags rising items before listings saturate",
+            "digital-goods storefront with instant delivery, license keys, and refund-abuse guard",
+            "marketplace cross-lister that syncs inventory across eBay, Etsy, and Facebook with repricing",
+            "dropship order router with multi-supplier failover on stockouts",
+            "returns-triage bot that decides refund, return, or replace by item economics",
+            "subscription-box curation planner with per-box unit-economics simulator",
+            "ad-creative assembly pipeline that turns product clips into tested variants",
+            "review-mining tool that finds product gaps in competitor one-star reviews",
+            "pre-order storefront that validates demand before committing capital",
+            "bundle builder that lifts order value with margin-aware suggestions",
+            "shipping-promise engine that shows honest delivery dates per supplier",
+            "chargeback-evidence assembler for card disputes with delivery proof",
+            "seasonal-demand forecaster for reorder timing and cash planning",
+            "liquidation-lot screener that flags below-market wholesale pallets",
+            "abandoned-checkout rescue with inventory-aware discount logic",
+            "listing-quality grader that scores photos, titles, and keywords against category leaders",
+            "cash-conversion-cycle dashboard tracking days from spend to collected revenue",
+        ],
+        "domains_to_cross": [
+            "dropshippers",
+            "print-on-demand sellers",
+            "marketplace sellers",
+            "TikTok Shop sellers",
+            "digital-goods sellers",
+            "subscription-box operators",
+            "thrift and liquidation resellers",
+            "niche DTC brands",
+            "wholesale buyers",
+            "side-hustle operators",
+            "student entrepreneurs",
+            "hobbyist sellers",
+        ],
+    },
+    IdeaCategory.LEAD_GENERATION: {
+        "description": (
+            "Assets that capture purchase-intent traffic and sell it — niche "
+            "comparison sites, calculators and estimators, local trade "
+            "lead-gen, verified directories. Revenue per lead or per "
+            "referral; tiny capital, compounding traffic. The software IS "
+            "the asset: it ranks, captures, qualifies, and routes."
+        ),
+        "seed_concepts": [
+            "local-trade lead site factory with call tracking and per-lead billing",
+            "insurance-comparison calculator for one niche vertical with referral routing",
+            "mortgage-refinance breakeven calculator with lender referral integration",
+            "review-site generator grounded in scraped spec data instead of affiliate copy",
+            "B2B software comparison matrix with verified pricing and demo-booking links",
+            "cost-estimator widgets for contractors embeddable on their sites, sold per lead",
+            "niche job board with employer posting fees and candidate alert subscriptions",
+            "scholarship and grant finder with deadline alerts and qualified-lead routing",
+            "utility-plan switch advisor for one state with commission routing",
+            "equipment-financing pre-qualification quiz that routes to brokers",
+            "wedding-vendor directory for one metro with premium listing tiers",
+            "moving-quote aggregator with a verified mover network",
+            "senior-care facility comparison with tour-booking lead capture",
+            "solar-savings estimator using roof data with installer referral routing",
+            "hosting and VPN comparison grounded in live speed-test data",
+            "certification-program comparison with salary-outcome data and enrollment referrals",
+            "local rank-tracker freemium tool that upsells trade marketing packages",
+            "service-outage checker site with related-tool referral placements",
+            "tax-deadline reminder tool that routes filers to partner CPAs per state",
+            "price-drop and recall alert list with replacement-product referrals",
+            "home-renovation ROI calculator that captures remodeler leads per metro",
+            "verified-contractor background-check badge that contractors pay to display",
+        ],
+        "domains_to_cross": [
+            "home-services trades",
+            "insurance",
+            "personal finance",
+            "legal intake",
+            "healthcare and senior care",
+            "education",
+            "SaaS and B2B",
+            "weddings and events",
+            "real estate",
+            "automotive",
+            "travel",
+            "local metros",
+        ],
+    },
+    IdeaCategory.FLIPPING_ARBITRAGE: {
+        "description": (
+            "Buy low, sell high, with a data edge — marketplace mispricing "
+            "scanners, fee-true ROI calculators, refurb-flip evaluators, "
+            "domain and micro-site screeners. The software finds the spread "
+            "humans miss; the cash cycle is days to weeks. Folding cash in "
+            "its most literal form."
+        ),
+        "seed_concepts": [
+            "marketplace undervaluation scanner that flags listings priced below resale comps",
+            "retail-clearance-to-online arbitrage scanner with fee-adjusted ROI per barcode",
+            "used-camera-gear price-gap tracker across resale platforms",
+            "expired-domain hunter scoring backlink value against auction price",
+            "collectible price-spread monitor with liquidity scoring across resale venues",
+            "thrift-store book scanner with instant buyback and fulfillment margin lookup",
+            "estate-sale route optimizer with item-category value heat map",
+            "auction-lot analyzer that estimates resale value per lot from photos",
+            "broken-electronics repair-flip evaluator comparing part cost to refurbished resale",
+            "furniture-flip margin estimator with refinish cost model",
+            "micro-SaaS acquisition screener scoring listings on churn and traffic authenticity",
+            "seasonal-item storage arbitrage planner that buys off-season and sells at peak",
+            "regional price-gap finder for bulky goods across metro markets",
+            "pallet manifest decomposer that predicts part-out value before bidding",
+            "vintage video-game price tracker with lot-value decomposition",
+            "textbook buyback arbitrage scanner across buyback vendors by ISBN",
+            "open-box and refurb deal scanner across retailer outlets with resale comps",
+            "brick-set retirement tracker predicting post-retirement appreciation",
+            "misspelled-listing finder that surfaces underpriced auctions",
+            "e-waste part-out calculator with live scrap and component pricing",
+            "sneaker and streetwear bid-ask dashboard with fee-true net-out per size",
+            "local-pickup deal radius alert that pings when a flip-worthy listing posts nearby",
+        ],
+        "domains_to_cross": [
+            "eBay resellers",
+            "Amazon FBA sellers",
+            "thrift flippers",
+            "estate-sale hunters",
+            "refurb technicians",
+            "furniture flippers",
+            "domain investors",
+            "micro-acquisition buyers",
+            "pallet and liquidation buyers",
+            "collectors",
+            "local pickup-and-ship operators",
+            "e-waste recyclers",
+        ],
+    },
 }
 
 

@@ -303,6 +303,10 @@ class Database:
             # v0.18 — Missions (#84): link an idea to the operator directive
             # it was generated against. NULL for the engine's own rotation.
             "ALTER TABLE ideas ADD COLUMN mission_id TEXT",
+            # v0.20 — Cashflow board (#96): time-to-first-dollar axis
+            # (parallel to fundability/ambition/snipe). NULL outside the
+            # cashflow categories. Sorted DESC on /cashflow.
+            "ALTER TABLE ideas ADD COLUMN cashflow_score REAL",
         ):
             try:
                 await self._db.execute(stmt)
@@ -372,8 +376,8 @@ class Database:
                  feasibility_score, mvp_scope, tech_stack, generated_at, status,
                  github_issue_url, project_repo_url, content_hash, source_url,
                  generation_mode, fundability_score, auto_promoted_at, ambition_score,
-                artifact_type, snipe_score, target_incumbent, mission_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                artifact_type, snipe_score, target_incumbent, mission_id, cashflow_score)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     idea.id,
                     idea.name,
@@ -398,6 +402,7 @@ class Database:
                     getattr(idea, "snipe_score", None),
                     getattr(idea, "target_incumbent", None),
                     getattr(idea, "mission_id", None),
+                    getattr(idea, "cashflow_score", None),
                 ),
             )
             await self.db.commit()
@@ -1463,6 +1468,7 @@ class Database:
             snipe_score=(row["snipe_score"] if "snipe_score" in keys else None),
             target_incumbent=(row["target_incumbent"] if "target_incumbent" in keys else None),
             mission_id=(row["mission_id"] if "mission_id" in keys else None),
+            cashflow_score=(row["cashflow_score"] if "cashflow_score" in keys else None),
         )
 
     # === RESOURCE CRUD ===

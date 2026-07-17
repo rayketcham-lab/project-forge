@@ -25,6 +25,7 @@
                 <a href="/claude-lab" class="nav-link nav-link-frontier {% if request.url.path == '/claude-lab' %}active{% endif %}">Claude Lab</a>
                 <a href="/sniper" class="nav-link nav-link-snipe {% if request.url.path == '/sniper' %}active{% endif %}">Sniper</a>
                 <a href="/crypto" class="nav-link nav-link-crypto {% if request.url.path == '/crypto' %}active{% endif %}">Crypto</a>
+                <a href="/cashflow" class="nav-link nav-link-cash {% if request.url.path == '/cashflow' %}active{% endif %}">Cashflow</a>
                 <a href="/missions" class="nav-link {% if request.url.path == '/missions' %}active{% endif %}">Missions</a>
                 <a href="/labs" class="nav-link nav-link-labs {% if request.url.path in ['/labs', '/scoreboard', '/foundry', '/pulse', '/cartographer', '/killboard'] %}active{% endif %}">Labs</a>
                 <a href="/projects" class="nav-link {% if request.url.path == '/projects' %}active{% endif %}">Projects</a>
@@ -48,7 +49,7 @@
     </main>
     <footer class="footer">
         <div class="container">
-            <p>Project Forge v0.18 &mdash; autonomous, human-driven idea engine</p>
+            <p>Project Forge v{{ forge_version }} &mdash; autonomous, human-driven idea engine</p>
             <p class="footer-links">
                 <a href="https://github.com/rayketcham/project-forge" target="_blank">GitHub</a>
                 <span>&middot;</span>

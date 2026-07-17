@@ -27,6 +27,9 @@ STATIC_DIR = WEB_DIR / "static"
 
 db = Database(settings.db_path)
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+# Version SSOT (#82): the footer renders {{ forge_version }} from
+# __version__ so template text can never drift from the package version.
+templates.env.globals["forge_version"] = __version__
 
 # Ephemeral dashboard token — fresh on each MACHINE BOOT but stable across
 # process restarts and uvicorn --reload re-imports within a boot. Three

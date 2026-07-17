@@ -64,6 +64,18 @@ class IdeaCategory(StrEnum):
     DEFI_TOOLING = "defi-tooling"
     STABLECOIN_PAYMENTS = "stablecoin-payments"
     CRYPTO_COMPLIANCE = "crypto-compliance"
+    # v0.20 Cashflow board — folding-cash plays. Where the money categories
+    # pitch fundable products, these pitch capital-light systems with the
+    # shortest path to actual dollars: productized expertise (the operator's
+    # PKI edge), build-once digital assets, lean commerce operations
+    # (dropshipping done honestly), lead-gen assets, and data-edge flipping.
+    # Ranked by their own axis (cashflow_score), not fundability, whose
+    # recurring-SaaS bias mis-ranks exactly these shapes.
+    PRODUCTIZED_SERVICES = "productized-services"
+    DIGITAL_PRODUCTS = "digital-products"
+    COMMERCE_OPS = "commerce-ops"
+    LEAD_GENERATION = "lead-generation"
+    FLIPPING_ARBITRAGE = "flipping-arbitrage"
 
 
 # --------------------------------------------------------------------------- #
@@ -123,6 +135,18 @@ CRYPTO_CATEGORIES: tuple["IdeaCategory", ...] = (
     IdeaCategory.CRYPTO_COMPLIANCE,
 )
 
+# v0.20 Cashflow board — the folding-cash grouping. Scored by cashflow_score
+# (time-to-first-dollar + capital required), a separate axis from
+# fundability. Disjoint from every other board so /cashflow stays its own
+# clean surface.
+CASHFLOW_CATEGORIES: tuple["IdeaCategory", ...] = (
+    IdeaCategory.PRODUCTIZED_SERVICES,
+    IdeaCategory.DIGITAL_PRODUCTS,
+    IdeaCategory.COMMERCE_OPS,
+    IdeaCategory.LEAD_GENERATION,
+    IdeaCategory.FLIPPING_ARBITRAGE,
+)
+
 
 IdeaStatus = Literal["new", "approved", "scaffolded", "rejected", "archived", "contributed", "implemented"]
 
@@ -180,6 +204,11 @@ class Idea(BaseModel):
     # generated against. None for everything the engine dreamt up on its
     # own rotation. Powers the per-mission grids on /missions.
     mission_id: str | None = None
+    # v0.20 Cashflow board (#96) — how fast this idea turns into actual
+    # dollars, with how little capital. fundability asks "can we sell it";
+    # cashflow asks "how soon is the first invoice". Sorted DESC on
+    # /cashflow; None for ideas outside the board (or predating the axis).
+    cashflow_score: float | None = None
 
 
 MissionStatus = Literal["active", "paused", "archived"]

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Cashflow - Project Forge{% endblock %}
+
+{% block content %}
+<div id="cashflow-root" data-category-filter="{{ category_filter or '' }}"></div>
+<section class="page-header">
+    <div class="container">
+        <h1>&#128181; Cashflow</h1>
+        <p class="page-subtitle">
+            {{ total }} folding-cash ideas across {{ categories|length }} categories &mdash;
+            productized services, digital products, lean commerce ops, lead gen, and
+            data-edge flipping &mdash; sorted by <strong>cashflow score</strong>: how fast
+            the idea turns into actual dollars, with how little capital. Where Money Bots
+            hunt fundable products, this board hunts the shortest path to the first invoice.
+        </p>
+        <div class="churn-row">
+            <button id="churn-btn" class="btn btn-primary btn-churn" type="button">
+                <span class="churn-icon">&#9889;</span>
+                <span class="churn-label">Churn Now</span>
+            </button>
+            <div id="churn-status" class="churn-status"></div>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+
+        <div class="filters-bar">
+            <div class="filter-row">
+                <span class="filter-row-label">Category</span>
+                <div class="filter-chips">
+                    <a href="/cashflow" class="chip {% if not category_filter %}chip-active{% endif %}">All</a>
+                    {% for cat in categories %}
+                    <a href="/cashflow?category={{ cat }}"
+                       class="chip {% if category_filter == cat %}chip-active{% endif %}">
+                        {{ cat }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        {% if ideas %}
+        <div class="moneybot-grid">
+            {% for idea in ideas %}
+            <div class="moneybot-card" data-idea-id="{{ idea.id }}"
+                 data-idea-name="{{ idea.name }}"
+                 data-idea-tagline="{{ idea.tagline }}"
+                 data-cashflow-score="{{ idea.cashflow_score or '' }}"
+                 data-feasibility-score="{{ idea.feasibility_score }}"
+                 data-generation-mode="{{ idea.generation_mode or '' }}">
+                <button class="idea-reject-btn" type="button" title="Reject this idea">&times;</button>
+                <div class="moneybot-card-body-wrap">
+                    <div class="moneybot-card-head">
+                        <span class="fundability-badge fundability-{{ ((idea.cashflow_score or 0) * 10) | int }}"
+                              title="Cashflow score — time to first dollar">
+                            {{ "%.2f"|format(idea.cashflow_score or 0) }}
+                        </span>
+                        {% if idea.auto_promoted_at and idea.status == 'approved' %}
+                            <span class="status-pill status-promoted">&#10003; promoted</span>
+                        {% else %}
+                            <span class="status-pill status-{{ idea.status }}">{{ idea.status }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="moneybot-card-body">
+                        <div class="moneybot-name">{{ idea.name }}</div>
+                        <div class="moneybot-tagline">{{ idea.tagline }}</div>
+                    </div>
+                </div>
+                <div class="moneybot-card-foot">
+                    <code class="cat-tag">{{ idea.category.value }}</code>
+                    {% if idea.generation_mode %}
+                        <span class="mode-pill mode-{{ idea.generation_mode }}">{{ idea.generation_mode }}</span>
+                    {% else %}
+                        <span class="mode-pill mode-template">template</span>
+                    {% endif %}
+                    {% if idea.github_issue_url %}
+                        <a href="{{ idea.github_issue_url }}" target="_blank" rel="noopener" class="moneybot-issue">issue &#8599;</a>
+                    {% else %}
+                        <button class="promote-btn" data-idea-id="{{ idea.id }}" type="button" title="File a GitHub issue with the full MVP spec for this idea">Promote &#10142;</button>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No scored cashflow ideas yet. The cashflow scorer runs daily &mdash; or hit <strong>Churn Now</strong> above.</p>
+        </div>
+        {% endif %}
+
+    </div>
+</section>
+
+<script src="/static/cashflow.js?v=1"></script>
+{% endblock %}
