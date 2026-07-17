@@ -218,18 +218,14 @@ class TestCashflowHeuristic:
         from project_forge.engine.cashflow import score_cashflow_heuristic
 
         without = score_cashflow_heuristic(_cash_idea())
-        with_pay = score_cashflow_heuristic(
-            _cash_idea(description="Clients pay a deposit and an invoice at kickoff.")
-        )
+        with_pay = score_cashflow_heuristic(_cash_idea(description="Clients pay a deposit and an invoice at kickoff."))
         assert with_pay > without
 
     def test_low_capital_bump(self):
         from project_forge.engine.cashflow import score_cashflow_heuristic
 
         without = score_cashflow_heuristic(_cash_idea())
-        with_cap = score_cashflow_heuristic(
-            _cash_idea(description="No inventory and no ad spend required to start.")
-        )
+        with_cap = score_cashflow_heuristic(_cash_idea(description="No inventory and no ad spend required to start."))
         assert with_cap > without
 
     def test_builtin_demand_marketplace_bump(self):
