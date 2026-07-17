@@ -811,7 +811,11 @@ async def api_churn(request: Request):
     if cat_str in allowed:
         category = IdeaCategory(cat_str)
     else:
-        category = IdeaCategory(_random.choice(allowed))
+        # v0.21 (#97): auto-pick is inverse-density weighted — a crowded
+        # category stops out-drawing the board's white space.
+        from project_forge.engine.saturation import pick_weighted_category
+
+        category = await pick_weighted_category(db, [IdeaCategory(c) for c in allowed], rng=_random)
 
     # Generate. Snipe has its own grounded path; the others share one.
     if lab == "snipe":

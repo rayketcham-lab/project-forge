@@ -34,11 +34,14 @@ logger = logging.getLogger(__name__)
 
 # --- Thresholds ------------------------------------------------------------ #
 
-# Categories with active ideas below this count are white space.
-WHITE_SPACE_THRESHOLD: int = 5
-
-# Categories with active ideas at or above this count are cluster-heavy.
-SATURATION_COUNT_THRESHOLD: int = 20
+# v0.21 (#97): the count thresholds and the per-category density aggregate
+# moved to engine/saturation.py — the shared source of truth the generation
+# loop also consumes — and are re-exported here for back-compat.
+from project_forge.engine.saturation import (  # noqa: E402
+    SATURATION_COUNT_THRESHOLD,
+    WHITE_SPACE_THRESHOLD,
+    category_density,
+)
 
 # Categories whose 30-day rejection rate exceeds this fraction are also
 # flagged saturated even if their raw count is modest (ideas keep getting
@@ -77,15 +80,9 @@ async def build_atlas(db: Database) -> dict[str, Any]:
       recommended_next_bet str             -- highest-priority white space pick
       generated_at      str                -- ISO timestamp of this run
     """
-    # 1. Per-category active idea counts.
-    cursor = await db.db.execute(
-        "SELECT category, COUNT(*) AS n FROM ideas WHERE status NOT IN ('rejected', 'archived') GROUP BY category"
-    )
-    rows = await cursor.fetchall()
-    counts: dict[str, int] = {row[0]: int(row[1]) for row in rows}
-
-    # Ensure every IdeaCategory appears (zero if not present).
-    vertical_coverage: dict[str, int] = {cat.value: counts.get(cat.value, 0) for cat in IdeaCategory}
+    # 1. Per-category active idea counts — via the shared density source
+    #    (#97) so the atlas and the generation loop can't drift.
+    vertical_coverage: dict[str, int] = await category_density(db)
 
     # 2. Rejection rates from telemetry (30-day window, category-keyed).
     try:

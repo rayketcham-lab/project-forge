@@ -13,6 +13,7 @@ from project_forge.engine.categories import CATEGORY_SEEDS
 from project_forge.engine.dedup import filter_and_save
 from project_forge.engine.llm_generator import generate_idea_llm
 from project_forge.engine.quality_review import review_idea
+from project_forge.engine.saturation import category_density, rank_pair_score
 from project_forge.engine.super_ideas import SuperIdeaGenerator, pick_least_covered_slot
 from project_forge.models import Idea, IdeaCategory
 from project_forge.storage.db import Database
@@ -26,8 +27,14 @@ async def pick_cross_category_pair(
 ) -> tuple[IdeaCategory, IdeaCategory]:
     """Pick the least-explored category pair for cross-pollination.
 
-    Returns two different IdeaCategory values, targeting pairs
-    that have been explored the fewest times.
+    Returns two different IdeaCategory values, targeting pairs that have
+    been explored the fewest times. v0.21 (#97): within an exploration
+    tier, corpus DENSITY breaks the tie — `rank_pair_score` keeps the
+    integer explored-count as the dominant term and adds a strict-fraction
+    density term, so a crowded pair can never outrank a thinner pair that
+    has been explored less, but among equally-explored pairs the thinnest
+    zones win. That's what points the hourly expand cadence at white space
+    instead of re-treading 190-idea categories.
     """
     excluded_normalized = set()
     if exclude:
@@ -35,21 +42,27 @@ async def pick_cross_category_pair(
             pair = tuple(sorted([a.value, b.value]))
             excluded_normalized.add(pair)
 
-    pairs = await db.get_least_explored_pairs(limit=66)
+    pairs = await db.get_least_explored_pairs(limit=10_000)
 
     # Self-improvement ideas come ONLY from the introspection engine (concrete,
     # grounded code tasks). Never let cross-category generation bridge into it —
     # that produced garbled "Dashboard UX Improvements for Performance" noise.
     si = IdeaCategory.SELF_IMPROVEMENT.value
-    for cat_a_val, cat_b_val, _count in pairs:
+    density = await category_density(db)
+    best: tuple[float, str, str] | None = None
+    for cat_a_val, cat_b_val, count in pairs:
         if si in (cat_a_val, cat_b_val):
             continue
-        pair = (cat_a_val, cat_b_val)
-        if pair in excluded_normalized:
+        if (cat_a_val, cat_b_val) in excluded_normalized:
             continue
-        return IdeaCategory(cat_a_val), IdeaCategory(cat_b_val)
+        score = rank_pair_score(count, density.get(cat_a_val, 0), density.get(cat_b_val, 0))
+        key = (score, cat_a_val, cat_b_val)  # stable, deterministic tiebreak
+        if best is None or key < best:
+            best = key
+    if best is not None:
+        return IdeaCategory(best[1]), IdeaCategory(best[2])
 
-    # Fallback: random pair (should never reach here with 66 pairs)
+    # Fallback: random pair (should never reach here with 600+ pairs)
     cats = [c for c in IdeaCategory if c != IdeaCategory.SELF_IMPROVEMENT]
     a, b = random.sample(cats, 2)
     return a, b

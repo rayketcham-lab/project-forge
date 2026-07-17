@@ -422,8 +422,13 @@ async def _fire_fundability_score(db: Database) -> None:
     catch up over multiple ticks instead.
     """
     from project_forge.engine.fundability import score_pending_ideas
+    from project_forge.engine.llm_backend import resolve_cheap_backend
 
-    result = await score_pending_ideas(db, limit=5)
+    # v0.21 (#97): keyless deployments burst — the heuristic is instant, so
+    # the small batch only exists to bound the LLM tie-break time. With a
+    # backend present the writer-lock discipline above still applies.
+    limit = 5 if resolve_cheap_backend() is not None else 200
+    result = await score_pending_ideas(db, limit=limit)
     logger.info("Fundability cycle scored %d ideas", result.get("scored", 0))
 
 
@@ -435,8 +440,11 @@ async def _fire_cashflow_score(db: Database) -> None:
     holding the writer for minutes.
     """
     from project_forge.engine.cashflow import score_pending_cashflow
+    from project_forge.engine.llm_backend import resolve_cheap_backend
 
-    result = await score_pending_cashflow(db, limit=5)
+    # v0.21 (#97): same adaptive batch as the fundability runner.
+    limit = 5 if resolve_cheap_backend() is not None else 200
+    result = await score_pending_cashflow(db, limit=limit)
     logger.info("Cashflow cycle scored %d ideas", result.get("scored", 0))
 
 

@@ -50,6 +50,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from project_forge.engine.llm_backend import LLMBackend, resolve_cheap_backend
+from project_forge.engine.saturation import density_prompt_block
 from project_forge.models import Idea, IdeaCategory
 from project_forge.storage.db import Database
 
@@ -620,9 +621,13 @@ def _build_prompt(
     avoid_list: list[str],
     artifact_type: str | None = None,
     seed: str | None = None,
+    density_block: str | None = None,
 ) -> str:
     avoid_block = "\n".join(avoid_list) if avoid_list else "(none yet)"
     seed_block = f"## Fresh real-world signal to react to (anchor the idea to this)\n{seed}\n\n" if seed else ""
+    # v0.21 (#97): corpus-density section — crowded zones repel, white
+    # space attracts. Rendered by saturation.density_prompt_block.
+    density_section = f"{density_block}\n\n" if density_block else ""
 
     # Two prompt frames: the project-pitch (default — every category before
     # v0.15a used this) and the artifact-shape pitch (Claude Lab categories).
@@ -643,6 +648,7 @@ def _build_prompt(
         f"## Generation mode: {mode}\n{_MODE_PROMPTS[mode]}\n\n"
         f"{artifact_block}"
         f"{seed_block}"
+        f"{density_section}"
         f"## Do NOT produce anything resembling these recent ideas\n"
         f"(no renames, no verb-tense variants, no 'X for {{vertical}}' clones):\n"
         f"{avoid_block}\n\n"
@@ -738,8 +744,20 @@ async def generate_idea_llm(
         artifact_type = await pick_least_used_artifact(db, category)
 
     persona = _pick_persona(category)
-    avoid = await _recent_idea_lines(db, category)
-    prompt = _build_prompt(category, mode, persona, avoid, artifact_type=artifact_type, seed=seed)
+    # v0.21 (#97): recent avoid-list shrinks 30 -> 15 to make room for the
+    # density block — which carries the DENSE stems the recency window
+    # misses (a 191-idea category used to look identical to a 31-idea one).
+    avoid = await _recent_idea_lines(db, category, limit=15)
+    density_block = await density_prompt_block(db, category)
+    prompt = _build_prompt(
+        category,
+        mode,
+        persona,
+        avoid,
+        artifact_type=artifact_type,
+        seed=seed,
+        density_block=density_block,
+    )
 
     raw = backend.call(prompt) or ""
     if not raw.strip():

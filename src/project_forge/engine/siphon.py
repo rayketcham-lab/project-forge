@@ -17,11 +17,13 @@ are already archived (filtered out by the active-status guard).
 from __future__ import annotations
 
 import logging
+import os
 import re
 from collections import defaultdict
 from datetime import UTC, datetime
 
 from project_forge.engine.dedup import _normalize, tagline_similarity
+from project_forge.models import IdeaCategory
 from project_forge.storage.db import Database
 
 logger = logging.getLogger(__name__)
@@ -448,6 +450,121 @@ async def siphon_verticals(
 
 
 # --------------------------------------------------------------------------- #
+# Density thinning (#97)                                                      #
+# --------------------------------------------------------------------------- #
+
+
+# Per-category active cap for the density pass. The near-dupe siphons above
+# collapse PARAPHRASES; this pass thins DISTINCT-but-crowded zones the
+# pairwise thresholds can never reach (a 191-idea category of unique
+# micro-saas pitches contains few pairs above any similarity bar).
+DENSITY_CAP = int(os.environ.get("FORGE_DENSITY_CAP", "60"))
+
+
+def _density_composite(row) -> float:
+    """Keep-ranking for the density pass: the best signal we have about an
+    idea. Max board-axis score when any exists; otherwise feasibility
+    scaled down (template feasibility is uniform noise); small bonus for
+    LLM-mode ideas over template ones."""
+    axes = [
+        row["fundability_score"],
+        row["ambition_score"],
+        row["snipe_score"],
+        row["cashflow_score"],
+    ]
+    scored = [a for a in axes if a is not None]
+    base = max(scored) if scored else (row["feasibility_score"] or 0.0) * 0.85
+    if row["generation_mode"]:
+        base += 0.05
+    return base
+
+
+def _density_protected(row) -> bool:
+    """Rows the density pass must never archive: operator-touched lifecycle
+    states, operator-directed (mission) or operator-ingested (source_url)
+    ideas, anything ever promoted to GitHub, and super-ideas (they have
+    their own siphon)."""
+    return bool(
+        row["status"] != "new"
+        or row["mission_id"]
+        or row["source_url"]
+        or row["github_issue_url"]
+        or (row["name"] or "").startswith("[SUPER]")
+    )
+
+
+async def siphon_density(
+    db: Database,
+    *,
+    dry_run: bool = True,
+    cap: int | None = None,
+) -> dict:
+    """Thin every over-cap category down to `cap` active ideas, keeping
+    protected rows plus the best of the rest by `_density_composite`.
+    Victims get archived_reason='saturation_thin' — fully reversible via
+    `restore_dedup_archive`. SELF_IMPROVEMENT is exempt (introspection-
+    engine-managed, not a market category)."""
+    cap = DENSITY_CAP if cap is None else cap
+    cur = await db.db.execute(
+        "SELECT id, name, category, status, generated_at, generation_mode, "
+        "mission_id, source_url, github_issue_url, feasibility_score, "
+        "fundability_score, ambition_score, snipe_score, cashflow_score "
+        "FROM ideas WHERE status NOT IN ('archived', 'rejected')"
+    )
+    rows = await cur.fetchall()
+
+    by_category: dict[str, list] = defaultdict(list)
+    for row in rows:
+        by_category[row["category"]].append(row)
+
+    report_categories: list[dict] = []
+    planned_archive: list[str] = []
+    applied_ids: list[str] = []
+
+    for cat_value, members in sorted(by_category.items()):
+        if cat_value == IdeaCategory.SELF_IMPROVEMENT.value:
+            continue
+        if len(members) <= cap:
+            continue
+        protected = [r for r in members if _density_protected(r)]
+        pool = [r for r in members if not _density_protected(r)]
+        keep_n = max(0, cap - len(protected))
+        pool.sort(key=lambda r: (-_density_composite(r), r["generated_at"], r["id"]))
+        victims = pool[keep_n:]
+        if not victims:
+            continue
+        victim_ids = [r["id"] for r in victims]
+        planned_archive.extend(victim_ids)
+        report_categories.append(
+            {
+                "category": cat_value,
+                "active": len(members),
+                "protected": len(protected),
+                "kept": len(protected) + keep_n,
+                "archived_count": len(victim_ids),
+            }
+        )
+        if not dry_run:
+            now = datetime.now(UTC).isoformat()
+            for vid in victim_ids:
+                await db.db.execute(
+                    "UPDATE ideas SET status = 'archived', archived_reason = ?, archived_at = ? WHERE id = ?",
+                    ("saturation_thin", now, vid),
+                )
+                applied_ids.append(vid)
+            await db.db.commit()
+
+    return {
+        "dry_run": dry_run,
+        "cap": cap,
+        "categories": report_categories,
+        "archived_count": len(planned_archive),
+        "applied_count": len(applied_ids),
+        "archived_ids": planned_archive,
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Combined entrypoint                                                         #
 # --------------------------------------------------------------------------- #
 
@@ -461,9 +578,12 @@ async def siphon_all(
     super_overlap_min: int = 3,
     super_name_jaccard: float = 0.65,
     vertical_cap: int = 2,
+    density_cap: int | None = None,
 ) -> dict:
-    """Run all three siphons (atomic / super / vertical) and return a
-    combined report. Defaults are the aggressive one-shot trim profile."""
+    """Run all four siphons (atomic / super / vertical / density) and
+    return a combined report. Defaults are the aggressive one-shot trim
+    profile. Density runs LAST so paraphrase clusters collapse first and
+    the cap keeps the most diverse best-of-category set (#97)."""
     atomic = await siphon_duplicates(
         db,
         dry_run=dry_run,
@@ -477,16 +597,21 @@ async def siphon_all(
         name_jaccard=super_name_jaccard,
     )
     verticals = await siphon_verticals(db, dry_run=dry_run, cap=vertical_cap)
+    density = await siphon_density(db, dry_run=dry_run, cap=density_cap)
     return {
         "dry_run": dry_run,
         "atomic": atomic,
         "supers": supers,
         "verticals": verticals,
-        "total_archived": atomic["archived_count"] + supers["archived_count"] + verticals["archived_count"],
+        "density": density,
+        "total_archived": atomic["archived_count"]
+        + supers["archived_count"]
+        + verticals["archived_count"]
+        + density["archived_count"],
     }
 
 
-_DEDUP_REASONS = ("retroactive_dedup", "super_overlap", "vertical_cap")
+_DEDUP_REASONS = ("retroactive_dedup", "super_overlap", "vertical_cap", "saturation_thin")
 
 
 async def restore_dedup_archive(
