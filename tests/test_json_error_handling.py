@@ -168,6 +168,85 @@ class TestGlobalExceptionHandlerReturnsJSON:
         assert "detail" in body
 
 
+class TestGlobalExceptionHandlerDoesNotLeakDetail:
+    """The 500 body must be a fixed generic string — never the exception text.
+
+    str(exc) can carry SQLite column/table names, filesystem paths, and library
+    internals. The full detail belongs in the server log, not in the response.
+    """
+
+    LEAK = "no such column: ideas.secret_internal_column /srv/forge/data/forge.db"
+
+    @pytest.mark.asyncio
+    async def test_post_500_body_is_generic(self, client):
+        """A POST 500 must return exactly the generic detail, not str(exc)."""
+        with patch(
+            "project_forge.web.routes.ingest_idea_from_url",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError(self.LEAK),
+        ):
+            resp = await client.post(
+                "/api/ideas/from-url",
+                json={"url": "https://example.com/article"},
+            )
+        assert resp.status_code == 500
+        assert resp.json() == {"detail": "Internal server error"}
+        assert self.LEAK not in resp.text
+
+    @pytest.mark.asyncio
+    async def test_unauthenticated_get_500_body_is_generic(self, client):
+        """GET is exempt from bearer auth — its 500s must not leak internals either."""
+        with patch(
+            "project_forge.engine.scoreboard.build_calibration",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError(self.LEAK),
+        ):
+            resp = await client.get("/api/scoreboard")
+        assert resp.status_code == 500
+        assert resp.json() == {"detail": "Internal server error"}
+        assert "secret_internal_column" not in resp.text
+
+    @pytest.mark.asyncio
+    async def test_empty_exception_message_still_generic(self, client):
+        """An exception with no message must still produce the generic detail."""
+        with patch(
+            "project_forge.web.routes.ingest_idea_from_url",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError(),
+        ):
+            resp = await client.post(
+                "/api/ideas/from-url",
+                json={"url": "https://example.com/article"},
+            )
+        assert resp.status_code == 500
+        assert resp.json() == {"detail": "Internal server error"}
+
+    @pytest.mark.asyncio
+    async def test_handler_still_logs_full_detail(self, client, caplog):
+        """logger.exception must keep the real error server-side for debugging."""
+        import logging
+
+        with caplog.at_level(logging.ERROR, logger="project_forge.web.app"):
+            with patch(
+                "project_forge.web.routes.ingest_idea_from_url",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError(self.LEAK),
+            ):
+                resp = await client.post(
+                    "/api/ideas/from-url",
+                    json={"url": "https://example.com/article"},
+                )
+        assert resp.status_code == 500
+        assert self.LEAK in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_http_exception_detail_still_passes_through(self, client):
+        """Deliberate HTTPException details are still surfaced — only 500s are masked."""
+        resp = await client.post("/api/ideas/no-such-idea-xyz/challenge", json={"question": "?"})
+        assert resp.status_code in (404, 422)
+        assert resp.json()["detail"] != "Internal server error"
+
+
 class TestAppJSSafeJsonHelper:
     """app.js must define safeJson() and use it at all error-path .json() calls."""
 

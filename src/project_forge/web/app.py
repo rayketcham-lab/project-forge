@@ -162,10 +162,14 @@ app.include_router(router)
 
 @app.exception_handler(Exception)
 async def _generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    # Full detail goes to the server log only. The response body stays a fixed
+    # generic string so unhandled errors can't leak internals (SQLite column/table
+    # names, filesystem paths, library messages) to whoever triggered the 500 —
+    # including unauthenticated GET callers, which BearerTokenMiddleware lets through.
     logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=500,
-        content={"detail": str(exc) or "Internal server error"},
+        content={"detail": "Internal server error"},
     )
 
 
