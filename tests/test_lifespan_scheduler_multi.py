@@ -23,6 +23,7 @@ The four added cadences and their watermarks:
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
@@ -327,9 +328,13 @@ class TestSelfImproveCadence:
         from project_forge.web import lifespan_scheduler
 
         called = AsyncMock(return_value={"processed": 0, "results": []})
-        with patch(
-            "project_forge.cron.self_improve_runner.run_self_improve_cycle",
-            called,
+        # #99: the cadence is disarmed by default — arm it so it invokes.
+        with (
+            patch.dict(os.environ, {"FORGE_SELF_IMPROVE_ENABLED": "1"}),
+            patch(
+                "project_forge.cron.self_improve_runner.run_self_improve_cycle",
+                called,
+            ),
         ):
             await lifespan_scheduler._fire_self_improve(db)
         called.assert_awaited_once_with()
@@ -341,9 +346,13 @@ class TestSelfImproveCadence:
         async def _boom():
             raise RuntimeError("github down")
 
-        with patch(
-            "project_forge.cron.self_improve_runner.run_self_improve_cycle",
-            _boom,
+        # #99: arm the cadence so the runner (and its exception) is reached.
+        with (
+            patch.dict(os.environ, {"FORGE_SELF_IMPROVE_ENABLED": "1"}),
+            patch(
+                "project_forge.cron.self_improve_runner.run_self_improve_cycle",
+                _boom,
+            ),
         ):
             await lifespan_scheduler._fire_self_improve(db)
 

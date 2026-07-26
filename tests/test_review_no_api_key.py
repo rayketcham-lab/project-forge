@@ -234,10 +234,14 @@ class TestSIRunnerNoKey:
             patch("project_forge.cron.self_improve_runner.settings") as mock_settings,
             patch("project_forge.cron.self_improve_runner.fetch_ci_queue_issues", return_value=fake_issues),
             patch("project_forge.cron.self_improve_runner.gather_self_context", return_value={}),
+            # #99: no key AND no `claude` CLI = the true no-Claude path → skip.
+            # With the subscription CLI present the loop now proceeds; that
+            # path is covered in test_mechanic_foundation.py.
+            patch("project_forge.engine.llm_backend.resolve_backend", return_value=None),
         ):
             mock_settings.anthropic_api_key = ""
             mock_settings.anthropic_model = "claude-sonnet-4-20250514"
             result = await run_self_improve_cycle()
 
-        # Should skip, not crash
+        # Should skip cleanly, not crash
         assert result["results"][0]["status"] == "skipped"

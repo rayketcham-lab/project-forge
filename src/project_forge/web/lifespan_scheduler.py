@@ -374,13 +374,27 @@ async def _fire_review(db: Database) -> None:
     )
 
 
+def _self_improve_armed() -> bool:
+    """The autonomous self-improve loop writes code and opens PRs, so it is
+    DISARMED by default (#99). It fires only when FORGE_SELF_IMPROVE_ENABLED
+    is truthy — the deliberate arm step. Shipping the capability must never
+    start an unattended code-modifying loop on the next uvicorn reload."""
+    import os
+
+    return os.environ.get("FORGE_SELF_IMPROVE_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 async def _fire_self_improve(db: Database) -> None:
-    """Run one self-improve cycle. No-ops cleanly without an API key.
+    """Run one self-improve cycle IF armed (#99). No-ops when disarmed.
 
     The runner is GitHub-driven (ci-queue label) so it ignores `db`.
     Errors are swallowed at this layer so the supervisor's child-loop
     `except Exception` never trips for a transient GitHub outage.
     """
+    if not _self_improve_armed():
+        logger.debug("self-improve cadence disarmed (FORGE_SELF_IMPROVE_ENABLED unset)")
+        return
+
     from project_forge.cron.self_improve_runner import run_self_improve_cycle
 
     try:

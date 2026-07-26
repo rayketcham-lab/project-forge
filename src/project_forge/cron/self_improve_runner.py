@@ -44,28 +44,44 @@ def _run_cmd(cmd: list[str], cwd: str | None = None) -> tuple[int, str]:
 def _call_claude(prompt: str) -> str:
     """Send a prompt to Claude and return the raw text response.
 
-    Raises ValueError if the response is empty or truncated.
+    #99 — prefers a configured API key (deterministic model + system
+    prompt); otherwise falls back to the Claude Code SUBSCRIPTION via
+    ClaudeCodeBackend (`claude --print`) so the implement loop works on
+    Pro/Max with no API key — the same backend the generation half already
+    uses. Raises ValueError on an empty/failed response so the caller
+    reverts cleanly.
     """
-    key = settings.anthropic_api_key
-    if not key:
-        import os
+    import os
 
-        key = os.environ.get("ANTHROPIC_API_KEY", "")
-    client = anthropic.Anthropic(api_key=key)
-    response = client.messages.create(
-        model=settings.anthropic_model,
-        max_tokens=8192,
-        system=(
-            "You are a senior Python developer improving the Project Forge codebase. "
-            "Respond ONLY with valid JSON in the specified format. No markdown wrapping."
-        ),
-        messages=[{"role": "user", "content": prompt}],
+    key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+    system = (
+        "You are a senior Python developer improving the Project Forge codebase. "
+        "Respond ONLY with valid JSON in the specified format. No markdown wrapping."
     )
-    if not response.content:
-        raise ValueError("Claude returned empty response")
-    if response.stop_reason == "max_tokens":
-        raise ValueError("Claude response truncated (max_tokens reached)")
-    return response.content[0].text
+    if key:
+        client = anthropic.Anthropic(api_key=key)
+        response = client.messages.create(
+            model=settings.anthropic_model,
+            max_tokens=8192,
+            system=system,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        if not response.content:
+            raise ValueError("Claude returned empty response")
+        if response.stop_reason == "max_tokens":
+            raise ValueError("Claude response truncated (max_tokens reached)")
+        return response.content[0].text
+
+    # No API key → subscription (Pro/Max) via the Claude Code CLI backend.
+    from project_forge.engine.llm_backend import resolve_backend
+
+    backend = resolve_backend()
+    if backend is None:
+        raise ValueError("No Claude backend available (no API key, no `claude` CLI on PATH)")
+    text = backend.call(f"{system}\n\n{prompt}")
+    if not text or not text.strip():
+        raise ValueError(f"Empty response from subscription backend {backend.name}")
+    return text
 
 
 def _git_checked(args: list[str], cwd: str) -> str:
@@ -240,8 +256,16 @@ _BLOCKED_FILES = (
     "src/project_forge/config.py",
     "src/project_forge/web/app.py",
     "src/project_forge/storage/db.py",
+    # #99 — the self-improver must never edit its own code or the mechanic
+    # that drives it. A self-modifier that can rewrite its own guardrails
+    # (the allow/block-list, the kill-switch check) voids every other
+    # guardrail — this is the one exclusion that makes the rest trustworthy.
+    "src/project_forge/cron/self_improve_runner.py",
+    "src/project_forge/engine/mechanic.py",
 )
-_BLOCKED_PATTERNS = (".github/", ".env", ".bashrc", ".profile", ".ssh/", "scripts/")
+# `.claude/` added (#99): settings.local.json holds the permission allow/deny
+# the headless agent runs under — off-limits to the agent it governs.
+_BLOCKED_PATTERNS = (".github/", ".env", ".bashrc", ".profile", ".ssh/", "scripts/", ".claude/")
 
 
 def _validate_path(change_path: str, root: Path) -> Path:
@@ -411,27 +435,31 @@ async def run_self_improve_cycle() -> dict:
         logger.info("No ci-queue issues found. Nothing to do.")
         return {"processed": 0, "results": []}
 
-    # Check for API key — SI requires Claude to generate code
+    # Reachable Claude required — an API key OR the subscription CLI backend
+    # (#99). Only skip when NEITHER is available, so Pro/Max boxes (no key,
+    # `claude` on PATH) now proceed instead of no-op'ing forever.
     import os
 
     key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
     if not key:
-        logger.warning(
-            "No API key configured — skipping %d ci-queue issues. "
-            "Self-improvement requires a Claude API key to generate code changes.",
-            len(issues),
-        )
-        return {
-            "processed": len(issues),
-            "results": [
-                {
-                    "issue": i.get("number", 0),
-                    "status": "skipped",
-                    "detail": "No API key — self-improvement requires Claude.",
-                }
-                for i in issues
-            ],
-        }
+        from project_forge.engine.llm_backend import resolve_backend
+
+        if resolve_backend() is None:
+            logger.warning(
+                "No Claude backend (no API key, no `claude` CLI) — skipping %d ci-queue issues.",
+                len(issues),
+            )
+            return {
+                "processed": len(issues),
+                "results": [
+                    {
+                        "issue": i.get("number", 0),
+                        "status": "skipped",
+                        "detail": "No Claude backend available (no API key, no `claude` CLI).",
+                    }
+                    for i in issues
+                ],
+            }
 
     context = gather_self_context()
     results = []
