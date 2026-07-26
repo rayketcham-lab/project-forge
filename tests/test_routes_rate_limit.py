@@ -126,6 +126,60 @@ class TestIngestRateLimit:
         assert statuses[0] == 200
 
 
+class TestRateLimitEviction:
+    """a2923634 — the store must not grow unbounded; fully-expired keys are
+    evicted so a long-running process doesn't leak an entry per client/action."""
+
+    def test_prune_drops_expired_keeps_fresh(self):
+        import time
+
+        from project_forge.web.routes import (
+            _RATE_LIMIT_WINDOW,
+            _prune_rate_limit_store,
+            _rate_limit_store,
+        )
+
+        now = time.monotonic()
+        _rate_limit_store["stale:1"] = [now - _RATE_LIMIT_WINDOW - 5]
+        _rate_limit_store["stale:2"] = [now - _RATE_LIMIT_WINDOW - 1, now - _RATE_LIMIT_WINDOW - 2]
+        _rate_limit_store["fresh:1"] = [now - 1]
+
+        _prune_rate_limit_store(now)
+
+        assert "stale:1" not in _rate_limit_store
+        assert "stale:2" not in _rate_limit_store
+        assert "fresh:1" in _rate_limit_store
+
+    def test_check_rate_limit_evicts_once_store_is_large(self):
+        import time
+
+        from project_forge.web import routes
+
+        now = time.monotonic()
+        for i in range(routes._RATE_LIMIT_PRUNE_THRESHOLD + 50):
+            routes._rate_limit_store[f"stale:{i}"] = [now - routes._RATE_LIMIT_WINDOW - 10]
+        before = len(routes._rate_limit_store)
+
+        routes._check_rate_limit("liveclient:probe")
+
+        after = len(routes._rate_limit_store)
+        assert after < before, "expired keys should have been evicted"
+        assert "liveclient:probe" in routes._rate_limit_store, "the live key must remain"
+
+    def test_active_limiting_still_enforced(self):
+        """Eviction must not weaken the limiter — a burst still trips 429."""
+        import pytest as _pytest
+        from fastapi import HTTPException
+
+        from project_forge.web.routes import _RATE_LIMIT_MAX, _check_rate_limit
+
+        for _ in range(_RATE_LIMIT_MAX):
+            _check_rate_limit("burst:client")
+        with _pytest.raises(HTTPException) as exc:
+            _check_rate_limit("burst:client")
+        assert exc.value.status_code == 429
+
+
 class TestRateLimitIsolation:
     @pytest.mark.asyncio
     async def test_unrelated_get_still_passes(self, client):
