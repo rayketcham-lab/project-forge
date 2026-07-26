@@ -2112,14 +2112,30 @@ class IssueReport(BaseModel):
 
 _RATE_LIMIT_WINDOW = 60
 _RATE_LIMIT_MAX = 5
+# Evict fully-expired keys once the store grows past this. Without it the
+# store leaks one dead entry for every (client-ip, action) pair ever seen —
+# unbounded growth in a long-running process (a2923634 "Prune Stale
+# Rate-Limit Keys").
+_RATE_LIMIT_PRUNE_THRESHOLD = 1024
 _rate_limit_store: dict[str, list[float]] = {}
+
+
+def _prune_rate_limit_store(now: float) -> None:
+    """Drop keys whose every timestamp has aged out of the window."""
+    stale = [key for key, ts in _rate_limit_store.items() if all(now - t >= _RATE_LIMIT_WINDOW for t in ts)]
+    for key in stale:
+        del _rate_limit_store[key]
 
 
 def _check_rate_limit(client_key: str) -> None:
     """Raise 429 if the client has exceeded the issue creation rate limit."""
     now = time.monotonic()
-    timestamps = _rate_limit_store.get(client_key, [])
-    timestamps = [t for t in timestamps if now - t < _RATE_LIMIT_WINDOW]
+    # Opportunistically evict expired keys so the store can't grow unbounded.
+    # Only sweeps when it has actually grown large, so the common path stays
+    # O(1).
+    if len(_rate_limit_store) > _RATE_LIMIT_PRUNE_THRESHOLD:
+        _prune_rate_limit_store(now)
+    timestamps = [t for t in _rate_limit_store.get(client_key, []) if now - t < _RATE_LIMIT_WINDOW]
     if len(timestamps) >= _RATE_LIMIT_MAX:
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again in a minute.")
     timestamps.append(now)
