@@ -137,12 +137,12 @@ class TestOrchestration:
         removed = {"n": 0}
 
         with (
-            patch.object(m, "_create_worktree", lambda branch: FAKE_WT),
+            patch.object(m, "_create_workspace", lambda branch: FAKE_WT),
             patch.object(m, "run_agent", lambda wt, prompt, **kw: _Proc(0)),
             patch.object(m, "_changed_paths", lambda wt: ["src/project_forge/engine/fundability.py"]),
             patch.object(m, "_quality_gate", lambda wt: (True, "ok")),
             patch.object(m, "_open_pr", lambda wt, branch, idea: "https://github.com/x/y/pull/9"),
-            patch.object(m, "_remove_worktree", lambda wt, branch: removed.__setitem__("n", removed["n"] + 1)),
+            patch.object(m, "_remove_workspace", lambda ws: removed.__setitem__("n", removed["n"] + 1)),
         ):
             result = await m.run_mechanic_cycle(db)
 
@@ -158,12 +158,12 @@ class TestOrchestration:
         pr_called = {"n": 0}
 
         with (
-            patch.object(m, "_create_worktree", lambda branch: FAKE_WT),
+            patch.object(m, "_create_workspace", lambda branch: FAKE_WT),
             patch.object(m, "run_agent", lambda wt, prompt, **kw: _Proc(0)),
             patch.object(m, "_changed_paths", lambda wt: ["src/project_forge/engine/x.py"]),
             patch.object(m, "_quality_gate", lambda wt: (False, "pytest failed: 3 errors")),
             patch.object(m, "_open_pr", lambda wt, branch, idea: pr_called.__setitem__("n", 1) or "url"),
-            patch.object(m, "_remove_worktree", lambda wt, branch: None),
+            patch.object(m, "_remove_workspace", lambda ws: None),
         ):
             result = await m.run_mechanic_cycle(db)
 
@@ -178,10 +178,10 @@ class TestOrchestration:
         gate_called = {"n": 0}
 
         with (
-            patch.object(m, "_create_worktree", lambda branch: FAKE_WT),
+            patch.object(m, "_create_workspace", lambda branch: FAKE_WT),
             patch.object(m, "run_agent", lambda wt, prompt, **kw: _Proc(1, stderr="boom")),
             patch.object(m, "_quality_gate", lambda wt: gate_called.__setitem__("n", 1) or (True, "ok")),
-            patch.object(m, "_remove_worktree", lambda wt, branch: None),
+            patch.object(m, "_remove_workspace", lambda ws: None),
         ):
             result = await m.run_mechanic_cycle(db)
 
@@ -194,10 +194,10 @@ class TestOrchestration:
 
         await db.save_idea(_si("Noop", content_hash="mech-noop"))
         with (
-            patch.object(m, "_create_worktree", lambda branch: FAKE_WT),
+            patch.object(m, "_create_workspace", lambda branch: FAKE_WT),
             patch.object(m, "run_agent", lambda wt, prompt, **kw: _Proc(0)),
             patch.object(m, "_changed_paths", lambda wt: []),
-            patch.object(m, "_remove_worktree", lambda wt, branch: None),
+            patch.object(m, "_remove_workspace", lambda ws: None),
         ):
             result = await m.run_mechanic_cycle(db)
         assert result.status == "no_change"
@@ -208,12 +208,12 @@ class TestOrchestration:
 
         await db.save_idea(_si("Sneaky", content_hash="mech-sneaky"))
         with (
-            patch.object(m, "_create_worktree", lambda branch: FAKE_WT),
+            patch.object(m, "_create_workspace", lambda branch: FAKE_WT),
             patch.object(m, "run_agent", lambda wt, prompt, **kw: _Proc(0)),
             # Agent tried to edit its own guardrail file.
             patch.object(m, "_changed_paths", lambda wt: ["src/project_forge/engine/mechanic.py"]),
             patch.object(m, "_quality_gate", lambda wt: (True, "ok")),
-            patch.object(m, "_remove_worktree", lambda wt, branch: None),
+            patch.object(m, "_remove_workspace", lambda ws: None),
         ):
             result = await m.run_mechanic_cycle(db)
         assert result.status == "gate_failed"
@@ -230,9 +230,9 @@ class TestOrchestration:
             raise RuntimeError("subprocess exploded")
 
         with (
-            patch.object(m, "_create_worktree", lambda branch: FAKE_WT),
+            patch.object(m, "_create_workspace", lambda branch: FAKE_WT),
             patch.object(m, "run_agent", _boom),
-            patch.object(m, "_remove_worktree", lambda wt, branch: removed.__setitem__("n", removed["n"] + 1)),
+            patch.object(m, "_remove_workspace", lambda ws: removed.__setitem__("n", removed["n"] + 1)),
         ):
             with pytest.raises(RuntimeError):
                 await m.run_mechanic_cycle(db)

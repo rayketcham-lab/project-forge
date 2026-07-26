@@ -21,7 +21,9 @@ from __future__ import annotations
 import logging
 import os
 import re
+import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -159,16 +161,28 @@ def _run(cmd: list[str], *, cwd: str | None = None, timeout: int = 120) -> subpr
     return subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, timeout=timeout)
 
 
-def _create_worktree(branch: str) -> Path:
-    """Throwaway git worktree on a fresh branch off main."""
-    wt = _PROJECT_ROOT / ".claude" / "worktrees" / branch.replace("/", "-")
-    _run(["git", "worktree", "add", "-B", branch, str(wt), "main"], cwd=str(_PROJECT_ROOT))
-    return wt
+def _create_workspace(branch: str) -> Path:
+    """Isolated workspace = a fresh local clone in a temp dir, on `branch`.
+
+    git worktrees are unavailable here — `.git/worktrees` is a read-only
+    mount — and a clone is stronger isolation anyway: it's a CLEAN checkout
+    of committed main (not the messy live tree the running server sits in),
+    so a bad agent run can't touch the live checkout at all. Origin is
+    repointed to the real GitHub remote so push + PR work.
+    """
+    ws = Path(tempfile.mkdtemp(prefix="mechanic-"))
+    _run(["git", "clone", "--quiet", str(_PROJECT_ROOT), str(ws)], timeout=300)
+    _run(["git", "checkout", "-B", branch], cwd=str(ws))
+    remote = _run(["git", "remote", "get-url", "origin"], cwd=str(_PROJECT_ROOT)).stdout.strip()
+    if remote:
+        _run(["git", "remote", "set-url", "origin", remote], cwd=str(ws))
+    return ws
 
 
-def _remove_worktree(wt: Path, branch: str) -> None:
-    _run(["git", "worktree", "remove", "--force", str(wt)], cwd=str(_PROJECT_ROOT))
-    _run(["git", "branch", "-D", branch], cwd=str(_PROJECT_ROOT))
+def _remove_workspace(ws: Path) -> None:
+    """Delete the throwaway clone. The mechanic branch lives only inside it
+    (plus, once pushed, on GitHub) — nothing to clean in the live repo."""
+    shutil.rmtree(ws, ignore_errors=True)
 
 
 def run_agent(worktree: Path, prompt: str, *, timeout: int = AGENT_TIMEOUT) -> subprocess.CompletedProcess:
@@ -184,8 +198,9 @@ def run_agent(worktree: Path, prompt: str, *, timeout: int = AGENT_TIMEOUT) -> s
     )
 
 
-def _changed_paths(worktree: Path) -> list[str]:
-    diff = _run(["git", "diff", "--name-only", "main"], cwd=str(worktree))
+def _changed_paths(workspace: Path) -> list[str]:
+    # Uncommitted working-tree changes the agent made (branch starts at main).
+    diff = _run(["git", "diff", "--name-only", "HEAD"], cwd=str(workspace))
     return [ln.strip() for ln in diff.stdout.splitlines() if ln.strip()]
 
 
@@ -247,7 +262,7 @@ async def run_mechanic_cycle(db: Database, *, exclude_ids: set[str] | None = Non
         return MechanicResult("", "", "no_work", detail="Think Tank queue empty")
 
     branch = f"mechanic/{idea.id}"
-    wt = _create_worktree(branch)
+    wt = _create_workspace(branch)
     try:
         proc = run_agent(wt, build_task_prompt(idea))
         if proc.returncode != 0:
@@ -269,4 +284,4 @@ async def run_mechanic_cycle(db: Database, *, exclude_ids: set[str] | None = Non
         logger.info("Mechanic opened PR for %s: %s", idea.name, pr_url)
         return MechanicResult(idea.id, idea.name, "pr_opened", pr_url=pr_url)
     finally:
-        _remove_worktree(wt, branch)
+        _remove_workspace(wt)
