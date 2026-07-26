@@ -54,17 +54,18 @@ AGENT_ALLOWED_TOOLS = [
     "Bash(ruff:*)",
 ]
 
-# The agent must never rewrite the mechanic, the runner, their guardrails,
-# CI, or the permission config — a self-modifier that edits its own leash
-# voids every other control.
+# The agent may never rewrite its OWN LEASH — the mechanic, the runner,
+# their review gate, CI, or the permission config. A self-modifier that can
+# edit those escapes review BEFORE the operator sees the PR, voiding every
+# other control. Everything else — including app.py / db.py / auth.py /
+# config.py — IS editable: those are legitimate targets for the security
+# backlog, and the PR review panel is the human gate on them.
 _FORBIDDEN_FILES = frozenset(
     {
         "src/project_forge/engine/mechanic.py",
+        "src/project_forge/engine/mechanic_review.py",
+        "src/project_forge/cron/mechanic_runner.py",
         "src/project_forge/cron/self_improve_runner.py",
-        "src/project_forge/config.py",
-        "src/project_forge/web/auth.py",
-        "src/project_forge/web/app.py",
-        "src/project_forge/storage/db.py",
     }
 )
 _FORBIDDEN_PREFIXES = (".github/", ".claude/", ".env", "scripts/")
@@ -136,9 +137,10 @@ def build_task_prompt(idea: Idea) -> str:
         "- Keep the change tightly scoped to this item — no drive-by refactors.\n"
         "- `python -m pytest tests/ -q`, `python -m ruff check src/ tests/`, and "
         "`python -m ruff format src/ tests/` MUST all pass when you finish.\n"
-        "- Do NOT edit: .github/, .claude/, scripts/, engine/mechanic.py, "
-        "cron/self_improve_runner.py, config.py, web/auth.py, web/app.py, or "
-        "storage/db.py.\n"
+        "- Do NOT edit the mechanic's own files (engine/mechanic.py, "
+        "engine/mechanic_review.py, cron/mechanic_runner.py, "
+        "cron/self_improve_runner.py), .github/, .claude/, or scripts/. "
+        "Everything else — including app.py, db.py, auth.py — is fair game.\n"
         "- Do NOT run git or gh — just leave the working tree changed.\n"
     )
 

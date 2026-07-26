@@ -241,13 +241,20 @@ class TestOrchestration:
 
 
 class TestGuardrails:
-    def test_forbidden_detects_own_files_and_prefixes(self):
+    def test_forbidden_is_the_leash_not_app_files(self):
         from project_forge.engine.mechanic import _forbidden_touched
 
-        assert _forbidden_touched(["src/project_forge/engine/fundability.py"]) is None
+        # The mechanic's own leash is off-limits (self-modification escape).
         assert _forbidden_touched(["src/project_forge/engine/mechanic.py"]) is not None
+        assert _forbidden_touched(["src/project_forge/engine/mechanic_review.py"]) is not None
+        assert _forbidden_touched(["src/project_forge/cron/self_improve_runner.py"]) is not None
         assert _forbidden_touched([".github/workflows/ci.yml"]) is not None
         assert _forbidden_touched([".claude/settings.json"]) is not None
+        # But sensitive app files ARE editable — the PR review panel gates
+        # them (they're the security backlog's actual targets).
+        assert _forbidden_touched(["src/project_forge/web/app.py"]) is None
+        assert _forbidden_touched(["src/project_forge/storage/db.py"]) is None
+        assert _forbidden_touched(["src/project_forge/engine/fundability.py"]) is None
 
     def test_allowed_tools_never_bypass_permissions(self):
         from project_forge.engine.mechanic import AGENT_ALLOWED_TOOLS
