@@ -80,23 +80,37 @@ class TestListOpenPrs:
 
 
 class TestMergeClose:
-    def test_merge_ok(self):
+    def test_merge_admin_squash_when_ci_green(self):
         from project_forge.engine import mechanic_review as mr
 
-        with patch.object(mr, "_gh", return_value=_proc(0, "merged")) as gh:
+        view = _proc(0, json.dumps({"statusCheckRollup": [{"conclusion": "SUCCESS"}], "mergeStateStatus": "BLOCKED"}))
+        merge = _proc(0, "merged")
+        with patch.object(mr, "_gh", side_effect=[view, merge]) as gh:
             result = mr.merge_pr(7)
         assert result["ok"] is True
-        # squash + delete-branch, never a plain merge
-        args = gh.call_args[0][0]
-        assert "--squash" in args and "--delete-branch" in args
+        merge_args = gh.call_args_list[-1][0][0]
+        # --admin bypasses the solo-repo approval block; squash + delete-branch.
+        assert "--squash" in merge_args and "--admin" in merge_args and "--delete-branch" in merge_args
 
-    def test_merge_failure_surfaces(self):
+    def test_merge_refuses_when_ci_not_green(self):
         from project_forge.engine import mechanic_review as mr
 
-        with patch.object(mr, "_gh", return_value=_proc(1, "", "not mergeable")):
+        view = _proc(0, json.dumps({"statusCheckRollup": [{"conclusion": "FAILURE"}]}))
+        with patch.object(mr, "_gh", side_effect=[view]) as gh:
             result = mr.merge_pr(7)
         assert result["ok"] is False
-        assert "not mergeable" in result["detail"]
+        assert "ci" in result["detail"].lower()
+        assert gh.call_count == 1  # never even attempted the merge
+
+    def test_merge_surfaces_command_failure(self):
+        from project_forge.engine import mechanic_review as mr
+
+        view = _proc(0, json.dumps({"statusCheckRollup": [{"conclusion": "SUCCESS"}]}))
+        merge = _proc(1, "", "still blocked somehow")
+        with patch.object(mr, "_gh", side_effect=[view, merge]):
+            result = mr.merge_pr(7)
+        assert result["ok"] is False
+        assert "still blocked" in result["detail"]
 
     def test_close_ok(self):
         from project_forge.engine import mechanic_review as mr

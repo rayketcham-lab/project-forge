@@ -11,10 +11,19 @@
         );
     }
 
+    var statusEl = document.getElementById('mechanic-run-status');
+
+    function setStatus(msg, kind) {
+        if (!statusEl) return;
+        statusEl.textContent = msg;
+        statusEl.className = 'churn-status churn-status-' + kind;
+    }
+
     async function act(number, action, btn, verb) {
         var prev = btn.textContent;
         btn.disabled = true;
         btn.textContent = verb + '...';
+        setStatus('PR #' + number + ': ' + verb + '...', 'loading');
         try {
             var resp = await fetch('/api/mechanic/prs/' + encodeURIComponent(number) + '/' + action, {
                 method: 'POST',
@@ -25,12 +34,16 @@
                 throw new Error(err.detail || ('HTTP ' + resp.status));
             }
             btn.textContent = '✓ ' + verb + 'd';
+            setStatus('PR #' + number + ' ' + verb + 'd — reloading...', 'success');
             var card = btn.closest('.moneybot-card');
             if (card) { card.style.opacity = '0.5'; }
-            setTimeout(function () { window.location.reload(); }, 900);
+            setTimeout(function () { window.location.reload(); }, 1000);
         } catch (e) {
-            btn.textContent = 'failed: ' + e.message;
-            setTimeout(function () { btn.textContent = prev; btn.disabled = false; }, 3000);
+            // Persist the full reason in the status line (not the tiny button)
+            // so it's readable and stays put — you asked for real detail.
+            btn.textContent = prev;
+            btn.disabled = false;
+            setStatus('PR #' + number + ' ' + verb + ' failed: ' + e.message, 'error');
         }
     }
 
