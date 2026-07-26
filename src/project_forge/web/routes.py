@@ -1673,6 +1673,19 @@ async def api_mechanic_prs():
     return {"prs": list_open_prs()}
 
 
+@router.post("/api/mechanic/run")
+async def api_mechanic_run(request: Request):
+    """Human-triggered single mechanic cycle (validation / on-demand). Launches
+    a detached one-shot process so the server never blocks on the agent; the
+    resulting PR appears in the panel for review. Rate-limited."""
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"mechanic-run:{client_ip}")
+    from project_forge.cron.mechanic_runner import spawn_mechanic_run
+
+    spawn_mechanic_run()
+    return {"status": "started"}
+
+
 @router.post("/api/mechanic/prs/{number}/approve")
 async def api_mechanic_approve(number: int, request: Request):
     """Human-gated: squash-merge a Mechanic PR (the ship action). This is the

@@ -64,6 +64,9 @@ SIPHON_INTERVAL = _interval_from_env("FORGE_SIPHON_INTERVAL_HOURS", 24.0)
 FUNDABILITY_SCORE_INTERVAL = _interval_from_env("FORGE_FUNDABILITY_INTERVAL_HOURS", 24.0)
 # v0.20 — Cashflow board (#96): keeps cashflow_score fresh for /cashflow.
 CASHFLOW_SCORE_INTERVAL = _interval_from_env("FORGE_CASHFLOW_INTERVAL_HOURS", 24.0)
+# #100 — Forge Mechanic: how often the (disarmed-by-default) autonomous
+# self-improvement cadence considers a Think Tank item.
+MECHANIC_INTERVAL = _interval_from_env("FORGE_MECHANIC_INTERVAL_HOURS", 24.0)
 AUTO_PROMOTE_INTERVAL = _interval_from_env("FORGE_AUTO_PROMOTE_INTERVAL_HOURS", 168.0)
 ISSUE_SYNC_INTERVAL = _interval_from_env("FORGE_ISSUE_SYNC_INTERVAL_HOURS", 1.0)
 # v0.16 — grounded competitive-displacement generation for the Sniper board.
@@ -450,6 +453,31 @@ async def _fire_fundability_score(db: Database) -> None:
     logger.info("Fundability cycle scored %d ideas", result.get("scored", 0))
 
 
+def _mechanic_armed() -> bool:
+    """The mechanic writes code and opens PRs autonomously, so its cadence is
+    DISARMED by default (#100) — it fires only when FORGE_MECHANIC_ENABLED is
+    truthy. Each fire launches ONE isolated one-shot process; the operator
+    still merges every PR via the review panel."""
+    import os
+
+    return os.environ.get("FORGE_MECHANIC_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+async def _fire_mechanic(db: Database) -> None:
+    """Launch one mechanic cycle IF armed. Spawns a detached one-shot process
+    (never blocks the scheduler on the agent) and returns."""
+    if not _mechanic_armed():
+        logger.debug("mechanic cadence disarmed (FORGE_MECHANIC_ENABLED unset)")
+        return
+    from project_forge.cron.mechanic_runner import spawn_mechanic_run
+
+    try:
+        spawn_mechanic_run()
+        logger.info("Mechanic cycle launched (detached one-shot)")
+    except Exception:
+        logger.exception("failed to launch mechanic cycle")
+
+
 async def _fire_cashflow_score(db: Database) -> None:
     """Score recent unscored cashflow-board ideas for time-to-first-dollar.
 
@@ -804,6 +832,18 @@ def default_cadences() -> list[Cadence]:
             runner=_fire_cashflow_score,
             delay_query=None,
             tick_interval=CASHFLOW_SCORE_INTERVAL.total_seconds(),
+            initial_delay=initial,
+        ),
+        Cadence(
+            # #100 — Forge Mechanic: autonomous self-improvement. DISARMED by
+            # default (_fire_mechanic no-ops unless FORGE_MECHANIC_ENABLED);
+            # each fire launches one isolated one-shot process that opens a PR
+            # for the operator to merge. Pure clock.
+            name="mechanic",
+            interval=MECHANIC_INTERVAL,
+            runner=_fire_mechanic,
+            delay_query=None,
+            tick_interval=MECHANIC_INTERVAL.total_seconds(),
             initial_delay=initial,
         ),
         Cadence(

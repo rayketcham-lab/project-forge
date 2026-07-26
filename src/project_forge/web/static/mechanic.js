@@ -34,6 +34,29 @@
         }
     }
 
+    // === Run mechanic now (validation / on-demand) ===
+    var runBtn = document.getElementById('mechanic-run-btn');
+    var runStatus = document.getElementById('mechanic-run-status');
+    if (runBtn && runStatus) {
+        runBtn.addEventListener('click', async function () {
+            if (!confirm('Run one mechanic cycle now? It implements the top Think Tank item on your subscription and opens a PR here for review.')) return;
+            runBtn.disabled = true;
+            runStatus.textContent = 'launching mechanic...';
+            runStatus.className = 'churn-status churn-status-loading';
+            try {
+                var resp = await fetch('/api/mechanic/run', { method: 'POST', headers: headers() });
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                runStatus.textContent = 'mechanic started — a PR will appear here when it finishes (may take a few minutes). Refresh to check.';
+                runStatus.className = 'churn-status churn-status-success';
+            } catch (e) {
+                runStatus.textContent = 'failed: ' + e.message;
+                runStatus.className = 'churn-status churn-status-error';
+            } finally {
+                runBtn.disabled = false;
+            }
+        });
+    }
+
     document.querySelectorAll('.mechanic-approve').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var n = btn.getAttribute('data-pr-number');
