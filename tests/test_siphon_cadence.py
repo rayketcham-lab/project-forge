@@ -18,8 +18,9 @@ class TestSiphonCadenceRegistration:
         names = [c.name for c in cadences]
         assert "siphon" in names
         siphon_cad = next(c for c in cadences if c.name == "siphon")
-        # Weekly, pure clock — siphon_all is idempotent and cheap when clean.
-        assert siphon_cad.interval == timedelta(hours=168)
+        # Daily (#98, was weekly), pure clock — siphon_all is idempotent and
+        # cheap when clean; hourly generation outran a weekly fire 7:1.
+        assert siphon_cad.interval == timedelta(hours=24)
         assert siphon_cad.delay_query is None
 
 

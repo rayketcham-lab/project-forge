@@ -467,6 +467,10 @@ class TestSniperRoutes:
 
         idea = _snipe_idea(
             name="Churned Snipe",
+            # Distinct tagline: the shared _snipe_idea default tagline would
+            # trip the #98 cross-category gate against the fixtures saved in
+            # other categories (which is the gate working as intended).
+            tagline="self-hosted vault alternative with transparent audit pricing",
             target_incumbent="Vault",
             category=IdeaCategory.CRYPTO_INFRASTRUCTURE,
             content_hash="churn1",

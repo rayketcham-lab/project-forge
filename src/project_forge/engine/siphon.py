@@ -22,7 +22,7 @@ import re
 from collections import defaultdict
 from datetime import UTC, datetime
 
-from project_forge.engine.dedup import _normalize, tagline_similarity
+from project_forge.engine.dedup import _normalize, _tokenize, tagline_similarity
 from project_forge.models import IdeaCategory
 from project_forge.storage.db import Database
 
@@ -458,7 +458,9 @@ async def siphon_verticals(
 # collapse PARAPHRASES; this pass thins DISTINCT-but-crowded zones the
 # pairwise thresholds can never reach (a 191-idea category of unique
 # micro-saas pitches contains few pairs above any similarity bar).
-DENSITY_CAP = int(os.environ.get("FORGE_DENSITY_CAP", "60"))
+# 60 -> 50 in #98: with 36 market categories, cap x categories IS the
+# steady-state pool size; 50 holds the whole pool under ~1.9k active.
+DENSITY_CAP = int(os.environ.get("FORGE_DENSITY_CAP", "50"))
 
 
 def _density_composite(row) -> float:
@@ -565,6 +567,136 @@ async def siphon_density(
 
 
 # --------------------------------------------------------------------------- #
+# Cross-category dedup (#98)                                                  #
+# --------------------------------------------------------------------------- #
+
+
+# Link threshold for the retro cross-category pass. Looser than the 0.80
+# INSERT gate (retro output is reviewable + reversible) but tighter than the
+# 0.45 within-category atomic profile — cross-category false positives are
+# costlier, and name similarity is deliberately NOT used here (it is
+# same-category-scoped by contract).
+CROSS_TAGLINE_THRESHOLD = 0.60
+
+# Prefilter: skip tokens shared by more than this many taglines — a token
+# like "detector" links half the corpus and adds nothing but O(n^2) pain.
+_CROSS_BUCKET_CAP = 200
+
+
+async def siphon_cross_category(
+    db: Database,
+    *,
+    dry_run: bool = True,
+    tagline_threshold: float = CROSS_TAGLINE_THRESHOLD,
+) -> dict:
+    """Find near-duplicate taglines ACROSS categories and (optionally)
+    archive the losers as 'cross_category_dedup' (reversible).
+
+    Only clusters spanning >= 2 distinct categories are acted on —
+    within-category paraphrases are `siphon_duplicates`' job at its own
+    thresholds. Keep = best `_density_composite`; protected rows
+    (`_density_protected`) are never archived. SI and supers excluded.
+    """
+    cur = await db.db.execute(
+        "SELECT id, name, tagline, category, status, generated_at, generation_mode, "
+        "mission_id, source_url, github_issue_url, feasibility_score, "
+        "fundability_score, ambition_score, snipe_score, cashflow_score "
+        "FROM ideas WHERE status NOT IN ('archived', 'rejected') "
+        "AND category != 'self-improvement' AND name NOT LIKE '[SUPER]%'"
+    )
+    rows = list(await cur.fetchall())
+    n = len(rows)
+    tokens = [_tokenize(r["tagline"] or "") for r in rows]
+
+    # Token inverted index → candidate pairs share at least one useful token.
+    index: dict[str, list[int]] = defaultdict(list)
+    for i, toks in enumerate(tokens):
+        for t in toks:
+            index[t].append(i)
+
+    parent = list(range(n))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    seen: set[tuple[int, int]] = set()
+    for ids in index.values():
+        if len(ids) > _CROSS_BUCKET_CAP:
+            continue
+        for ai in range(len(ids)):
+            for bi in range(ai + 1, len(ids)):
+                pair = (ids[ai], ids[bi])
+                if pair in seen:
+                    continue
+                seen.add(pair)
+                ta, tb = tokens[pair[0]], tokens[pair[1]]
+                if not ta or not tb:
+                    continue
+                if len(ta & tb) / len(ta | tb) >= tagline_threshold:
+                    union(pair[0], pair[1])
+
+    groups: dict[int, list[int]] = defaultdict(list)
+    for i in range(n):
+        groups[find(i)].append(i)
+
+    report_clusters: list[dict] = []
+    planned_archive: list[str] = []
+    applied_ids: list[str] = []
+
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        cats = {rows[i]["category"] for i in members}
+        if len(cats) < 2:
+            continue  # within-category — the atomic pass owns it
+        ranked = sorted(
+            members,
+            key=lambda i: (-_density_composite(rows[i]), rows[i]["generated_at"], rows[i]["id"]),
+        )
+        keep = ranked[0]
+        victims = [i for i in ranked[1:] if not _density_protected(rows[i])]
+        if not victims:
+            continue
+        victim_ids = [rows[i]["id"] for i in victims]
+        planned_archive.extend(victim_ids)
+        report_clusters.append(
+            {
+                "categories": sorted(cats),
+                "members": [rows[i]["id"] for i in members],
+                "keep": rows[keep]["id"],
+                "keep_name": rows[keep]["name"],
+                "archive": victim_ids,
+            }
+        )
+        if not dry_run:
+            now = datetime.now(UTC).isoformat()
+            for vid in victim_ids:
+                await db.db.execute(
+                    "UPDATE ideas SET status = 'archived', archived_reason = ?, archived_at = ? WHERE id = ?",
+                    ("cross_category_dedup", now, vid),
+                )
+                applied_ids.append(vid)
+            await db.db.commit()
+
+    return {
+        "dry_run": dry_run,
+        "cluster_count": len(report_clusters),
+        "archived_count": len(planned_archive),
+        "applied_count": len(applied_ids),
+        "archived_ids": planned_archive,
+        "clusters": report_clusters,
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Combined entrypoint                                                         #
 # --------------------------------------------------------------------------- #
 
@@ -597,21 +729,24 @@ async def siphon_all(
         name_jaccard=super_name_jaccard,
     )
     verticals = await siphon_verticals(db, dry_run=dry_run, cap=vertical_cap)
+    cross = await siphon_cross_category(db, dry_run=dry_run)
     density = await siphon_density(db, dry_run=dry_run, cap=density_cap)
     return {
         "dry_run": dry_run,
         "atomic": atomic,
         "supers": supers,
         "verticals": verticals,
+        "cross": cross,
         "density": density,
         "total_archived": atomic["archived_count"]
         + supers["archived_count"]
         + verticals["archived_count"]
+        + cross["archived_count"]
         + density["archived_count"],
     }
 
 
-_DEDUP_REASONS = ("retroactive_dedup", "super_overlap", "vertical_cap", "saturation_thin")
+_DEDUP_REASONS = ("retroactive_dedup", "super_overlap", "vertical_cap", "saturation_thin", "cross_category_dedup")
 
 
 async def restore_dedup_archive(

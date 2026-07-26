@@ -40,6 +40,14 @@ NAME_JACCARD_THRESHOLD = float(_os.environ.get("FORGE_NAME_JACCARD_THRESHOLD", "
 VERTICAL_CAP = int(_os.environ.get("FORGE_VERTICAL_CAP", "3"))
 SUPER_COMPONENT_OVERLAP_MIN = int(_os.environ.get("FORGE_SUPER_OVERLAP_MIN", "4"))
 
+# #98 — cross-category trampling gate. Check 4 compares within ONE category
+# by design, so the same idea could live in micro-saas AND automation-income
+# forever ("cardinality explosion detector" x7 across two categories in the
+# July 2026 corpus). This gate is tagline-only and STRICTER than the
+# within-category threshold: name similarity stays same-category-scoped on
+# purpose (test_dedup_uniqueness pins that contract).
+CROSS_CATEGORY_TAGLINE_THRESHOLD = float(_os.environ.get("FORGE_CROSS_CATEGORY_THRESHOLD", "0.80"))
+
 # Borderline band — when a heuristic score lands in
 # [threshold - BAND, threshold), ask the cheap LLM whether the two ideas
 # are actually the same concept before rejecting. Heuristic rejections at
@@ -281,6 +289,19 @@ async def should_accept(idea: Idea, db: Database) -> tuple[bool, str | None]:
             return False, f"duplicate:tagline_similarity:{score:.2f} (similar to {existing_id})"
         if heuristic_reject_name:
             return False, f"duplicate:name_similarity:{n_score:.2f} (similar to {existing_id})"
+
+    # Check 5 (#98): cross-category trampling gate — tagline-only, strict.
+    # SI and supers are excluded (SI is introspection-managed; supers have
+    # their own component-overlap check above).
+    cursor = await db.db.execute(
+        "SELECT id, tagline FROM ideas WHERE category != ? AND status != 'rejected' "
+        "AND category != 'self-improvement' AND name NOT LIKE '[SUPER]%'",
+        (idea.category.value,),
+    )
+    for row in await cursor.fetchall():
+        score = tagline_similarity(idea.tagline, row[1])
+        if score >= CROSS_CATEGORY_TAGLINE_THRESHOLD:
+            return False, (f"duplicate:cross_category:{score:.2f} (similar to {row[0]} in another category)")
 
     return True, None
 

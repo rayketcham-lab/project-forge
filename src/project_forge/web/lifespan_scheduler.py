@@ -56,7 +56,11 @@ SELF_IMPROVE_INTERVAL = _interval_from_env("FORGE_SELF_IMPROVE_INTERVAL_HOURS", 
 CHALLENGE_INTERVAL = _interval_from_env("FORGE_CHALLENGE_INTERVAL_HOURS", 168.0)
 VERDICT_AUDIT_INTERVAL = _interval_from_env("FORGE_VERDICT_AUDIT_INTERVAL_HOURS", 24.0)
 FEED_REFRESH_INTERVAL = _interval_from_env("FORGE_FEED_REFRESH_INTERVAL_HOURS", 24.0)
-SIPHON_INTERVAL = _interval_from_env("FORGE_SIPHON_INTERVAL_HOURS", 168.0)
+# #98 — daily (was weekly): generation adds ~150 ideas/day, so a weekly
+# fire let the pool oscillate 1.6k -> 2.8k between passes. All siphon
+# passes are idempotent and reversible; daily keeps steady-state near the
+# density cap instead of 7 days of drift above it.
+SIPHON_INTERVAL = _interval_from_env("FORGE_SIPHON_INTERVAL_HOURS", 24.0)
 FUNDABILITY_SCORE_INTERVAL = _interval_from_env("FORGE_FUNDABILITY_INTERVAL_HOURS", 24.0)
 # v0.20 — Cashflow board (#96): keeps cashflow_score fresh for /cashflow.
 CASHFLOW_SCORE_INTERVAL = _interval_from_env("FORGE_CASHFLOW_INTERVAL_HOURS", 24.0)

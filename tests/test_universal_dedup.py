@@ -165,8 +165,14 @@ class TestUniversalFuzzyDedup:
         assert len(all_ideas) == 2
 
     @pytest.mark.asyncio
-    async def test_cross_category_similar_taglines_both_saved(self, db):
-        """Similar taglines in DIFFERENT categories should both persist (scoped dedup)."""
+    async def test_identical_tagline_cross_category_rejected(self, db):
+        """#98 CONTRACT FLIP (was: both saved under v0.6 scoped dedup).
+        Category-scoped dedup let the same idea live in 2-3 categories
+        ('cardinality explosion detector' x7 in the July 2026 corpus).
+        The cross-category gate (tagline >= 0.80, tagline-ONLY — name
+        similarity stays same-category-scoped by contract) now rejects
+        the copy. Moderately-similar cross-category taglines still both
+        save (see test_cross_category_dedup.py)."""
         sec_idea = _idea(
             "Cert Monitor Security",
             "monitor certificates for security compliance issues",
@@ -178,10 +184,12 @@ class TestUniversalFuzzyDedup:
             category=IdeaCategory.COMPLIANCE,
         )
         await filter_and_save(sec_idea, db)
-        await filter_and_save(comp_idea, db)
+        _, accepted, reason = await filter_and_save(comp_idea, db)
 
+        assert accepted is False
+        assert "cross_category" in (reason or "")
         total = await db.count_ideas()
-        assert total == 2, "Same tagline in different categories should both save"
+        assert total == 1, "Identical tagline in another category must be rejected (#98)"
 
     @pytest.mark.asyncio
     async def test_dedup_ignores_rejected_ideas(self, db):
