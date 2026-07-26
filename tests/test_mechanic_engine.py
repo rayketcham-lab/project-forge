@@ -264,6 +264,27 @@ class TestGuardrails:
         assert "dangerously" not in joined
         assert "bash(git" not in joined  # orchestrator owns commits, not the agent
 
+    def test_run_agent_pins_model_when_configured(self, monkeypatch):
+        import project_forge.engine.mechanic as m
+
+        monkeypatch.setattr(m, "AGENT_MODEL", "opus")
+        captured = {}
+        monkeypatch.setattr(m.subprocess, "run", lambda argv, **kw: captured.setdefault("argv", argv) or _Proc(0))
+        monkeypatch.setattr("project_forge.engine.llm_backend._claude_cli_path", lambda: "claude")
+        m.run_agent(FAKE_WT, "prompt")
+        assert "--model" in captured["argv"]
+        assert "opus" in captured["argv"]
+
+    def test_run_agent_inherits_cli_default_when_unset(self, monkeypatch):
+        import project_forge.engine.mechanic as m
+
+        monkeypatch.setattr(m, "AGENT_MODEL", "")
+        captured = {}
+        monkeypatch.setattr(m.subprocess, "run", lambda argv, **kw: captured.setdefault("argv", argv) or _Proc(0))
+        monkeypatch.setattr("project_forge.engine.llm_backend._claude_cli_path", lambda: "claude")
+        m.run_agent(FAKE_WT, "prompt")
+        assert "--model" not in captured["argv"]
+
     def test_clone_env_prepends_workspace_src(self):
         from project_forge.engine.mechanic import _clone_env
 

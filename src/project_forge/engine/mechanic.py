@@ -39,6 +39,11 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 # subscription spend.
 AGENT_TIMEOUT = int(os.environ.get("FORGE_MECHANIC_AGENT_TIMEOUT", "2400"))
 
+# Model the headless agent runs on. Empty (default) = inherit the `claude`
+# CLI's configured default. Set FORGE_MECHANIC_MODEL to pin it, e.g. "opus"
+# for the hardest items or "sonnet" for faster/cheaper runs.
+AGENT_MODEL = os.environ.get("FORGE_MECHANIC_MODEL", "").strip()
+
 # Tools the headless agent may use — read/edit/write code + run tests and ruff.
 # NOT arbitrary bash, NOT git/gh (the orchestrator owns commits + PRs), and
 # NEVER --dangerously-skip-permissions.
@@ -219,8 +224,11 @@ def run_agent(workspace: Path, prompt: str, *, timeout: int = AGENT_TIMEOUT) -> 
     from project_forge.engine.llm_backend import _claude_cli_path
 
     claude = _claude_cli_path() or "claude"
+    cmd = [claude, "--print", "--permission-mode", "acceptEdits", "--allowedTools", *AGENT_ALLOWED_TOOLS]
+    if AGENT_MODEL:
+        cmd += ["--model", AGENT_MODEL]
     return subprocess.run(
-        [claude, "--print", "--permission-mode", "acceptEdits", "--allowedTools", *AGENT_ALLOWED_TOOLS],
+        cmd,
         input=prompt,
         capture_output=True,
         text=True,

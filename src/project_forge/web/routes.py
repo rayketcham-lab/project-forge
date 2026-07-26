@@ -1717,7 +1717,16 @@ async def api_mechanic_approve(number: int, request: Request):
     result = merge_pr(number)
     if not result["ok"]:
         raise HTTPException(status_code=502, detail=f"merge failed: {result['detail']}")
-    return {"status": "merged", "number": number}
+    # Mark the Think Tank item implemented immediately so the mechanic won't
+    # re-pick it before the (daily) reconciler catches up (#100).
+    item_id = result.get("item_id")
+    marked = False
+    if item_id:
+        idea = await db.get_idea(item_id)
+        if idea is not None and idea.status not in ("implemented", "archived", "rejected"):
+            await db.update_idea_status(item_id, "implemented")
+            marked = True
+    return {"status": "merged", "number": number, "item_marked": marked}
 
 
 @router.post("/api/mechanic/prs/{number}/reject")

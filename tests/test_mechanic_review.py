@@ -83,11 +83,21 @@ class TestMergeClose:
     def test_merge_admin_squash_when_ci_green(self):
         from project_forge.engine import mechanic_review as mr
 
-        view = _proc(0, json.dumps({"statusCheckRollup": [{"conclusion": "SUCCESS"}], "mergeStateStatus": "BLOCKED"}))
+        view = _proc(
+            0,
+            json.dumps(
+                {
+                    "statusCheckRollup": [{"conclusion": "SUCCESS"}],
+                    "mergeStateStatus": "BLOCKED",
+                    "headRefName": "mechanic/abc123",
+                }
+            ),
+        )
         merge = _proc(0, "merged")
         with patch.object(mr, "_gh", side_effect=[view, merge]) as gh:
             result = mr.merge_pr(7)
         assert result["ok"] is True
+        assert result["item_id"] == "abc123"  # so the route can reconcile the item
         merge_args = gh.call_args_list[-1][0][0]
         # --admin bypasses the solo-repo approval block; squash + delete-branch.
         assert "--squash" in merge_args and "--admin" in merge_args and "--delete-branch" in merge_args
@@ -172,6 +182,35 @@ class TestMechanicRoutes:
         assert resp.status_code == 200
         assert resp.json()["status"] == "merged"
         mk.assert_called_once_with(7)
+
+    @pytest.mark.asyncio
+    async def test_approve_marks_think_tank_item_implemented(self, client):
+        """Merging must mark the item done immediately so the mechanic won't
+        re-pick it before the daily reconciler runs."""
+        from project_forge.models import Idea, IdeaCategory
+        from project_forge.web.app import db
+
+        idea = Idea(
+            name="SI thing",
+            tagline="fix a thing",
+            description="A concrete self-improvement to the codebase.",
+            category=IdeaCategory.SELF_IMPROVEMENT,
+            market_analysis="reliability",
+            feasibility_score=0.6,
+            mvp_scope="one change",
+            tech_stack=["python"],
+            content_hash="approve-mark",
+        )
+        await db.save_idea(idea)
+        with patch(
+            "project_forge.engine.mechanic_review.merge_pr",
+            return_value={"ok": True, "detail": "merged", "item_id": idea.id},
+        ):
+            resp = await client.post("/api/mechanic/prs/7/approve")
+        assert resp.status_code == 200
+        assert resp.json()["item_marked"] is True
+        got = await db.get_idea(idea.id)
+        assert got.status == "implemented"
 
     @pytest.mark.asyncio
     async def test_approve_surfaces_merge_failure(self, client):

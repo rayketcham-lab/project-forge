@@ -88,13 +88,15 @@ def merge_pr(number: int) -> dict:
     --admin executes it. We refuse unless every check passes, so --admin can
     never ship red code.
     """
-    view = _gh(["pr", "view", str(number), "--json", "statusCheckRollup,mergeStateStatus,state"])
+    view = _gh(["pr", "view", str(number), "--json", "statusCheckRollup,mergeStateStatus,state,headRefName"])
     if view.returncode != 0:
         return {"ok": False, "detail": f"could not read PR #{number}: {(view.stderr or '').strip()[:300]}"}
     try:
         data = json.loads(view.stdout or "{}")
     except json.JSONDecodeError:
         data = {}
+    head = data.get("headRefName") or ""
+    item_id = head[len(MECHANIC_BRANCH_PREFIX) :] if head.startswith(MECHANIC_BRANCH_PREFIX) else None
     ci = _ci_state(data.get("statusCheckRollup"))
     if ci != "passing":
         logger.info("refusing merge of PR #%d: CI is %s", number, ci)
@@ -104,7 +106,7 @@ def merge_pr(number: int) -> dict:
     ok = proc.returncode == 0
     if not ok:
         logger.warning("merge PR #%d failed: %s", number, detail)
-    return {"ok": ok, "detail": detail or ("merged" if ok else "merge failed (see server logs)")}
+    return {"ok": ok, "detail": detail or ("merged" if ok else "merge failed (see server logs)"), "item_id": item_id}
 
 
 def close_pr(number: int) -> dict:
