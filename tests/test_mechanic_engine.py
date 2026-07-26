@@ -279,11 +279,33 @@ class TestGuardrails:
         import project_forge.engine.mechanic as m
 
         monkeypatch.setattr(m, "AGENT_MODEL", "")
+        monkeypatch.setattr(m, "AGENT_EFFORT", "")
         captured = {}
         monkeypatch.setattr(m.subprocess, "run", lambda argv, **kw: captured.setdefault("argv", argv) or _Proc(0))
         monkeypatch.setattr("project_forge.engine.llm_backend._claude_cli_path", lambda: "claude")
         m.run_agent(FAKE_WT, "prompt")
         assert "--model" not in captured["argv"]
+        assert "--effort" not in captured["argv"]
+
+    def test_run_agent_passes_effort_when_configured(self, monkeypatch):
+        import project_forge.engine.mechanic as m
+
+        monkeypatch.setattr(m, "AGENT_MODEL", "claude-opus-5")
+        monkeypatch.setattr(m, "AGENT_EFFORT", "medium")
+        captured = {}
+        monkeypatch.setattr(m.subprocess, "run", lambda argv, **kw: captured.setdefault("argv", argv) or _Proc(0))
+        monkeypatch.setattr("project_forge.engine.llm_backend._claude_cli_path", lambda: "claude")
+        m.run_agent(FAKE_WT, "prompt")
+        argv = captured["argv"]
+        assert argv[argv.index("--model") + 1] == "claude-opus-5"
+        assert argv[argv.index("--effort") + 1] == "medium"
+
+    def test_defaults_are_opus5_medium(self):
+        """The operator's configured defaults (env unset in a clean env)."""
+        import project_forge.engine.mechanic as m
+
+        assert m.AGENT_MODEL == "claude-opus-5"
+        assert m.AGENT_EFFORT == "medium"
 
     def test_clone_env_prepends_workspace_src(self):
         from project_forge.engine.mechanic import _clone_env

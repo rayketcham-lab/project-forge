@@ -39,10 +39,12 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 # subscription spend.
 AGENT_TIMEOUT = int(os.environ.get("FORGE_MECHANIC_AGENT_TIMEOUT", "2400"))
 
-# Model the headless agent runs on. Empty (default) = inherit the `claude`
-# CLI's configured default. Set FORGE_MECHANIC_MODEL to pin it, e.g. "opus"
-# for the hardest items or "sonnet" for faster/cheaper runs.
-AGENT_MODEL = os.environ.get("FORGE_MECHANIC_MODEL", "").strip()
+# Model + reasoning effort the headless agent runs on. Operator's choice:
+# Opus 5 at medium effort — strong implementation quality without maxing the
+# reasoning budget on every item. Override via env; empty AGENT_MODEL inherits
+# the `claude` CLI default, empty AGENT_EFFORT uses the model's default effort.
+AGENT_MODEL = os.environ.get("FORGE_MECHANIC_MODEL", "claude-opus-5").strip()
+AGENT_EFFORT = os.environ.get("FORGE_MECHANIC_EFFORT", "medium").strip()
 
 # Tools the headless agent may use — read/edit/write code + run tests and ruff.
 # NOT arbitrary bash, NOT git/gh (the orchestrator owns commits + PRs), and
@@ -227,6 +229,8 @@ def run_agent(workspace: Path, prompt: str, *, timeout: int = AGENT_TIMEOUT) -> 
     cmd = [claude, "--print", "--permission-mode", "acceptEdits", "--allowedTools", *AGENT_ALLOWED_TOOLS]
     if AGENT_MODEL:
         cmd += ["--model", AGENT_MODEL]
+    if AGENT_EFFORT:
+        cmd += ["--effort", AGENT_EFFORT]
     return subprocess.run(
         cmd,
         input=prompt,
