@@ -262,3 +262,24 @@ class TestGuardrails:
         joined = " ".join(AGENT_ALLOWED_TOOLS).lower()
         assert "dangerously" not in joined
         assert "bash(git" not in joined  # orchestrator owns commits, not the agent
+
+    def test_run_agent_sends_prompt_via_stdin_not_argv(self, monkeypatch):
+        """Regression (found by live validation): --allowedTools is variadic
+        and would swallow a positional prompt, so the prompt MUST go via
+        stdin."""
+        import project_forge.engine.mechanic as m
+
+        captured = {}
+
+        def _fake_run(argv, **kw):
+            captured["argv"] = argv
+            captured["input"] = kw.get("input")
+            return _Proc(0)
+
+        monkeypatch.setattr(m.subprocess, "run", _fake_run)
+        monkeypatch.setattr("project_forge.engine.llm_backend._claude_cli_path", lambda: "claude")
+        m.run_agent(FAKE_WT, "MY UNIQUE PROMPT TEXT")
+
+        assert captured["input"] == "MY UNIQUE PROMPT TEXT"
+        assert "MY UNIQUE PROMPT TEXT" not in captured["argv"]
+        assert "--allowedTools" in captured["argv"]

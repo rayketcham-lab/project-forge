@@ -187,15 +187,22 @@ def _remove_workspace(ws: Path) -> None:
     shutil.rmtree(ws, ignore_errors=True)
 
 
-def run_agent(worktree: Path, prompt: str, *, timeout: int = AGENT_TIMEOUT) -> subprocess.CompletedProcess:
-    """Invoke `claude -p` as a scoped agent inside the worktree, on the
-    Pro/Max SUBSCRIPTION (the logged-in CLI). Injectable for tests."""
+def run_agent(workspace: Path, prompt: str, *, timeout: int = AGENT_TIMEOUT) -> subprocess.CompletedProcess:
+    """Invoke `claude -p` as a scoped agent inside the workspace, on the
+    Pro/Max SUBSCRIPTION (the logged-in CLI). Injectable for tests.
+
+    The prompt goes via STDIN, not as a positional arg: `--allowedTools`
+    takes N values and would otherwise swallow a trailing prompt argument
+    (claude then errors 'Input must be provided … when using --print')."""
     from project_forge.engine.llm_backend import _claude_cli_path
 
     claude = _claude_cli_path() or "claude"
-    return _run(
-        [claude, "--print", "--permission-mode", "acceptEdits", "--allowedTools", *AGENT_ALLOWED_TOOLS, prompt],
-        cwd=str(worktree),
+    return subprocess.run(
+        [claude, "--print", "--permission-mode", "acceptEdits", "--allowedTools", *AGENT_ALLOWED_TOOLS],
+        input=prompt,
+        capture_output=True,
+        text=True,
+        cwd=str(workspace),
         timeout=timeout,
     )
 
