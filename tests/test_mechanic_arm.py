@@ -103,9 +103,27 @@ async def client(tmp_path):
 
 class TestRunEndpoint:
     @pytest.mark.asyncio
-    async def test_run_endpoint_spawns_and_returns_started(self, client):
-        with patch("project_forge.cron.mechanic_runner.spawn_mechanic_run") as sp:
+    async def test_run_endpoint_spawns_when_idle(self, client):
+        with (
+            patch("project_forge.engine.mechanic_status.read_status", return_value={"terminal": True}),
+            patch("project_forge.engine.mechanic_status.write_status"),
+            patch("project_forge.cron.mechanic_runner.spawn_mechanic_run") as sp,
+        ):
             resp = await client.post("/api/mechanic/run")
         assert resp.status_code == 200
         assert resp.json()["status"] == "started"
         sp.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_run_endpoint_refuses_when_already_running(self, client):
+        """Guard: no second concurrent run (double spend + branch race)."""
+        with (
+            patch(
+                "project_forge.engine.mechanic_status.read_status",
+                return_value={"terminal": False, "message": "busy"},
+            ),
+            patch("project_forge.cron.mechanic_runner.spawn_mechanic_run") as sp,
+        ):
+            resp = await client.post("/api/mechanic/run")
+        assert resp.json()["status"] == "already_running"
+        sp.assert_not_called()

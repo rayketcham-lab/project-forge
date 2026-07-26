@@ -1690,7 +1690,18 @@ async def api_mechanic_run(request: Request):
     client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(f"mechanic-run:{client_ip}")
     from project_forge.cron.mechanic_runner import spawn_mechanic_run
+    from project_forge.engine.mechanic_status import read_status, write_status
 
+    # Guard: one run at a time. A second concurrent run would double the
+    # subscription spend and race on the same branch.
+    status = read_status()
+    if not status.get("terminal"):
+        return {"status": "already_running", "detail": status.get("message", "A mechanic run is already in progress.")}
+
+    # Write an immediate non-terminal status BEFORE spawning, so the panel's
+    # first poll sees progress instead of the previous run's stale/idle state
+    # (that race is what made 'Run now' look like nothing happened).
+    write_status("selecting")
     spawn_mechanic_run()
     return {"status": "started"}
 
