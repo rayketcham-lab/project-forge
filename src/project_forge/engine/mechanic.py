@@ -37,7 +37,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 # Per-run wall-clock cap for the agent (seconds) — bounds time and, by proxy,
 # subscription spend.
-AGENT_TIMEOUT = int(os.environ.get("FORGE_MECHANIC_AGENT_TIMEOUT", "1800"))
+AGENT_TIMEOUT = int(os.environ.get("FORGE_MECHANIC_AGENT_TIMEOUT", "2400"))
 
 # Tools the headless agent may use — read/edit/write code + run tests and ruff.
 # NOT arbitrary bash, NOT git/gh (the orchestrator owns commits + PRs), and
@@ -128,20 +128,27 @@ async def select_work(db: Database, *, exclude_ids: set[str] | None = None) -> I
 def build_task_prompt(idea: Idea) -> str:
     """The scoped brief handed to the headless agent."""
     return (
-        "You are the Forge Mechanic, implementing ONE self-improvement item in "
-        "the Project Forge repo. Work ONLY on the item below.\n\n"
+        "You are the Forge Mechanic. Implement ONE self-improvement item in this "
+        "Project Forge repo END TO END and leave the working tree with the fix "
+        "COMPLETE and every test passing.\n\n"
         f"## Item: {idea.name}\n{idea.tagline}\n\n{idea.description or ''}\n\n"
-        "## Rules\n"
-        "- TDD: write or extend a test that fails for the gap, then implement "
-        "until it passes.\n"
-        "- Keep the change tightly scoped to this item — no drive-by refactors.\n"
-        "- `python -m pytest tests/ -q`, `python -m ruff check src/ tests/`, and "
-        "`python -m ruff format src/ tests/` MUST all pass when you finish.\n"
-        "- Do NOT edit the mechanic's own files (engine/mechanic.py, "
-        "engine/mechanic_review.py, cron/mechanic_runner.py, "
-        "cron/self_improve_runner.py), .github/, .claude/, or scripts/. "
-        "Everything else — including app.py, db.py, auth.py — is fair game.\n"
-        "- Do NOT run git or gh — just leave the working tree changed.\n"
+        "## DONE means ALL of these — do not stop until they hold\n"
+        "1. You wrote or extended a test that pins the fix.\n"
+        "2. You IMPLEMENTED the fix in the source code — not just the test.\n"
+        "3. `python -m pytest tests/ -q` passes with ZERO failures. If a test is "
+        "red, keep working until it is green — never finish on a failing test.\n"
+        "4. `python -m ruff check src/ tests/` and `python -m ruff format src/ tests/` "
+        "are clean.\n\n"
+        "## Work efficiently\n"
+        "- While iterating, run just the relevant test file "
+        "(`python -m pytest tests/test_<x>.py -q`) — it is much faster. Run the "
+        "FULL suite once at the very end to confirm nothing else broke.\n"
+        "- Keep the change tightly scoped to this item. No drive-by refactors.\n\n"
+        "## Do NOT touch\n"
+        ".github/, .claude/, scripts/, or the mechanic's own files "
+        "(engine/mechanic.py, engine/mechanic_review.py, cron/mechanic_runner.py, "
+        "cron/self_improve_runner.py). Everything else — including app.py, db.py, "
+        "auth.py — is fair game. Do NOT run git or gh; just leave the tree changed.\n"
     )
 
 
