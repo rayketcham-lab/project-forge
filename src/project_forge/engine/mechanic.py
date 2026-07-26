@@ -166,8 +166,23 @@ class MechanicResult:
     detail: str = ""
 
 
-def _run(cmd: list[str], *, cwd: str | None = None, timeout: int = 120) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, timeout=timeout)
+def _run(
+    cmd: list[str], *, cwd: str | None = None, timeout: int = 120, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, timeout=timeout, env=env)
+
+
+def _clone_env(workspace: Path) -> dict[str, str]:
+    """Env for subprocesses run against the CLONE. Puts the clone's `src` at
+    the FRONT of PYTHONPATH so `import project_forge` resolves to the agent's
+    edits — not the editable-installed MAIN repo. Without this the gate (and
+    the agent's own test runs) import stale main-repo code, so every source
+    change is invisible and even a correct fix fails the gate."""
+    env = dict(os.environ)
+    src = str(workspace / "src")
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{src}{os.pathsep}{existing}" if existing else src
+    return env
 
 
 def _create_workspace(branch: str) -> Path:
@@ -210,6 +225,7 @@ def run_agent(workspace: Path, prompt: str, *, timeout: int = AGENT_TIMEOUT) -> 
         capture_output=True,
         text=True,
         cwd=str(workspace),
+        env=_clone_env(workspace),
         timeout=timeout,
     )
 
@@ -227,16 +243,35 @@ def _forbidden_touched(paths: list[str]) -> str | None:
     return None
 
 
+# The wheel build/install test is about packaging, not the code change under
+# review, and it can't run inside a throwaway clone (no network/venv). CI
+# validates packaging separately, so deselect it here — otherwise it blocks
+# every otherwise-green mechanic PR.
+_GATE_DESELECT = "tests/test_packaging.py::TestInstallAndRun::test_wheel_installs_in_venv"
+
+
 def _quality_gate(worktree: Path) -> tuple[bool, str]:
     """Full suite + ruff check + ruff format-check inside the worktree — the
-    same bar a human PR must clear."""
-    tests = _run(["python3", "-m", "pytest", "tests/", "-q"], cwd=str(worktree), timeout=1200)
+    same bar a human PR must clear. Runs with the clone's src on PYTHONPATH so
+    the agent's edits are what's actually tested."""
+    env = _clone_env(worktree)
+    tests = _run(
+        ["python3", "-m", "pytest", "tests/", "-q", "--deselect", _GATE_DESELECT],
+        cwd=str(worktree),
+        env=env,
+        timeout=1200,
+    )
     if tests.returncode != 0:
         return False, f"pytest failed:\n{tests.stdout[-2000:]}"
-    check = _run(["python3", "-m", "ruff", "check", "src/", "tests/"], cwd=str(worktree), timeout=180)
+    check = _run(["python3", "-m", "ruff", "check", "src/", "tests/"], cwd=str(worktree), env=env, timeout=180)
     if check.returncode != 0:
         return False, f"ruff check failed:\n{check.stdout[-1000:]}"
-    fmt = _run(["python3", "-m", "ruff", "format", "--check", "src/", "tests/"], cwd=str(worktree), timeout=180)
+    fmt = _run(
+        ["python3", "-m", "ruff", "format", "--check", "src/", "tests/"],
+        cwd=str(worktree),
+        env=env,
+        timeout=180,
+    )
     if fmt.returncode != 0:
         return False, f"ruff format failed:\n{fmt.stdout[-1000:]}"
     return True, "ok"
@@ -273,30 +308,43 @@ async def run_mechanic_cycle(db: Database, *, exclude_ids: set[str] | None = Non
     """One mechanic cycle: pick the top item, implement it in isolation, gate,
     and open a PR for the operator to review. Never merges. Never leaves a
     worktree behind."""
+    from project_forge.engine.mechanic_status import write_status
+
+    write_status("selecting")
     idea = await select_work(db, exclude_ids=exclude_ids)
     if idea is None:
+        write_status("no_work")
         return MechanicResult("", "", "no_work", detail="Think Tank queue empty")
 
+    write_status("cloning", item=idea.name)
     branch = f"mechanic/{idea.id}"
     wt = _create_workspace(branch)
     try:
+        write_status("implementing", item=idea.name)
         proc = run_agent(wt, build_task_prompt(idea))
         if proc.returncode != 0:
+            write_status("agent_failed", item=idea.name, detail=(proc.stderr or "")[-300:])
             return MechanicResult(idea.id, idea.name, "agent_failed", detail=(proc.stderr or "")[-500:])
 
         paths = _changed_paths(wt)
         if not paths:
+            write_status("no_change", item=idea.name)
             return MechanicResult(idea.id, idea.name, "no_change", detail="agent made no changes")
 
         bad = _forbidden_touched(paths)
         if bad is not None:
+            write_status("gate_failed", item=idea.name, detail=f"touched forbidden path: {bad}")
             return MechanicResult(idea.id, idea.name, "gate_failed", detail=f"touched forbidden path: {bad}")
 
+        write_status("gating", item=idea.name)
         ok, why = _quality_gate(wt)
         if not ok:
+            write_status("gate_failed", item=idea.name, detail=why[-300:])
             return MechanicResult(idea.id, idea.name, "gate_failed", detail=why)
 
+        write_status("opening_pr", item=idea.name)
         pr_url = _open_pr(wt, branch, idea)
+        write_status("pr_opened", item=idea.name, detail=pr_url)
         logger.info("Mechanic opened PR for %s: %s", idea.name, pr_url)
         return MechanicResult(idea.id, idea.name, "pr_opened", pr_url=pr_url)
     finally:

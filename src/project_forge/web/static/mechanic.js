@@ -47,28 +47,89 @@
         }
     }
 
-    // === Run mechanic now (validation / on-demand) ===
+    // === Run mechanic now + LIVE animated status (a run takes minutes) ===
     var runBtn = document.getElementById('mechanic-run-btn');
-    var runStatus = document.getElementById('mechanic-run-status');
-    if (runBtn && runStatus) {
+    var pollTimer = null, animTimer = null, animFrame = 0, lastData = null, startedAt = 0;
+    var SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+    function stopTimers() {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        if (animTimer) { clearInterval(animTimer); animTimer = null; }
+    }
+
+    function elapsed() {
+        if (!startedAt) return '';
+        var s = Math.round((Date.now() - startedAt) / 1000);
+        return ' · ' + (s < 60 ? s + 's' : Math.floor(s / 60) + 'm' + ('0' + (s % 60)).slice(-2) + 's');
+    }
+
+    function renderStatus(data, spinning) {
+        if (!statusEl) return;
+        var spin = spinning ? SPINNER[animFrame % SPINNER.length] + ' ' : '';
+        var tail = '';
+        if (data.terminal && data.detail && data.stage !== 'pr_opened') { tail = ' — ' + data.detail; }
+        else if (!data.terminal) { tail = elapsed(); }
+        statusEl.textContent = spin + (data.message || data.stage || '') + tail;
+        var kind = data.stage === 'pr_opened' ? 'success'
+            : (data.terminal && data.stage !== 'idle') ? 'error' : 'loading';
+        statusEl.className = 'churn-status churn-status-' + kind;
+    }
+
+    async function pollOnce() {
+        try {
+            var resp = await fetch('/api/mechanic/status', { headers: headers() });
+            if (!resp.ok) return;
+            lastData = await resp.json();
+            renderStatus(lastData, !lastData.terminal);
+            if (lastData.terminal) {
+                stopTimers();
+                if (runBtn) runBtn.disabled = false;
+                if (lastData.stage === 'pr_opened') {
+                    setTimeout(function () { window.location.reload(); }, 1800);
+                }
+            }
+        } catch (e) { /* transient — keep polling */ }
+    }
+
+    function startPolling() {
+        stopTimers();
+        if (!startedAt) startedAt = Date.now();
+        // Spin between polls so it always looks alive; the 2.5s poll swaps
+        // the message at each real stage change.
+        animTimer = setInterval(function () {
+            animFrame++;
+            if (lastData && !lastData.terminal) renderStatus(lastData, true);
+        }, 350);
+        pollTimer = setInterval(pollOnce, 2500);
+        pollOnce();
+    }
+
+    if (runBtn && statusEl) {
         runBtn.addEventListener('click', async function () {
-            if (!confirm('Run one mechanic cycle now? It implements the top Think Tank item on your subscription and opens a PR here for review.')) return;
+            if (!confirm('Run one mechanic cycle now? It implements the top Think Tank item on your subscription and opens a PR here. Takes several minutes — leave the page open.')) return;
             runBtn.disabled = true;
-            runStatus.textContent = 'launching mechanic...';
-            runStatus.className = 'churn-status churn-status-loading';
+            startedAt = Date.now();
+            setStatus('⏱ starting — this takes a few minutes (clone → Claude implements → full test suite → PR). Leave this open; the PR appears below when done.', 'loading');
             try {
                 var resp = await fetch('/api/mechanic/run', { method: 'POST', headers: headers() });
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                runStatus.textContent = 'mechanic started — a PR will appear here when it finishes (may take a few minutes). Refresh to check.';
-                runStatus.className = 'churn-status churn-status-success';
+                startPolling();
             } catch (e) {
-                runStatus.textContent = 'failed: ' + e.message;
-                runStatus.className = 'churn-status churn-status-error';
-            } finally {
+                setStatus('failed to start: ' + e.message, 'error');
                 runBtn.disabled = false;
             }
         });
     }
+
+    // Resume the live status if a run is already in progress on page load.
+    (async function () {
+        await pollOnce();
+        if (lastData && !lastData.terminal && lastData.stage !== 'idle') {
+            if (runBtn) runBtn.disabled = true;
+            startedAt = Date.now();
+            startPolling();
+        }
+    })();
 
     document.querySelectorAll('.mechanic-approve').forEach(function (btn) {
         btn.addEventListener('click', function () {

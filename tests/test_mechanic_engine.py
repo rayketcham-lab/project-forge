@@ -8,6 +8,7 @@ the orchestration state machine with every subprocess seam mocked.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -262,6 +263,31 @@ class TestGuardrails:
         joined = " ".join(AGENT_ALLOWED_TOOLS).lower()
         assert "dangerously" not in joined
         assert "bash(git" not in joined  # orchestrator owns commits, not the agent
+
+    def test_clone_env_prepends_workspace_src(self):
+        from project_forge.engine.mechanic import _clone_env
+
+        env = _clone_env(Path("mech-ws"))
+        assert env["PYTHONPATH"].split(os.pathsep)[0] == "mech-ws/src"
+
+    def test_quality_gate_uses_clone_env_and_deselects_wheel(self, monkeypatch):
+        """Regression (found live): the gate must test the CLONE's code, not
+        the editable-installed main repo, and must not choke on the wheel
+        packaging test that can't run in a throwaway clone."""
+        import project_forge.engine.mechanic as m
+
+        calls = []
+
+        def _fake_run(cmd, *, cwd=None, timeout=120, env=None):
+            calls.append({"cmd": cmd, "env": env})
+            return _Proc(0)
+
+        monkeypatch.setattr(m, "_run", _fake_run)
+        ok, _ = m._quality_gate(Path("mech-ws"))
+        assert ok
+        pytest_call = calls[0]
+        assert "--deselect" in pytest_call["cmd"]
+        assert pytest_call["env"]["PYTHONPATH"].split(os.pathsep)[0].endswith("/src")
 
     def test_run_agent_sends_prompt_via_stdin_not_argv(self, monkeypatch):
         """Regression (found by live validation): --allowedTools is variadic

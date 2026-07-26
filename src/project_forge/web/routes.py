@@ -1673,6 +1673,15 @@ async def api_mechanic_prs():
     return {"prs": list_open_prs()}
 
 
+@router.get("/api/mechanic/status")
+async def api_mechanic_status():
+    """Live progress of the current/last mechanic run — polled by the panel
+    so a multi-minute run shows an animated, stage-by-stage status."""
+    from project_forge.engine.mechanic_status import read_status
+
+    return read_status()
+
+
 @router.post("/api/mechanic/run")
 async def api_mechanic_run(request: Request):
     """Human-triggered single mechanic cycle (validation / on-demand). Launches
