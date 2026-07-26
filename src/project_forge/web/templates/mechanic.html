@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Mechanic - Project Forge{% endblock %}
+
+{% block content %}
+<div id="mechanic-root"></div>
+<section class="page-header">
+    <div class="container">
+        <h1>&#128295; Forge Mechanic</h1>
+        <p class="page-subtitle">
+            {{ total }} autonomous self-improvement PR{{ '' if total == 1 else 's' }} awaiting your review.
+            The engine picks a Think Tank item, implements it in an isolated worktree, gates it on the
+            full test suite, and opens a PR &mdash; you <strong>approve (merge)</strong> or
+            <strong>reject (close)</strong>. Nothing ships without your click.
+        </p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        {% if prs %}
+        <div class="moneybot-grid">
+            {% for pr in prs %}
+            <div class="moneybot-card" data-pr-number="{{ pr.number }}">
+                <div class="moneybot-card-body-wrap">
+                    <div class="moneybot-card-head">
+                        <span class="mode-pill mode-{{ pr.ci }}" title="CI status">CI: {{ pr.ci }}</span>
+                        <code class="cat-tag">+{{ pr.additions }} / &minus;{{ pr.deletions }}</code>
+                    </div>
+                    <div class="moneybot-card-body">
+                        <div class="moneybot-name">{{ pr.title }}</div>
+                        <div class="moneybot-tagline">Think Tank item {{ pr.item_id }} &middot; PR #{{ pr.number }}</div>
+                    </div>
+                </div>
+                <div class="moneybot-card-foot">
+                    <a href="{{ pr.url }}" target="_blank" rel="noopener" class="moneybot-issue">review diff &#8599;</a>
+                    <button class="promote-btn mechanic-approve" data-pr-number="{{ pr.number }}" type="button"
+                            title="Squash-merge this PR to main">Approve &amp; merge &#10142;</button>
+                    <button class="idea-reject-btn mechanic-reject" data-pr-number="{{ pr.number }}" type="button"
+                            title="Reject &mdash; close this PR">&times;</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No Mechanic PRs awaiting review. When the mechanic runs a Think Tank item, its PR lands here for your approval.</p>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<script src="/static/mechanic.js?v=1"></script>
+{% endblock %}

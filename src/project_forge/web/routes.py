@@ -1654,6 +1654,52 @@ async def reject_proposal(idea_id: str):
     return {"status": "rejected", "id": idea_id}
 
 
+@router.get("/mechanic", response_class=HTMLResponse)
+async def mechanic_page(request: Request):
+    """Review panel (#100) — the operator's gate on the Forge Mechanic's
+    autonomous self-improvement PRs. Approve = squash-merge; Reject = close.
+    Nothing ships without a click here."""
+    from project_forge.engine.mechanic_review import list_open_prs
+
+    prs = list_open_prs()
+    return templates.TemplateResponse(request, "mechanic.html", {"prs": prs, "total": len(prs)})
+
+
+@router.get("/api/mechanic/prs")
+async def api_mechanic_prs():
+    """JSON: open Mechanic PRs awaiting review."""
+    from project_forge.engine.mechanic_review import list_open_prs
+
+    return {"prs": list_open_prs()}
+
+
+@router.post("/api/mechanic/prs/{number}/approve")
+async def api_mechanic_approve(number: int, request: Request):
+    """Human-gated: squash-merge a Mechanic PR (the ship action). This is the
+    ONLY path that merges mechanic work to main — never automatic."""
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"mechanic-merge:{client_ip}")
+    from project_forge.engine.mechanic_review import merge_pr
+
+    result = merge_pr(number)
+    if not result["ok"]:
+        raise HTTPException(status_code=502, detail=f"merge failed: {result['detail']}")
+    return {"status": "merged", "number": number}
+
+
+@router.post("/api/mechanic/prs/{number}/reject")
+async def api_mechanic_reject(number: int, request: Request):
+    """Human-gated: close (reject) a Mechanic PR and delete its branch."""
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"mechanic-reject:{client_ip}")
+    from project_forge.engine.mechanic_review import close_pr
+
+    result = close_pr(number)
+    if not result["ok"]:
+        raise HTTPException(status_code=502, detail=f"close failed: {result['detail']}")
+    return {"status": "rejected", "number": number}
+
+
 @router.get("/thinktank/audit", response_class=HTMLResponse)
 async def thinktank_audit_page(request: Request):
     """Audit page — shows implementation status of promoted ideas."""

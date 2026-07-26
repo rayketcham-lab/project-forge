@@ -30,6 +30,7 @@
                 <a href="/labs" class="nav-link nav-link-labs {% if request.url.path in ['/labs', '/scoreboard', '/foundry', '/pulse', '/cartographer', '/killboard'] %}active{% endif %}">Labs</a>
                 <a href="/projects" class="nav-link {% if request.url.path == '/projects' %}active{% endif %}">Projects</a>
                 <a href="/thinktank" class="nav-link {% if request.url.path == '/thinktank' %}active{% endif %}">Think Tank</a>
+                <a href="/mechanic" class="nav-link nav-link-mechanic {% if request.url.path == '/mechanic' %}active{% endif %}">Mechanic</a>
             </div>
             <div class="nav-search">
                 <form action="/explore" method="get">
