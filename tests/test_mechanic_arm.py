@@ -127,3 +127,19 @@ class TestRunEndpoint:
             resp = await client.post("/api/mechanic/run")
         assert resp.json()["status"] == "already_running"
         sp.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_run_endpoint_force_overrides_guard(self, client):
+        """force=true starts a run even if one looks in-progress (the escape
+        hatch for a stuck run)."""
+        with (
+            patch(
+                "project_forge.engine.mechanic_status.read_status",
+                return_value={"terminal": False, "message": "busy"},
+            ),
+            patch("project_forge.engine.mechanic_status.write_status"),
+            patch("project_forge.cron.mechanic_runner.spawn_mechanic_run") as sp,
+        ):
+            resp = await client.post("/api/mechanic/run?force=true")
+        assert resp.json()["status"] == "started"
+        sp.assert_called_once()

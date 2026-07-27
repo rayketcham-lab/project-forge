@@ -104,20 +104,33 @@
         pollOnce();
     }
 
-    if (runBtn && statusEl) {
-        runBtn.addEventListener('click', async function () {
-            if (!confirm('Run one mechanic cycle now? It implements the top Think Tank item on your subscription and opens a PR here. Takes several minutes — leave the page open.')) return;
-            runBtn.disabled = true;
-            startedAt = Date.now();
-            setStatus('⏱ starting — this takes a few minutes (clone → Claude implements → full test suite → PR). Leave this open; the PR appears below when done.', 'loading');
-            try {
-                var resp = await fetch('/api/mechanic/run', { method: 'POST', headers: headers() });
-                if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                startPolling();
-            } catch (e) {
-                setStatus('failed to start: ' + e.message, 'error');
-                runBtn.disabled = false;
+    async function doRun(force) {
+        runBtn.disabled = true;
+        startedAt = Date.now();
+        setStatus('⏱ starting — this takes a few minutes (clone → Claude implements → full test suite → PR). Leave this open; the PR appears below when done.', 'loading');
+        try {
+            var resp = await fetch('/api/mechanic/run' + (force ? '?force=true' : ''), { method: 'POST', headers: headers() });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            var data = await resp.json();
+            if (data.status === 'already_running') {
+                var item = data.item ? ' (item: ' + data.item + ')' : '';
+                if (confirm('A mechanic run is already in progress' + item + '. Agents run silently for several minutes, so it may still be working. Force a NEW run anyway?')) {
+                    return doRun(true);
+                }
+                startPolling();  // just show the in-progress run's live status
+                return;
             }
+            startPolling();
+        } catch (e) {
+            setStatus('failed to start: ' + e.message, 'error');
+            runBtn.disabled = false;
+        }
+    }
+
+    if (runBtn && statusEl) {
+        runBtn.addEventListener('click', function () {
+            if (!confirm('Run one mechanic cycle now? It implements the top Think Tank item on your subscription and opens a PR here. Takes several minutes — leave the page open.')) return;
+            doRun(false);
         });
     }
 

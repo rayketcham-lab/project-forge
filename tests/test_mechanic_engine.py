@@ -38,6 +38,16 @@ def _no_open_prs(monkeypatch):
     monkeypatch.setattr("project_forge.engine.mechanic_review.list_open_prs", lambda: [])
 
 
+@pytest.fixture(autouse=True)
+def _isolate_status(tmp_path, monkeypatch):
+    # run_mechanic_cycle writes progress via mechanic_status; isolate that file
+    # so tests NEVER touch the real one the running server's panel reads (a
+    # test's mid-run 'implementing' status was ghost-locking the run guard).
+    import project_forge.engine.mechanic_status as ms
+
+    monkeypatch.setattr(ms, "_STATUS_FILE", tmp_path / "mech-status.json")
+
+
 def _si(name: str, **over) -> Idea:
     base = dict(
         name=name,

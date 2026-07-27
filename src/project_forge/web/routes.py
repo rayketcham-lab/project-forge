@@ -1683,24 +1683,30 @@ async def api_mechanic_status():
 
 
 @router.post("/api/mechanic/run")
-async def api_mechanic_run(request: Request):
+async def api_mechanic_run(request: Request, force: bool = False):
     """Human-triggered single mechanic cycle (validation / on-demand). Launches
     a detached one-shot process so the server never blocks on the agent; the
-    resulting PR appears in the panel for review. Rate-limited."""
+    resulting PR appears in the panel for review. Rate-limited.
+
+    `force=true` overrides the one-at-a-time guard — for when a run looks stuck
+    (the agent is silent for minutes, so age alone can't prove it's dead)."""
     client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(f"mechanic-run:{client_ip}")
     from project_forge.cron.mechanic_runner import spawn_mechanic_run
     from project_forge.engine.mechanic_status import read_status, write_status
 
-    # Guard: one run at a time. A second concurrent run would double the
-    # subscription spend and race on the same branch.
+    # Guard: one run at a time (a second concurrent run doubles the spend and
+    # races on the branch) — unless the operator forces it.
     status = read_status()
-    if not status.get("terminal"):
-        return {"status": "already_running", "detail": status.get("message", "A mechanic run is already in progress.")}
+    if not force and not status.get("terminal"):
+        return {
+            "status": "already_running",
+            "detail": status.get("message", "A mechanic run is already in progress."),
+            "item": status.get("item", ""),
+        }
 
     # Write an immediate non-terminal status BEFORE spawning, so the panel's
-    # first poll sees progress instead of the previous run's stale/idle state
-    # (that race is what made 'Run now' look like nothing happened).
+    # first poll sees progress instead of the previous run's stale state.
     write_status("selecting")
     spawn_mechanic_run()
     return {"status": "started"}
