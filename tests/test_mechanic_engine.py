@@ -31,6 +31,13 @@ async def db(tmp_path):
     await database.close()
 
 
+@pytest.fixture(autouse=True)
+def _no_open_prs(monkeypatch):
+    # Default: no pending mechanic PRs, so run_mechanic_cycle's PR-exclusion
+    # lookup doesn't reach for gh. Tests that care override this.
+    monkeypatch.setattr("project_forge.engine.mechanic_review.list_open_prs", lambda: [])
+
+
 def _si(name: str, **over) -> Idea:
     base = dict(
         name=name,
@@ -129,6 +136,21 @@ class TestOrchestration:
 
         result = await run_mechanic_cycle(db)
         assert result.status == "no_work"
+
+    @pytest.mark.asyncio
+    async def test_skips_item_that_already_has_open_pr(self, db, monkeypatch):
+        """An item with an OPEN (unmerged) PR is still status='new'; the
+        mechanic must not re-pick it and open a duplicate."""
+        import project_forge.engine.mechanic as m
+
+        idea = _si("Already in a PR", content_hash="mech-haspr")
+        await db.save_idea(idea)
+        monkeypatch.setattr(
+            "project_forge.engine.mechanic_review.list_open_prs",
+            lambda: [{"item_id": idea.id}],
+        )
+        result = await m.run_mechanic_cycle(db)
+        assert result.status == "no_work"  # the only item is excluded (pending review)
 
     @pytest.mark.asyncio
     async def test_happy_path_opens_pr_and_cleans_up(self, db):

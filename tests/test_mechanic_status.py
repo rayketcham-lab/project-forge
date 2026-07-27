@@ -28,6 +28,13 @@ async def db(tmp_path):
     await database.close()
 
 
+@pytest.fixture(autouse=True)
+def _no_open_prs(monkeypatch):
+    # run_mechanic_cycle looks up open PRs to skip already-worked items; keep
+    # the cycle tests off gh.
+    monkeypatch.setattr("project_forge.engine.mechanic_review.list_open_prs", lambda: [])
+
+
 class TestStatusRoundTrip:
     def test_write_then_read_renders_message(self, tmp_path, monkeypatch):
         import project_forge.engine.mechanic_status as ms

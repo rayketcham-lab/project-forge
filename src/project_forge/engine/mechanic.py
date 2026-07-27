@@ -323,10 +323,21 @@ async def run_mechanic_cycle(db: Database, *, exclude_ids: set[str] | None = Non
     from project_forge.engine.mechanic_status import write_status
 
     write_status("selecting")
-    idea = await select_work(db, exclude_ids=exclude_ids)
+    # Never re-work an item that already has an open PR awaiting review — an
+    # OPEN (unmerged) PR leaves the item at status='new', so without this the
+    # mechanic redoes work that's already in the panel and opens a duplicate.
+    exclude = set(exclude_ids or ())
+    try:
+        from project_forge.engine.mechanic_review import list_open_prs
+
+        exclude |= {pr["item_id"] for pr in list_open_prs() if pr.get("item_id")}
+    except Exception:
+        logger.warning("could not list open mechanic PRs; proceeding without PR exclusion", exc_info=True)
+
+    idea = await select_work(db, exclude_ids=exclude)
     if idea is None:
         write_status("no_work")
-        return MechanicResult("", "", "no_work", detail="Think Tank queue empty")
+        return MechanicResult("", "", "no_work", detail="No unworked Think Tank items (all done or pending review)")
 
     write_status("cloning", item=idea.name)
     branch = f"mechanic/{idea.id}"
