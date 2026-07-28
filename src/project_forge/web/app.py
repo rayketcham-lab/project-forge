@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -76,12 +77,24 @@ templates.env.globals["dashboard_token"] = _dashboard_token
 
 _CSP_SKIP_PATHS = ("/docs", "/redoc", "/openapi.json")
 
+# Client-supplied request IDs are untrusted input reflected into a response
+# header, so restrict them to a short, safe alphabet. Anything else (missing,
+# too long, control characters, non-ASCII) is replaced with a fresh ID.
+_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def sanitize_request_id(value: str | None) -> str:
+    """Return `value` if it is a safe request ID, else a freshly generated one."""
+    if value is not None and _REQUEST_ID_RE.match(value):
+        return value
+    return uuid.uuid4().hex[:16]
+
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
     """Add a unique X-Request-ID to every response for correlation."""
 
     async def dispatch(self, request: Request, call_next):
-        request_id = request.headers.get("x-request-id", uuid.uuid4().hex[:16])
+        request_id = sanitize_request_id(request.headers.get("x-request-id"))
         response: Response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
         return response
