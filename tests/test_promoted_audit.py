@@ -194,6 +194,15 @@ class TestAuditPromotedIdea:
 class TestBulkAudit:
     """run_promoted_audit audits all promoted/approved ideas."""
 
+    def test_promoted_statuses_are_all_declared_idea_statuses(self):
+        """Every queried status must exist, or the query silently matches nothing."""
+        from typing import get_args
+
+        from project_forge.engine.audit import PROMOTED_STATUSES
+        from project_forge.models import IdeaStatus
+
+        assert PROMOTED_STATUSES <= set(get_args(IdeaStatus))
+
     @pytest.mark.asyncio
     async def test_bulk_audit_returns_list(self, client):
         """run_promoted_audit should return a list of PromotedIdeaAudit."""

@@ -1,8 +1,10 @@
 """Tests for SQLite storage layer."""
 
+from typing import get_args
+
 import pytest
 
-from project_forge.models import GenerationRun, Idea, IdeaCategory
+from project_forge.models import GenerationRun, Idea, IdeaCategory, IdeaStatus
 
 
 @pytest.mark.asyncio
@@ -79,6 +81,61 @@ async def test_update_idea_status(db):
     updated = await db.update_idea_status(idea.id, "approved")
     assert updated is not None
     assert updated.status == "approved"
+
+
+@pytest.mark.asyncio
+async def test_update_idea_status_rejects_invalid_status(db):
+    """A typo'd status must raise instead of silently corrupting the row."""
+    idea = Idea(
+        name="Guard Test",
+        tagline="Tag",
+        description="Desc",
+        category=IdeaCategory.PRIVACY,
+        market_analysis="Market",
+        feasibility_score=0.6,
+        mvp_scope="MVP",
+    )
+    await db.save_idea(idea)
+
+    with pytest.raises(ValueError, match="Invalid idea status"):
+        await db.update_idea_status(idea.id, "archvied")
+
+    unchanged = await db.get_idea(idea.id)
+    assert unchanged is not None
+    assert unchanged.status == "new"
+
+
+@pytest.mark.asyncio
+async def test_list_and_count_ideas_reject_invalid_status(db):
+    with pytest.raises(ValueError, match="Invalid idea status"):
+        await db.list_ideas(status="archvied")
+    with pytest.raises(ValueError, match="Invalid idea status"):
+        await db.count_ideas(status="archvied")
+
+
+@pytest.mark.asyncio
+async def test_valid_statuses_still_accepted(db):
+    """Every declared IdeaStatus passes the guard, and None stays a no-op filter."""
+    idea = Idea(
+        name="Valid Status Test",
+        tagline="Tag",
+        description="Desc",
+        category=IdeaCategory.PRIVACY,
+        market_analysis="Market",
+        feasibility_score=0.6,
+        mvp_scope="MVP",
+    )
+    await db.save_idea(idea)
+
+    for status in get_args(IdeaStatus):
+        updated = await db.update_idea_status(idea.id, status)
+        assert updated is not None
+        assert updated.status == status
+        assert await db.count_ideas(status=status) == 1
+        assert len(await db.list_ideas(status=status)) == 1
+
+    assert await db.count_ideas() == 1
+    assert len(await db.list_ideas()) == 1
 
 
 @pytest.mark.asyncio

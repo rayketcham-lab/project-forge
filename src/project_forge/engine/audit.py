@@ -32,7 +32,9 @@ _KEYWORD_MAP: dict[str, list[str]] = {
     "input validation": ["field_validator", "min_length", "Query(min_length"],
 }
 
-PROMOTED_STATUSES = {"approved", "promoted", "scaffolded", "contributed", "implemented"}
+# Every entry must be a declared IdeaStatus -- db.list_ideas() rejects anything else.
+# ("promoted" used to be listed here but is not a real status, so it never matched a row.)
+PROMOTED_STATUSES = {"approved", "scaffolded", "contributed", "implemented"}
 
 
 def _extract_issue_number(url: str | None) -> int | None:
