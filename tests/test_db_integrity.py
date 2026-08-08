@@ -114,6 +114,7 @@ EXPECTED_TABLES = frozenset(
         "outcome_signals",  # v0.17 Scoreboard
         "calibration_weights",  # v0.17 Scoreboard auto-tune
         "missions",  # v0.18 Missions (#84) — operator directives
+        "pki_probes",  # v0.23 PKI board — hourly probe log + cadence watermark
     }
 )
 
@@ -136,6 +137,11 @@ EXPECTED_COLUMNS = {
             "project_repo_url",
             "content_hash",
             "source_url",
+            # v0.23 PKI board — urgency axis + the concrete artifact a
+            # finding is anchored to. Both added by ALTER TABLE migration,
+            # so locking them here catches a dropped migration.
+            "pki_urgency_score",
+            "pki_anchor",
         }
     ),
     "filtered_ideas": frozenset(

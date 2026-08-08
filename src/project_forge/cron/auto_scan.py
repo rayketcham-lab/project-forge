@@ -248,6 +248,38 @@ TECH_STACKS = {
         ["typescript", "node", "puppeteer", "postgres"],
         ["python", "httpx", "duckdb", "click"],
     ],
+    # v0.23 PKI board — stacks that can actually parse, mint, and serve
+    # certificates rather than just talk about them.
+    IdeaCategory.PKI_REVOCATION: [
+        ["go", "cfssl", "redis", "postgres"],
+        ["rust", "rustls", "x509-parser", "rocksdb"],
+        ["python", "cryptography", "fastapi", "postgres"],
+        ["go", "openssl", "nginx", "prometheus"],
+    ],
+    IdeaCategory.CERT_LIFECYCLE: [
+        ["go", "cert-manager", "kubernetes", "postgres"],
+        ["python", "acme", "fastapi", "sqlite"],
+        ["typescript", "node", "acme-client", "postgres"],
+        ["go", "step-ca", "vault", "prometheus"],
+    ],
+    IdeaCategory.PQC_MIGRATION: [
+        ["rust", "liboqs", "rustls", "sqlite"],
+        ["python", "cryptography", "liboqs-python", "fastapi"],
+        ["go", "openssl", "pkcs11", "postgres"],
+        ["c", "openssl", "cmake", "pkcs11"],
+    ],
+    IdeaCategory.CA_OPERATIONS: [
+        ["go", "step-ca", "pkcs11", "postgres"],
+        ["python", "cryptography", "fastapi", "postgres"],
+        ["rust", "rcgen", "x509-parser", "sqlite"],
+        ["go", "vault", "hsm", "prometheus"],
+    ],
+    IdeaCategory.CERT_IDENTITY: [
+        ["go", "spiffe", "spire", "kubernetes"],
+        ["rust", "rustls", "tokio", "postgres"],
+        ["go", "sigstore", "cosign", "postgres"],
+        ["python", "cryptography", "fastapi", "tpm2-pytss"],
+    ],
 }
 
 
@@ -488,7 +520,17 @@ def generate_local_idea(
             break
         name = _make_name(concept, domain, direction, variant)
 
+    # "concept: domain" collides with the template-junk filter whenever the
+    # drawn domain is a discipline name ("...: test engineering"), which
+    # quality_review rejects outright. That made run_auto_scan silently
+    # return fewer ideas than requested, at random, depending on the draw.
+    # Fall back to the "for <domain>" phrasing in exactly those cases —
+    # same information, and it reads better than the colon form anyway.
+    from project_forge.engine.quality_review import _PERSONA_SUFFIX_RE
+
     tagline = f"{concept[:80]}: {domain}"
+    if _PERSONA_SUFFIX_RE.search(tagline):
+        tagline = f"{concept[:80]} for {domain}"
     tech_stack = random.choice(TECH_STACKS.get(category, [["python", "fastapi"]]))
     score = round(random.uniform(0.55, 0.92), 2)
 

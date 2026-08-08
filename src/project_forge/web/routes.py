@@ -22,6 +22,7 @@ from project_forge.models import (
     CLAUDE_LAB_CATEGORIES,
     CRYPTO_CATEGORIES,
     MONEY_CATEGORIES,
+    PKI_CATEGORIES,
     SNIPER_CATEGORIES,
     Challenge,
     Idea,
@@ -222,6 +223,8 @@ _SNIPER_CATEGORIES = tuple(c.value for c in SNIPER_CATEGORIES)
 _CRYPTO_CATEGORIES = tuple(c.value for c in CRYPTO_CATEGORIES)
 
 _CASHFLOW_CATEGORIES = tuple(c.value for c in CASHFLOW_CATEGORIES)
+
+_PKI_CATEGORIES = tuple(c.value for c in PKI_CATEGORIES)
 
 
 @router.get("/claude-lab", response_class=HTMLResponse)
@@ -805,6 +808,7 @@ async def api_churn(request: Request):
         "snipe": _SNIPER_CATEGORIES,
         "crypto": _CRYPTO_CATEGORIES,
         "cashflow": _CASHFLOW_CATEGORIES,
+        "pki": _PKI_CATEGORIES,
     }.get(lab, _MONEY_CATEGORIES)
 
     cat_str = (payload.get("category") or "").strip()
@@ -841,6 +845,11 @@ async def api_churn(request: Request):
         from project_forge.engine.cashflow import score_cashflow
 
         result.idea.cashflow_score = await score_cashflow(result.idea)
+    elif lab == "pki":
+        from project_forge.engine.pki import extract_anchor, score_pki_urgency
+
+        result.idea.pki_urgency_score = await score_pki_urgency(result.idea)
+        result.idea.pki_anchor = extract_anchor(result.idea)
     else:
         result.idea.fundability_score = await score_fundability(result.idea)
 
@@ -861,6 +870,8 @@ async def api_churn(request: Request):
             "ambition_score": result.idea.ambition_score,
             "snipe_score": result.idea.snipe_score,
             "cashflow_score": result.idea.cashflow_score,
+            "pki_urgency_score": result.idea.pki_urgency_score,
+            "pki_anchor": result.idea.pki_anchor,
             "target_incumbent": result.idea.target_incumbent,
             "generation_mode": result.mode,
             "artifact_type": result.artifact_type,
@@ -1047,6 +1058,102 @@ async def api_crypto_top(limit: int = Query(default=10, ge=1, le=100)):
         }
         for r in rows
     ]
+
+
+@router.get("/pki", response_class=HTMLResponse)
+async def pki(
+    request: Request,
+    category: str | None = None,
+    limit: int = Query(default=30, ge=1, le=100),
+):
+    """The PKI board — certificate-infrastructure work ranked by
+    pki_urgency_score DESC (deadline pressure x blast radius x tooling gap).
+
+    Unlike the money boards, this one is expected to be SHORT. The hourly
+    probe admits roughly one item in several attempts, so the page also
+    surfaces the probe log: the quiet hours are the system working, and the
+    operator needs to see that rather than an unexplained empty grid."""
+    cats = (category,) if category in _PKI_CATEGORIES else _PKI_CATEGORIES
+    placeholders = ",".join("?" * len(cats))
+    cur = await db.db.execute(
+        f"SELECT id FROM ideas "  # noqa: S608
+        f"WHERE category IN ({placeholders}) "
+        f"AND status NOT IN ('archived', 'rejected') "
+        f"AND pki_urgency_score IS NOT NULL "
+        f"ORDER BY pki_urgency_score DESC, generated_at DESC LIMIT ?",
+        (*cats, limit),
+    )
+    rows = await cur.fetchall()
+    ideas = []
+    for r in rows:
+        idea = await db.get_idea(r["id"])
+        if idea is not None:
+            ideas.append(idea)
+    cur = await db.db.execute(
+        f"SELECT COUNT(*) FROM ideas WHERE category IN ({placeholders}) "  # noqa: S608
+        f"AND status NOT IN ('archived', 'rejected')",
+        cats,
+    )
+    total = (await cur.fetchone())[0]
+    try:
+        probes = await db.list_pki_probes(limit=12)
+        probe_stats = await db.pki_probe_stats()
+    except Exception:  # noqa: BLE001 — probe log is informational, never fatal
+        probes, probe_stats = [], {"probes": 0, "admitted": 0, "rejected": 0, "admit_rate": 0.0}
+    return templates.TemplateResponse(
+        request,
+        "pki.html",
+        {
+            "ideas": ideas,
+            "total": total,
+            "categories": list(_PKI_CATEGORIES),
+            "category_filter": category if category in _PKI_CATEGORIES else None,
+            "probes": probes,
+            "probe_stats": probe_stats,
+        },
+    )
+
+
+@router.get("/api/pki/top")
+async def api_pki_top(limit: int = Query(default=10, ge=1, le=100)):
+    """JSON: top-N urgency-ranked PKI findings."""
+    placeholders = ",".join("?" * len(_PKI_CATEGORIES))
+    cur = await db.db.execute(
+        f"SELECT id, name, tagline, category, pki_urgency_score, pki_anchor, "  # noqa: S608
+        f"generation_mode, status, github_issue_url, auto_promoted_at "
+        f"FROM ideas WHERE category IN ({placeholders}) "
+        f"AND status NOT IN ('archived', 'rejected') "
+        f"AND pki_urgency_score IS NOT NULL "
+        f"ORDER BY pki_urgency_score DESC, generated_at DESC LIMIT ?",
+        (*_PKI_CATEGORIES, limit),
+    )
+    rows = await cur.fetchall()
+    return [
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "tagline": r["tagline"],
+            "category": r["category"],
+            "pki_urgency_score": r["pki_urgency_score"],
+            "pki_anchor": r["pki_anchor"],
+            "generation_mode": r["generation_mode"],
+            "status": r["status"],
+            "github_issue_url": r["github_issue_url"],
+            "auto_promoted_at": r["auto_promoted_at"],
+        }
+        for r in rows
+    ]
+
+
+@router.get("/api/pki/probes")
+async def api_pki_probes(limit: int = Query(default=24, ge=1, le=200)):
+    """JSON: recent probe attempts + admission rate. This is the honest
+    view of the board — how often the hourly probe found nothing worth
+    keeping, and why it rejected what it found."""
+    return {
+        "stats": await db.pki_probe_stats(),
+        "probes": await db.list_pki_probes(limit=limit),
+    }
 
 
 @router.get("/ideas", response_class=HTMLResponse)

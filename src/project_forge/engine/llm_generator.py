@@ -487,6 +487,65 @@ PERSONAS_BY_CATEGORY: dict[IdeaCategory, list[str]] = {
         "micro-acquisition buyer screening small SaaS listings for faked traffic",
         "textbook flipper racing buyback price windows every semester",
     ],
+    # v0.23 PKI board personas — the people who actually run certificate
+    # infrastructure and eat the pager when it breaks. Written as
+    # "role — the specific thing that is broken for them today", because
+    # the board's bar is a real operational gap, not a plausible product.
+    IdeaCategory.PKI_REVOCATION: [
+        "CA operator whose CRL crossed 200MB and whose CDN bill now scales with revocations",
+        "browser security engineer who knows most clients soft-fail revocation checks and cannot prove otherwise",
+        "OCSP responder owner sizing capacity for signatures ten times larger than today's",
+        "PKI architect deciding between short-lived certificates and building real revocation infrastructure",
+        "mobile platform engineer who cannot ship a hundred-megabyte revocation list to metered devices",
+        "incident responder who needs to revoke fifty thousand certificates and has no rehearsed path",
+        "CDN engineer absorbing revocation traffic spikes with no way to predict the next one",
+        "compliance lead asked to state the maximum window during which a revoked cert is still trusted",
+        "device fleet owner whose endpoints have never successfully fetched a CRL in production",
+    ],
+    IdeaCategory.CERT_LIFECYCLE: [
+        "SRE who has been paged for the same expiry outage three times and still lacks an ownership map",
+        "platform engineer whose renewal automation covers ninety percent of certs and cannot name the rest",
+        "infrastructure lead staring down shorter mandated lifetimes with a partly manual fleet",
+        "DBA whose database TLS certificates are outside every automation system the company owns",
+        "Kubernetes operator whose cert rotation succeeds while pods keep serving the old certificate",
+        "email infrastructure admin who cannot use ACME for the protocols that actually matter to him",
+        "release manager whose renewal window keeps colliding with change freezes",
+        "security engineer who cannot prove private keys are rotated rather than reused at renewal",
+        "hosting provider scheduling thousands of renewals that all cluster on the same deadline",
+    ],
+    IdeaCategory.PQC_MIGRATION: [
+        "PKI architect asked for a migration plan who cannot yet answer where RSA is even used",
+        "CISO with a hard compliance deadline and no inventory of affected systems",
+        "firmware engineer whose shipped devices verify updates with keys that can never be replaced",
+        "vendor risk analyst trying to learn which products support post-quantum algorithms and when",
+        "TLS engineer whose hybrid chains no longer fit in the initial flight",
+        "HSM administrator discovering half the fleet's firmware cannot hold the new key types",
+        "government contractor mapping systems to a published deprecation timeline with no tooling",
+        "data owner estimating which archives outlive the point at which today's crypto fails",
+        "interop engineer whose hybrid handshake works with one stack and silently downgrades with another",
+    ],
+    IdeaCategory.CA_OPERATIONS: [
+        "internal CA owner running root ceremonies from a Word document and a camcorder",
+        "PKI lead migrating off an end-of-life commercial CA product with no export path",
+        "compliance engineer assembling audit evidence by hand every single year",
+        "CA operator who found a misissuance and has no rehearsed disclosure or revocation sequence",
+        "trust-store applicant trying to interpret root program requirements before spending a year on it",
+        "security architect debugging why one client rejects a chain that every other client accepts",
+        "key custodian worried the quorum no longer exists after two people left the company",
+        "sub-CA owner who cannot prove name constraints actually bound what was issued",
+        "domain owner who wants to know the moment anyone issues a certificate for his names",
+    ],
+    IdeaCategory.CERT_IDENTITY: [
+        "service mesh operator who cannot say which workloads are authorized to call which others",
+        "build engineer whose code-signing key is reachable from CI and knows it",
+        "device manufacturer binding hardware attestation to operational certificates by hand",
+        "zero-trust lead who has more machine identities than employees and no review process",
+        "supply chain security engineer linking build provenance to the signing certificate used",
+        "IoT operator whose constrained devices cannot fit a standard certificate profile",
+        "platform owner cleaning up certificates issued to workloads that no longer exist",
+        "release engineer who needs separate signing keys per channel and has one shared key",
+        "incident responder planning mass machine-credential rotation after a suspected key compromise",
+    ],
     # Security categories still get their detailed personas via the
     # original PERSONA_SEEDS list (diversity_prompts.py). We pull from
     # there in _pick_persona() when the category is not above.

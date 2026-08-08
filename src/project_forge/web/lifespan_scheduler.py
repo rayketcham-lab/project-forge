@@ -80,6 +80,14 @@ PULSE_INTERVAL = _interval_from_env("FORGE_PULSE_INTERVAL_HOURS", 3.0)
 # v0.18 — Missions (#84): operator-directed generation, round-robin over
 # active missions.
 MISSION_INTERVAL = _interval_from_env("FORGE_MISSION_INTERVAL_HOURS", 4.0)
+# v0.23 — PKI board: hourly grounded probe, one gated target per fire. Runs
+# hourly not because it produces hourly, but because the sources it watches
+# (IETF drafts, implementation trackers) change on that timescale; most
+# fires deliberately store nothing.
+PKI_INTERVAL = _interval_from_env("FORGE_PKI_INTERVAL_HOURS", 1.0)
+# Keeps pki_urgency_score fresh for anything that reached the board by
+# churn or predates the axis.
+PKI_SCORE_INTERVAL = _interval_from_env("FORGE_PKI_SCORE_INTERVAL_HOURS", 24.0)
 
 
 def _seconds_from_env(var: str, default_seconds: float) -> timedelta:
@@ -236,6 +244,20 @@ async def seconds_until_next_pulse(db: Database, interval: timedelta) -> float:
     pulse-mode ideas only — NOT the global watermark, which the hourly expand
     cadence keeps perpetually fresh (that left the Pulse avenue effectively dead)."""
     cursor = await db.db.execute("SELECT MAX(generated_at) FROM ideas WHERE generation_mode = 'pulse'")
+    row = await cursor.fetchone()
+    return _delay_from_watermark(row[0] if row else None, interval)
+
+
+async def seconds_until_next_pki(db: Database, interval: timedelta) -> float:
+    """Delay until the next PKI probe.
+
+    Watermark = MAX(pki_probes.probed_at), NOT MAX(ideas.generated_at) over
+    PKI ideas. The probe is designed to store nothing most hours, so an
+    idea-based watermark would leave the cadence permanently overdue and
+    re-firing every tick — burning a generation call each pass. The probe
+    log advances on every attempt, admitted or rejected, which is exactly
+    the semantics this schedule needs."""
+    cursor = await db.db.execute("SELECT MAX(probed_at) FROM pki_probes")
     row = await cursor.fetchone()
     return _delay_from_watermark(row[0] if row else None, interval)
 
@@ -492,6 +514,123 @@ async def _fire_cashflow_score(db: Database) -> None:
     limit = 5 if resolve_cheap_backend() is not None else 200
     result = await score_pending_cashflow(db, limit=limit)
     logger.info("Cashflow cycle scored %d ideas", result.get("scored", 0))
+
+
+async def _fire_pki_score(db: Database) -> None:
+    """Back-fill pki_urgency_score for PKI-board ideas that predate the axis
+    (or arrived by churn). Same small adaptive batch as the other scorers so
+    the SQLite writer isn't held for minutes."""
+    from project_forge.engine.llm_backend import resolve_cheap_backend
+    from project_forge.engine.pki import score_pending_pki_urgency
+
+    limit = 5 if resolve_cheap_backend() is not None else 200
+    result = await score_pending_pki_urgency(db, limit=limit)
+    logger.info("PKI scoring cycle scored %d ideas", result.get("scored", 0))
+
+
+async def _fire_pki(db: Database) -> None:
+    """The hourly PKI probe: ONE target, and it is allowed to come back empty.
+
+    Deliberately unlike every other generation cadence in this codebase.
+    The others always try to produce something; this one runs a grounded
+    probe, picks the single highest-leverage gap it found, works that one
+    gap hard, and then applies an admission gate that most attempts fail.
+
+      probe -> pick ONE gap -> generate one spec-grade item -> gate -> store or DROP
+
+    There is no fallback generation. If the probe finds nothing, or the
+    generator produces something unanchored, or the urgency score lands
+    below the threshold, this cadence stores NOTHING and logs why. That is
+    the intended behavior: the board is a short list of things that matter,
+    not an hourly deposit. Every attempt is recorded in `pki_probes` so the
+    quiet hours are auditable and so the schedule has a watermark that
+    advances even when nothing is stored.
+
+    Touches no GitHub state — governance rule for autonomous cadences.
+    """
+    from project_forge.engine.dedup import filter_and_save
+    from project_forge.engine.llm_generator import generate_idea_llm
+    from project_forge.engine.pki import admits, extract_anchor, score_pki_urgency
+    from project_forge.feeds.pki_probe import fetch_pki_gaps, gap_to_seed, pick_top_gap
+    from project_forge.models import IdeaCategory
+
+    try:
+        # 1. Probe the real sources. Never raises; [] is a normal outcome.
+        recent = await db.list_pki_probes(limit=200)
+        seen_urls = {p["anchor"] for p in recent if p.get("anchor")}
+        gaps = fetch_pki_gaps()
+
+        # 2. Exactly one gap gets worked this hour.
+        gap = pick_top_gap(gaps, seen_urls=seen_urls)
+        if gap is None:
+            await db.record_pki_probe(
+                gap_summary=None,
+                anchor=None,
+                admitted=False,
+                reason="no new PKI gap surfaced from any source",
+            )
+            logger.info("PKI probe: no new gap surfaced — storing nothing")
+            return
+
+        # 3. Work it. The seed demands the anchor, mechanism, tooling gap,
+        #    blast radius, and a validation plan.
+        try:
+            category = IdeaCategory(gap.get("category") or "cert-lifecycle")
+        except ValueError:
+            category = IdeaCategory.CERT_LIFECYCLE
+
+        result = await generate_idea_llm(db, category, mode="novel", seed=gap_to_seed(gap))
+        if result is None:
+            await db.record_pki_probe(
+                gap_summary=gap.get("title"),
+                anchor=gap.get("url"),
+                admitted=False,
+                reason="generator returned no parseable idea",
+            )
+            logger.info("PKI probe: generator produced nothing for %r", gap.get("title"))
+            return
+
+        idea = result.idea
+        # Tag the cadence's own watermark dimension and pin the anchor. The
+        # probe's source URL is the fallback anchor when the model didn't
+        # cite something more specific itself.
+        idea.generation_mode = "pki"
+        idea.pki_anchor = extract_anchor(idea) or (gap.get("url") or None)
+
+        # 4. The gate. Anchor + urgency threshold + right board.
+        score = await score_pki_urgency(idea)
+        idea.pki_urgency_score = score
+        ok, reason = admits(idea, score)
+        if not ok:
+            await db.record_pki_probe(
+                gap_summary=gap.get("title"),
+                anchor=idea.pki_anchor or gap.get("url"),
+                admitted=False,
+                reason=reason,
+                urgency_score=score,
+            )
+            logger.info("PKI probe: rejected %r — %s", idea.name, reason)
+            return
+
+        # 5. Survived the gate; dedup still gets the last word.
+        _saved, stored, dedup_reason = await filter_and_save(idea, db)
+        await db.record_pki_probe(
+            gap_summary=gap.get("title"),
+            anchor=idea.pki_anchor,
+            admitted=bool(stored),
+            reason="admitted" if stored else f"dedup rejected: {dedup_reason}",
+            idea_id=idea.id if stored else None,
+            urgency_score=score,
+        )
+        logger.info(
+            "PKI probe: %s %r (urgency=%.2f, anchor=%s)",
+            "ADMITTED" if stored else "dedup-rejected",
+            idea.name,
+            score,
+            idea.pki_anchor,
+        )
+    except Exception:
+        logger.exception("PKI probe cycle failed")
 
 
 async def _fire_auto_promote(db: Database) -> None:
@@ -908,6 +1047,30 @@ def default_cadences() -> list[Cadence]:
             runner=_fire_mission,
             delay_query=seconds_until_next_mission,
             tick_interval=1800.0,
+            initial_delay=initial,
+        ),
+        Cadence(
+            # v0.23 — PKI board: hourly grounded probe, ONE gated target per
+            # fire, and most fires deliberately store nothing. Watermark is
+            # pki_probes.probed_at (advanced on every attempt, admitted or
+            # not) — an idea-based watermark would leave it permanently
+            # overdue, since storing nothing is the common case. Read-only
+            # external fetches; touches no GitHub state.
+            name="pki",
+            interval=PKI_INTERVAL,
+            runner=_fire_pki,
+            delay_query=seconds_until_next_pki,
+            tick_interval=900.0,  # re-check every 15min; fires per watermark
+            initial_delay=initial,
+        ),
+        Cadence(
+            # v0.23 — PKI urgency back-fill for ideas that reached the board
+            # by churn or predate the axis.
+            name="pki_score",
+            interval=PKI_SCORE_INTERVAL,
+            runner=_fire_pki_score,
+            delay_query=None,
+            tick_interval=PKI_SCORE_INTERVAL.total_seconds(),
             initial_delay=initial,
         ),
         # REMOVED v0.14b — auto_promote cadence: the user explicitly
