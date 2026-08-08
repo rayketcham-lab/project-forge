@@ -9,6 +9,7 @@ import logging
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import get_args
 
 import aiosqlite
 
@@ -31,6 +32,17 @@ logger = logging.getLogger(__name__)
 
 # Query profiling threshold in seconds
 _SLOW_QUERY_THRESHOLD = 0.1  # 100ms
+
+# IdeaStatus is a Literal, which is erased at runtime -- enforce it explicitly
+# at the DB boundary so typos never reach persisted rows.
+VALID_IDEA_STATUSES: frozenset[str] = frozenset(get_args(IdeaStatus))
+
+
+def _validate_status(status: str | None) -> None:
+    """Raise ValueError if ``status`` is not a declared IdeaStatus. None is allowed."""
+    if status is not None and status not in VALID_IDEA_STATUSES:
+        raise ValueError(f"Invalid idea status {status!r}; expected one of {sorted(VALID_IDEA_STATUSES)}")
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS ideas (
@@ -455,6 +467,7 @@ class Database:
         limit: int = 50,
         offset: int = 0,
     ) -> list[Idea]:
+        _validate_status(status)
         query = "SELECT * FROM ideas WHERE 1=1"
         params: list = []
         if status:
@@ -469,6 +482,7 @@ class Database:
         return [self._row_to_idea(row) for row in rows]
 
     async def update_idea_status(self, idea_id: str, status: IdeaStatus) -> Idea | None:
+        _validate_status(status)
         async with self._write_lock:
             await self.db.execute("UPDATE ideas SET status = ? WHERE id = ?", (status, idea_id))
             await self.db.commit()
@@ -494,6 +508,7 @@ class Database:
     # === COUNTING & SEARCH (SQL-optimized, no Python-side filtering) ===
 
     async def count_ideas(self, status: IdeaStatus | None = None) -> int:
+        _validate_status(status)
         if status:
             cursor = await self.db.execute("SELECT COUNT(*) FROM ideas WHERE status = ?", (status,))
         else:
