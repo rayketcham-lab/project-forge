@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}PKI - Project Forge{% endblock %}
+
+{% block content %}
+<div id="pki-root" data-category-filter="{{ category_filter or '' }}"></div>
+<section class="page-header">
+    <div class="container">
+        <h1>&#128274; PKI</h1>
+        <p class="page-subtitle">
+            {{ total }} certificate-infrastructure findings across {{ categories|length }} categories &mdash;
+            revocation, lifecycle, post-quantum migration, CA operations, and machine identity &mdash;
+            ranked by <strong>urgency</strong>: deadline pressure &times; blast radius &times; how badly
+            today's tooling fails. An hourly probe works <em>one</em> grounded gap and admits it only if
+            it cites a real artifact and clears the bar. Most hours admit nothing &mdash; that is the point.
+        </p>
+        <div class="churn-row">
+            <button id="churn-btn" class="btn btn-primary btn-churn" type="button">
+                <span class="churn-icon">&#9889;</span>
+                <span class="churn-label">Churn Now</span>
+            </button>
+            <div id="churn-status" class="churn-status"></div>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+
+        <div class="filters-bar">
+            <div class="filter-row">
+                <span class="filter-row-label">Category</span>
+                <div class="filter-chips">
+                    <a href="/pki" class="chip {% if not category_filter %}chip-active{% endif %}">All</a>
+                    {% for cat in categories %}
+                    <a href="/pki?category={{ cat }}"
+                       class="chip {% if category_filter == cat %}chip-active{% endif %}">
+                        {{ cat }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        {% if ideas %}
+        <div class="moneybot-grid">
+            {% for idea in ideas %}
+            <div class="moneybot-card" data-idea-id="{{ idea.id }}"
+                 data-idea-name="{{ idea.name }}"
+                 data-idea-tagline="{{ idea.tagline }}"
+                 data-urgency-score="{{ idea.pki_urgency_score or '' }}"
+                 data-feasibility-score="{{ idea.feasibility_score }}"
+                 data-generation-mode="{{ idea.generation_mode or '' }}">
+                <button class="idea-reject-btn" type="button" title="Reject this idea">&times;</button>
+                <div class="moneybot-card-body-wrap">
+                    <div class="moneybot-card-head">
+                        <span class="fundability-badge fundability-{{ ((idea.pki_urgency_score or 0) * 10) | int }}"
+                              title="Urgency: deadline pressure x blast radius x tooling gap">
+                            {{ "%.2f"|format(idea.pki_urgency_score or 0) }}
+                        </span>
+                        {% if idea.auto_promoted_at and idea.status == 'approved' %}
+                            <span class="status-pill status-promoted">&#10003; promoted</span>
+                        {% else %}
+                            <span class="status-pill status-{{ idea.status }}">{{ idea.status }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="moneybot-card-body">
+                        <div class="moneybot-name">{{ idea.name }}</div>
+                        <div class="moneybot-tagline">{{ idea.tagline }}</div>
+                        {% if idea.pki_anchor %}
+                        <div class="pki-anchor" title="The concrete artifact this finding is pinned to">
+                            {% if idea.pki_anchor.startswith('http') %}
+                                &#128279; <a href="{{ idea.pki_anchor }}" target="_blank" rel="noopener">{{ idea.pki_anchor }}</a>
+                            {% else %}
+                                &#128279; {{ idea.pki_anchor }}
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="moneybot-card-foot">
+                    <code class="cat-tag">{{ idea.category.value }}</code>
+                    {% if idea.generation_mode %}
+                        <span class="mode-pill mode-{{ idea.generation_mode }}">{{ idea.generation_mode }}</span>
+                    {% else %}
+                        <span class="mode-pill mode-template">template</span>
+                    {% endif %}
+                    {% if idea.github_issue_url %}
+                        <a href="{{ idea.github_issue_url }}" target="_blank" rel="noopener" class="moneybot-issue">issue &#8599;</a>
+                    {% else %}
+                        <button class="promote-btn" data-idea-id="{{ idea.id }}" type="button" title="File a GitHub issue with the full MVP spec for this finding">Promote &#10142;</button>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>
+                Nothing has cleared the bar yet. The hourly probe stores an item only when it cites a
+                concrete artifact <em>and</em> scores above the urgency threshold &mdash; an empty board
+                means the gate is working, not that the cadence is broken. The probe log below shows
+                what it looked at.
+            </p>
+        </div>
+        {% endif %}
+
+        {# The probe log is the whole trust story for this board: it is the
+           difference between "nothing is happening" and "it looked, and
+           nothing was good enough". #}
+        <div class="probe-log">
+            <h2 class="probe-log-title">Probe log</h2>
+            <p class="probe-log-summary">
+                {{ probe_stats.probes }} probes &middot;
+                <strong>{{ probe_stats.admitted }} admitted</strong> &middot;
+                {{ probe_stats.rejected }} rejected &middot;
+                admit rate {{ "%.0f"|format((probe_stats.admit_rate or 0) * 100) }}%
+            </p>
+            {% if probes %}
+            <ul class="probe-list">
+                {% for p in probes %}
+                <li class="probe-item {% if p.admitted %}probe-admitted{% else %}probe-rejected{% endif %}">
+                    <span class="probe-verdict">{% if p.admitted %}&#10003; admitted{% else %}&#10007; dropped{% endif %}</span>
+                    <span class="probe-gap">{{ p.gap_summary or 'no gap surfaced' }}</span>
+                    {% if p.anchor %}
+                    <span class="probe-anchor">{{ p.anchor }}</span>
+                    {% endif %}
+                    <span class="probe-reason">{{ p.reason }}</span>
+                    {% if p.urgency_score is not none %}
+                    <span class="probe-score">{{ "%.2f"|format(p.urgency_score) }}</span>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="probe-empty">No probes recorded yet &mdash; the first fire lands within the hour.</p>
+            {% endif %}
+        </div>
+
+    </div>
+</section>
+
+<script src="/static/pki.js?v=1"></script>
+{% endblock %}

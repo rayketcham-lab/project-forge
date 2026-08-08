@@ -76,6 +76,17 @@ class IdeaCategory(StrEnum):
     COMMERCE_OPS = "commerce-ops"
     LEAD_GENERATION = "lead-generation"
     FLIPPING_ARBITRAGE = "flipping-arbitrage"
+    # v0.23 PKI board — the operator's home turf, finally its own board.
+    # PKI plumbing broadly: the revocation and sizing problems the PQ
+    # transition detonates, plus the classical lifecycle/CA/identity pain
+    # that already breaks production today. Deliberately NEW categories
+    # rather than reusing PQC_CRYPTOGRAPHY / CRYPTO_INFRASTRUCTURE (which
+    # the Sniper board already claims) so /pki stays a disjoint board.
+    PKI_REVOCATION = "pki-revocation"
+    CERT_LIFECYCLE = "cert-lifecycle"
+    PQC_MIGRATION = "pqc-migration"
+    CA_OPERATIONS = "ca-operations"
+    CERT_IDENTITY = "cert-identity"
 
 
 # --------------------------------------------------------------------------- #
@@ -147,6 +158,19 @@ CASHFLOW_CATEGORIES: tuple["IdeaCategory", ...] = (
     IdeaCategory.FLIPPING_ARBITRAGE,
 )
 
+# v0.23 PKI board — a think tank pointed at certificate plumbing. Ranked by
+# its own axis (pki_urgency_score: deadline pressure x blast radius x how
+# badly today's tooling fails), because neither fundability nor cashflow
+# captures "this breaks in 2030 and nobody has a migration path". Disjoint
+# from every other board so /pki is its own clean surface.
+PKI_CATEGORIES: tuple["IdeaCategory", ...] = (
+    IdeaCategory.PKI_REVOCATION,
+    IdeaCategory.CERT_LIFECYCLE,
+    IdeaCategory.PQC_MIGRATION,
+    IdeaCategory.CA_OPERATIONS,
+    IdeaCategory.CERT_IDENTITY,
+)
+
 
 IdeaStatus = Literal["new", "approved", "scaffolded", "rejected", "archived", "contributed", "implemented"]
 
@@ -209,6 +233,16 @@ class Idea(BaseModel):
     # cashflow asks "how soon is the first invoice". Sorted DESC on
     # /cashflow; None for ideas outside the board (or predating the axis).
     cashflow_score: float | None = None
+    # v0.23 PKI board — urgency, not money. Deadline pressure x blast radius
+    # x how badly today's tooling fails. Doubles as the board's ADMISSION
+    # gate, not just its sort order: the hourly probe discards anything that
+    # scores under PKI_ADMIT_THRESHOLD, so the board stays a short list of
+    # things that actually matter instead of a pile of plausible cert tools.
+    pki_urgency_score: float | None = None
+    # The concrete artifact this idea is pinned to — an RFC/draft name, a
+    # CA/B Forum ballot, a tracker issue, a compliance deadline. Required
+    # for admission to /pki: no anchor means it's a vibe, not a finding.
+    pki_anchor: str | None = None
 
 
 MissionStatus = Literal["active", "paused", "archived"]

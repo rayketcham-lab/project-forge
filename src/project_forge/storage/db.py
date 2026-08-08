@@ -215,6 +215,27 @@ CREATE TABLE IF NOT EXISTS missions (
     created_at TEXT NOT NULL,
     last_generated_at TEXT
 );
+
+-- v0.23 PKI board — one row per hourly probe, admitted or not.
+--
+-- Two jobs. It is the cadence WATERMARK: the probe is expected to store
+-- nothing most hours, so keying the schedule off MAX(ideas.generated_at)
+-- would leave it permanently overdue and re-firing every tick. This table
+-- advances on every attempt, admitted or rejected.
+--
+-- And it is the AUDIT TRAIL the operator reads to trust an empty board:
+-- "probed, found X, rejected because no anchor" is a working hour, not a
+-- broken one.
+CREATE TABLE IF NOT EXISTS pki_probes (
+    id TEXT PRIMARY KEY,
+    probed_at TEXT NOT NULL,
+    gap_summary TEXT,
+    anchor TEXT,
+    admitted INTEGER NOT NULL DEFAULT 0,
+    reason TEXT,
+    idea_id TEXT,
+    urgency_score REAL
+);
 """
 
 
@@ -307,6 +328,11 @@ class Database:
             # (parallel to fundability/ambition/snipe). NULL outside the
             # cashflow categories. Sorted DESC on /cashflow.
             "ALTER TABLE ideas ADD COLUMN cashflow_score REAL",
+            # v0.23 — PKI board: urgency axis (deadline pressure x blast
+            # radius x tooling gap) plus the concrete artifact the finding is
+            # anchored to. Both NULL outside the PKI categories.
+            "ALTER TABLE ideas ADD COLUMN pki_urgency_score REAL",
+            "ALTER TABLE ideas ADD COLUMN pki_anchor TEXT",
         ):
             try:
                 await self._db.execute(stmt)
@@ -376,8 +402,9 @@ class Database:
                  feasibility_score, mvp_scope, tech_stack, generated_at, status,
                  github_issue_url, project_repo_url, content_hash, source_url,
                  generation_mode, fundability_score, auto_promoted_at, ambition_score,
-                artifact_type, snipe_score, target_incumbent, mission_id, cashflow_score)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                artifact_type, snipe_score, target_incumbent, mission_id, cashflow_score,
+                pki_urgency_score, pki_anchor)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     idea.id,
                     idea.name,
@@ -403,6 +430,8 @@ class Database:
                     getattr(idea, "target_incumbent", None),
                     getattr(idea, "mission_id", None),
                     getattr(idea, "cashflow_score", None),
+                    getattr(idea, "pki_urgency_score", None),
+                    getattr(idea, "pki_anchor", None),
                 ),
             )
             await self.db.commit()
@@ -1469,6 +1498,8 @@ class Database:
             target_incumbent=(row["target_incumbent"] if "target_incumbent" in keys else None),
             mission_id=(row["mission_id"] if "mission_id" in keys else None),
             cashflow_score=(row["cashflow_score"] if "cashflow_score" in keys else None),
+            pki_urgency_score=(row["pki_urgency_score"] if "pki_urgency_score" in keys else None),
+            pki_anchor=(row["pki_anchor"] if "pki_anchor" in keys else None),
         )
 
     # === RESOURCE CRUD ===
@@ -1627,6 +1658,81 @@ class Database:
             )
         rows = await cursor.fetchall()
         return [self._row_to_idea(row) for row in rows]
+
+    # === PKI PROBE LOG (v0.23) ===
+
+    async def record_pki_probe(
+        self,
+        *,
+        gap_summary: str | None,
+        anchor: str | None,
+        admitted: bool,
+        reason: str | None,
+        idea_id: str | None = None,
+        urgency_score: float | None = None,
+    ) -> str:
+        """Log one hourly PKI probe attempt. Called on EVERY fire, including
+        the ones that store no idea — that is what advances the cadence
+        watermark and what makes an empty board auditable."""
+        from uuid import uuid4
+
+        probe_id = uuid4().hex[:12]
+        async with self._write_lock:
+            await self.db.execute(
+                """INSERT INTO pki_probes
+                (id, probed_at, gap_summary, anchor, admitted, reason, idea_id, urgency_score)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    probe_id,
+                    datetime.now(UTC).isoformat(),
+                    gap_summary,
+                    anchor,
+                    1 if admitted else 0,
+                    reason,
+                    idea_id,
+                    urgency_score,
+                ),
+            )
+            await self.db.commit()
+        return probe_id
+
+    async def list_pki_probes(self, limit: int = 24) -> list[dict]:
+        """Recent probe attempts, newest first — the board's 'what happened
+        in the quiet hours' feed."""
+        cursor = await self.db.execute(
+            "SELECT * FROM pki_probes ORDER BY probed_at DESC LIMIT ?",
+            (limit,),
+        )
+        rows = await cursor.fetchall()
+        return [
+            {
+                "id": r["id"],
+                "probed_at": r["probed_at"],
+                "gap_summary": r["gap_summary"],
+                "anchor": r["anchor"],
+                "admitted": bool(r["admitted"]),
+                "reason": r["reason"],
+                "idea_id": r["idea_id"],
+                "urgency_score": r["urgency_score"],
+            }
+            for r in rows
+        ]
+
+    async def pki_probe_stats(self) -> dict:
+        """Admission rate over the probe log — the honest measure of how
+        selective the board actually is."""
+        cursor = await self.db.execute(
+            "SELECT COUNT(*) AS total, COALESCE(SUM(admitted), 0) AS admitted FROM pki_probes"
+        )
+        row = await cursor.fetchone()
+        total = row["total"] or 0
+        admitted = row["admitted"] or 0
+        return {
+            "probes": total,
+            "admitted": admitted,
+            "rejected": total - admitted,
+            "admit_rate": round(admitted / total, 3) if total else 0.0,
+        }
 
     @staticmethod
     def _row_to_mission(row) -> Mission:

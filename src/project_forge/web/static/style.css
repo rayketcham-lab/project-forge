@@ -110,12 +110,14 @@ a:hover { color: var(--accent); }
    plain nav links — the dot is the only visual difference. */
 .nav-link-money,
 .nav-link-frontier,
-.nav-link-snipe {
+.nav-link-snipe,
+.nav-link-pki {
     padding-left: 1.45rem;
 }
 .nav-link-money::before,
 .nav-link-frontier::before,
-.nav-link-snipe::before {
+.nav-link-snipe::before,
+.nav-link-pki::before {
     content: '';
     position: absolute;
     left: 0.85rem;
@@ -137,9 +139,74 @@ a:hover { color: var(--accent); }
     background: #ef5b6e;
     box-shadow: 0 0 6px rgba(239, 91, 110, 0.35);
 }
+/* PKI board — a cool steel-teal, distinct from the money boards' warm
+   tones because this board is not measuring money. */
+.nav-link-pki::before {
+    background: #3fb8af;
+    box-shadow: 0 0 6px rgba(63, 184, 175, 0.35);
+}
 .nav-link-money.active::after { background: #f7c64a; }
 .nav-link-frontier.active::after { background: var(--purple); }
 .nav-link-snipe.active::after { background: #ef5b6e; }
+.nav-link-pki.active::after { background: #3fb8af; }
+
+/* PKI board — the anchor line on a card (the artifact the finding is
+   pinned to) and the probe log that makes an empty board legible. */
+.pki-anchor {
+    margin-top: 0.5rem;
+    font-size: 0.72rem;
+    color: var(--text-dim, #8b93a7);
+    word-break: break-all;
+    line-height: 1.4;
+}
+.pki-anchor a { color: #3fb8af; text-decoration: none; }
+.pki-anchor a:hover { text-decoration: underline; }
+
+.probe-log {
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border, #262b3a);
+}
+.probe-log-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0 0 0.35rem;
+    color: var(--text, #e6e9f0);
+}
+.probe-log-summary {
+    font-size: 0.78rem;
+    color: var(--text-dim, #8b93a7);
+    margin: 0 0 1rem;
+}
+.probe-list { list-style: none; margin: 0; padding: 0; }
+.probe-item {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: baseline;
+    padding: 0.5rem 0.65rem;
+    border-left: 2px solid transparent;
+    border-bottom: 1px solid var(--border, #262b3a);
+    font-size: 0.76rem;
+}
+.probe-admitted { border-left-color: #3fb8af; }
+.probe-rejected { border-left-color: #3a4152; }
+.probe-verdict { font-weight: 600; white-space: nowrap; }
+.probe-admitted .probe-verdict { color: #3fb8af; }
+.probe-rejected .probe-verdict { color: var(--text-dim, #8b93a7); }
+.probe-gap { flex: 1 1 16rem; color: var(--text, #e6e9f0); }
+.probe-anchor {
+    font-family: var(--mono, ui-monospace, monospace);
+    font-size: 0.7rem;
+    color: #3fb8af;
+    word-break: break-all;
+}
+.probe-reason { color: var(--text-dim, #8b93a7); font-style: italic; }
+.probe-score {
+    font-family: var(--mono, ui-monospace, monospace);
+    color: var(--text-dim, #8b93a7);
+}
+.probe-empty { font-size: 0.8rem; color: var(--text-dim, #8b93a7); }
 
 /* Sniper board accents — the "vs. incumbent" line, the snipe angle pill,
    and the Snipe-Now button tint. */

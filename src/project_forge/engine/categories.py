@@ -1693,6 +1693,254 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "e-waste recyclers",
         ],
     },
+    IdeaCategory.PKI_REVOCATION: {
+        "description": (
+            "Revocation is the part of PKI that was already half-broken and "
+            "that post-quantum signatures finish off. An ML-DSA signature is "
+            "roughly ten times an RSA-2048 one, so a CRL that was megabytes "
+            "becomes hundreds of megabytes, and an OCSP responder that served "
+            "a cached 500-byte response now serves five kilobytes. Work here "
+            "is about making 'is this certificate still good?' answerable at "
+            "internet scale without shipping the whole revocation list."
+        ),
+        "seed_concepts": [
+            "delta-CRL pipeline that keeps a rolling base CRL and ships only signed increments to edge caches",
+            "CRLite-style Bloom/ribbon filter builder that compresses a full revocation set into a pushable artifact",
+            "CRL partitioning planner that shards distribution points before a CRL exceeds its size budget",
+            "revocation-size regression harness that fails CI when a CRL grows past an operator-set megabyte ceiling",
+            "OCSP responder load model that projects responder cost under ML-DSA signature sizes before migration",
+            "OCSP stapling conformance scanner that proves every endpoint in a fleet actually staples and refreshes",
+            "must-staple policy rollout tool that finds which certificates can safely carry the extension first",
+            "short-lived-certificate feasibility calculator that trades revocation infrastructure for renewal load",
+            "revocation-reason analytics that show which reason codes actually drive list growth in a real CA",
+            "CRL diff visualizer that explains week-over-week size growth by issuer, reason, and expiry cliff",
+            "revocation propagation tracker measuring real-world delay from CA revoke to client enforcement",
+            "transparency-fed revocation reconciler finding certs revoked upstream but still trusted locally",
+            "compressed revocation transport experiment comparing gzip, zstd, and structured encodings on real CRLs",
+            "CRL expiry-cliff forecaster that predicts the mass-expiry spikes which detonate list size",
+            "revocation fallback auditor detecting clients that silently soft-fail when the responder is down",
+            "per-client revocation posture map showing which browsers, agents, and libraries actually check at all",
+            "signed-response caching proxy that shields origin responders from post-quantum bandwidth amplification",
+            "revocation SLA dashboard translating list freshness into a stated maximum window of stale trust",
+            "OCSP responder failover simulator that replays outage scenarios against a live trust configuration",
+            "revocation-list storage cost model across CDN egress, client bandwidth, and mobile data budgets",
+            "hybrid revocation strategy advisor that mixes short lifetimes, filters, and stapling per workload class",
+            "bulk-revocation drill tooling that rehearses a mass-revocation incident before it happens for real",
+        ],
+        "domains_to_cross": [
+            "public certificate authorities",
+            "private enterprise CAs",
+            "browser trust-store teams",
+            "CDN and edge operators",
+            "mobile platform vendors",
+            "IoT and device fleets",
+            "payment networks",
+            "government and defense PKI",
+            "healthcare identity systems",
+            "telecom operators",
+            "cloud service providers",
+            "TLS library maintainers",
+            "automotive and V2X",
+        ],
+    },
+    IdeaCategory.CERT_LIFECYCLE: {
+        "description": (
+            "The certificate lifecycle problems that take production down "
+            "today, before anyone says the word quantum: expiry outages, "
+            "renewal automation that covers ninety percent of a fleet and "
+            "silently misses the rest, ACME gaps for the things ACME was "
+            "never designed for, and the march toward much shorter lifetimes "
+            "that turns every manual renewal into an operational emergency."
+        ),
+        "seed_concepts": [
+            "certificate inventory reconciler that finds the certs no automation system currently owns",
+            "renewal-coverage scorecard reporting what percentage of a fleet is genuinely automated versus manual",
+            "expiry blast-radius mapper that ranks certificates by what breaks downstream when they lapse",
+            "ACME client conformance suite that tests real clients against edge cases of the protocol",
+            "ACME for non-web protocols bridging issuance to SMTP, LDAP, database, and message-broker endpoints",
+            "short-lifetime readiness simulator that replays a fleet at forty-seven-day validity to find what snaps",
+            "renewal thundering-herd scheduler that spreads issuance load instead of clustering it at the deadline",
+            "certificate ownership registry that maps each cert to a responsible team and escalation path",
+            "silent-renewal-failure detector that alerts when automation reports success but deploys nothing",
+            "post-renewal verification probe that confirms the new certificate is actually being served",
+            "private-key rotation tracker that proves keys are replaced at renewal rather than reused indefinitely",
+            "wildcard-certificate sprawl auditor that finds over-broad certs shared across unrelated services",
+            "certificate change-freeze advisor that flags renewals colliding with release or holiday freezes",
+            "multi-CA failover automation that reissues from a backup CA when the primary is unavailable",
+            "issuance policy linter that catches malformed subject fields and extensions before submission",
+            "renewal dependency graph showing which load balancers, proxies, and pods consume each certificate",
+            "certificate deployment drift detector comparing issued inventory against what endpoints actually present",
+            "expiry-outage postmortem generator that reconstructs the timeline from logs and inventory history",
+            "staged rollout tooling that canaries a new certificate to a slice of traffic before full cutover",
+            "lifecycle cost model comparing manual renewal labor against automation investment per fleet size",
+            "certificate request approval workflow with policy checks for regulated issuance environments",
+            "end-of-life protocol sweeper that finds endpoints still negotiating deprecated TLS versions at renewal",
+        ],
+        "domains_to_cross": [
+            "platform and SRE teams",
+            "Kubernetes operators",
+            "load-balancer and proxy fleets",
+            "managed hosting providers",
+            "financial services",
+            "retail and e-commerce",
+            "internal enterprise IT",
+            "CI/CD pipeline owners",
+            "database administrators",
+            "email infrastructure teams",
+            "content delivery networks",
+            "regulated healthcare systems",
+            "public sector agencies",
+        ],
+    },
+    IdeaCategory.PQC_MIGRATION: {
+        "description": (
+            "Moving a real organization off classical cryptography before the "
+            "deadlines bite. The hard part is not picking an algorithm, it is "
+            "discovery — knowing where RSA and ECDSA are actually used across "
+            "code, certificates, hardware, and vendor products — then "
+            "sequencing hybrid rollout without breaking interoperability. "
+            "Deadlines from standards bodies make this budgeted work, not "
+            "speculative work."
+        ),
+        "seed_concepts": [
+            "cryptographic bill of materials generator that emits a CBOM from source, binaries, and running services",
+            "crypto-discovery scanner that fingerprints algorithms in use across TLS endpoints and stored artifacts",
+            "hybrid certificate issuance pipeline that produces and validates composite classical plus PQ chains",
+            "interoperability matrix harness testing hybrid handshakes across client and server implementations",
+            "algorithm agility linter that finds hardcoded key sizes and curve names blocking future rotation",
+            "migration sequencer that orders systems by dependency so trust anchors move before leaf certificates",
+            "vendor PQC readiness tracker that records which products support which algorithms and in what version",
+            "HSM firmware capability inventory mapping which modules can hold post-quantum keys at all",
+            "handshake size budget analyzer that flags where a PQ chain exceeds initial-flight or MTU limits",
+            "certificate compression evaluator measuring real savings from chain compression on live traffic",
+            "harvest-now-decrypt-later exposure model ranking data by confidentiality lifetime against migration date",
+            "compliance deadline dashboard mapping systems to standards-body timelines and remaining runway",
+            "dual-trust-anchor distribution tooling that seeds PQ roots into fleets ahead of the cutover",
+            "PQ migration rehearsal environment that mirrors production trust for non-destructive cutover drills",
+            "code-signing chain migration planner for firmware that cannot be re-signed after shipping",
+            "key-size impact profiler measuring latency and CPU cost of PQ operations under production load",
+            "protocol downgrade detector that catches negotiation silently falling back to classical algorithms",
+            "long-lived-root planner for trust anchors that must remain valid for decades past the transition",
+            "PQ readiness scoring for acquisitions and third-party risk assessment during vendor review",
+            "migration rollback playbook generator with tested revert paths for each cutover stage",
+            "embedded-device triage tool that classifies hardware as upgradable, replaceable, or permanently stranded",
+            "cross-organization trust bridging for federations where members migrate on different schedules",
+        ],
+        "domains_to_cross": [
+            "large enterprises",
+            "defense and national security",
+            "financial infrastructure",
+            "hardware security module vendors",
+            "embedded and firmware teams",
+            "cloud platform providers",
+            "standards implementers",
+            "certificate authorities",
+            "medical device manufacturers",
+            "critical infrastructure operators",
+            "smart-card and identity issuers",
+            "satellite and space systems",
+            "automotive manufacturers",
+        ],
+    },
+    IdeaCategory.CA_OPERATIONS: {
+        "description": (
+            "Running a certificate authority as an operational system rather "
+            "than a binder of procedures. Root ceremonies, HSM custody, "
+            "issuance policy enforcement, audit evidence, certificate "
+            "transparency, and the trust-store politics that decide whether "
+            "anyone accepts what you issue. Mostly unautomated, extremely "
+            "high consequence, and almost entirely served by expensive legacy "
+            "products."
+        ),
+        "seed_concepts": [
+            "root key ceremony scripting system with tamper-evident logging and multi-party witness attestation",
+            "HSM key custody tracker recording quorum membership, card holders, and rotation obligations",
+            "issuance policy engine that enforces certificate profile rules at request time rather than in review",
+            "audit evidence collector that continuously assembles the artifacts a WebTrust-style audit will demand",
+            "certificate profile diff tool comparing issued certs against the documented policy for drift",
+            "certificate transparency log monitor that alerts on unexpected issuance for owned domains",
+            "CT log inclusion-proof verifier that independently validates SCTs rather than trusting the log",
+            "misissuance incident response toolkit with timeline reconstruction and mass-revocation orchestration",
+            "trust-store inclusion readiness checker against published browser and OS root program requirements",
+            "cross-signing topology planner that models trust paths during root transitions and rollovers",
+            "path-building debugger that explains why a specific chain failed to validate in a specific client",
+            "CA hierarchy designer that models issuing-CA separation by risk domain and blast radius",
+            "certificate policy and practice statement generator kept in sync with enforced technical controls",
+            "offline root air-gap workflow tooling with signed transfer manifests between zones",
+            "issuance rate anomaly detector that flags volume spikes suggesting compromise or misconfiguration",
+            "subordinate CA lifecycle manager tracking constraints, expiry, and delegated issuance scope",
+            "name-constraint validator that verifies technical restrictions actually bound what a sub-CA can issue",
+            "CA disaster recovery rehearsal harness that proves the backup issuance path works under load",
+            "compliance mapping tool aligning CA controls to multiple overlapping regulatory frameworks",
+            "certificate authority migration tooling for moving issuance off an end-of-life commercial product",
+            "quorum-loss contingency planner for when enough key custodians become unavailable",
+            "public disclosure workflow for CA incidents with structured reporting to root programs",
+        ],
+        "domains_to_cross": [
+            "commercial certificate authorities",
+            "enterprise internal PKI teams",
+            "root program operators",
+            "HSM and key-management vendors",
+            "compliance auditors",
+            "government credentialing agencies",
+            "banking consortium PKIs",
+            "cloud managed-PKI services",
+            "certificate transparency operators",
+            "trust-store maintainers",
+            "identity federation operators",
+            "managed security service providers",
+            "standards working groups",
+        ],
+    },
+    IdeaCategory.CERT_IDENTITY: {
+        "description": (
+            "Certificates as identity for things that are not websites: "
+            "service-to-service mutual TLS, workload identity, device and "
+            "hardware attestation, code and firmware signing, and the supply "
+            "chain that depends on all of it. This is where certificate "
+            "expiry causes outages nobody instruments and where key "
+            "compromise is hardest to recover from."
+        ),
+        "seed_concepts": [
+            "workload identity issuance broker that mints short-lived certificates bound to attested workload identity",
+            "mutual TLS policy visualizer showing which services can actually authenticate to which others",
+            "service mesh certificate rotation verifier that proves rotation happened without dropped connections",
+            "device attestation pipeline binding hardware roots of trust to issued operational certificates",
+            "code-signing key protection auditor that finds signing keys reachable from build infrastructure",
+            "firmware signing chain planner for devices that must verify updates for a decade after shipping",
+            "software supply chain attestation linker connecting build provenance to the signing certificate used",
+            "signing key compromise recovery planner with staged revocation and re-signing sequencing",
+            "certificate-based access review that maps machine identities to entitlements the way IAM does for humans",
+            "orphaned machine identity finder that revokes certificates for workloads that no longer exist",
+            "mTLS handshake failure analyzer that explains client-side rejection causes in plain language",
+            "SPIFFE-style identity migration tool for fleets moving off long-lived shared credentials",
+            "signing ceremony automation for release artifacts with reproducible verification steps",
+            "certificate pinning lifecycle manager that prevents pins from outliving the certificates they pin",
+            "hardware token enrollment automation for workforce and contractor device provisioning",
+            "cross-cluster trust bundle distributor keeping certificate authorities in sync across environments",
+            "machine identity sprawl analytics quantifying how many non-human identities exist versus humans",
+            "container image signing enforcement with admission control tied to certificate validity",
+            "constrained-device certificate profile optimizer for memory and bandwidth limited endpoints",
+            "emergency credential rotation orchestrator for mass machine-identity compromise scenarios",
+            "attestation freshness monitor that detects devices presenting stale or replayed attestations",
+            "signing policy separation tool enforcing distinct keys per release channel and environment",
+        ],
+        "domains_to_cross": [
+            "service mesh operators",
+            "Kubernetes platform teams",
+            "IoT device manufacturers",
+            "automotive and industrial control",
+            "software supply chain security",
+            "build and release engineering",
+            "zero-trust network teams",
+            "hardware token vendors",
+            "medical device fleets",
+            "robotics and drones",
+            "point-of-sale networks",
+            "smart grid and utilities",
+            "enterprise endpoint management",
+        ],
+    },
 }
 
 
