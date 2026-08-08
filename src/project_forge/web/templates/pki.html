@@ -10,8 +10,10 @@
             {{ total }} certificate-infrastructure findings across {{ categories|length }} categories &mdash;
             revocation, lifecycle, post-quantum migration, CA operations, and machine identity &mdash;
             ranked by <strong>urgency</strong>: deadline pressure &times; blast radius &times; how badly
-            today's tooling fails. An hourly probe works <em>one</em> grounded gap and admits it only if
-            it cites a real artifact and clears the bar. Most hours admit nothing &mdash; that is the point.
+            today's tooling fails. An hourly probe works <em>one</em> grounded gap, drops it if existing
+            tooling already does the job, red-teams the survivor three ways, rewrites it to answer the
+            objections, and admits it only if it cites a real artifact and clears the bar. Most hours admit
+            nothing &mdash; that is the point.
         </p>
         <div class="churn-row">
             <button id="churn-btn" class="btn btn-primary btn-churn" type="button">
@@ -20,6 +22,13 @@
             </button>
             <div id="churn-status" class="churn-status"></div>
         </div>
+        {# Churn is the RAW path on purpose: a human clicking it wants to see what
+           the generator produces now, not wait minutes for the panel. Say so, or
+           the pipeline description above reads as a promise this button doesn't keep. #}
+        <p class="churn-note">
+            Churn Now is the raw generator &mdash; no prior-art check, no red-team, no gate.
+            Only the hourly probe produces vetted findings.
+        </p>
     </div>
 </section>
 
@@ -75,6 +84,16 @@
                             {% endif %}
                         </div>
                         {% endif %}
+                        {# The objection the red-team panel raised that the rewrite
+                           could not answer away. Showing it is the whole point: a
+                           finding that names its own weakest joint is actionable,
+                           one that hides it is a pitch. #}
+                        {% if idea.pki_objection %}
+                        <div class="pki-objection" title="Strongest surviving counterargument from the red-team panel">
+                            <span class="pki-objection-label">strongest counterargument</span>
+                            <span class="pki-objection-text">{{ idea.pki_objection }}</span>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
                 <div class="moneybot-card-foot">
@@ -124,6 +143,9 @@
                     {% if p.anchor %}
                     <span class="probe-anchor">{{ p.anchor }}</span>
                     {% endif %}
+                    {# Reasons now come from four different stages — gate, red-team
+                       panel, prior art, dedup — and the panel/prior-art ones carry a
+                       sentence or a repo URL, so this line has to wrap, not clip. #}
                     <span class="probe-reason">{{ p.reason }}</span>
                     {% if p.urgency_score is not none %}
                     <span class="probe-score">{{ "%.2f"|format(p.urgency_score) }}</span>

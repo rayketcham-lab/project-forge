@@ -15,7 +15,7 @@ from project_forge.engine.llm_generator import generate_idea_llm
 from project_forge.engine.quality_review import review_idea
 from project_forge.engine.saturation import category_density, rank_pair_score
 from project_forge.engine.super_ideas import SuperIdeaGenerator, pick_least_covered_slot
-from project_forge.models import Idea, IdeaCategory
+from project_forge.models import GATED_CATEGORIES, Idea, IdeaCategory
 from project_forge.storage.db import Database
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ async def pick_cross_category_pair(
         return IdeaCategory(best[1]), IdeaCategory(best[2])
 
     # Fallback: random pair (should never reach here with 600+ pairs)
-    cats = [c for c in IdeaCategory if c != IdeaCategory.SELF_IMPROVEMENT]
+    cats = [c for c in IdeaCategory if c != IdeaCategory.SELF_IMPROVEMENT and c not in GATED_CATEGORIES]
     a, b = random.sample(cats, 2)
     return a, b
 

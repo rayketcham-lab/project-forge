@@ -1080,6 +1080,7 @@ async def pki(
         f"WHERE category IN ({placeholders}) "
         f"AND status NOT IN ('archived', 'rejected') "
         f"AND pki_urgency_score IS NOT NULL "
+        f"AND generation_mode = 'pki' "
         f"ORDER BY pki_urgency_score DESC, generated_at DESC LIMIT ?",
         (*cats, limit),
     )
@@ -1124,6 +1125,7 @@ async def api_pki_top(limit: int = Query(default=10, ge=1, le=100)):
         f"FROM ideas WHERE category IN ({placeholders}) "
         f"AND status NOT IN ('archived', 'rejected') "
         f"AND pki_urgency_score IS NOT NULL "
+        f"AND generation_mode = 'pki' "
         f"ORDER BY pki_urgency_score DESC, generated_at DESC LIMIT ?",
         (*_PKI_CATEGORIES, limit),
     )

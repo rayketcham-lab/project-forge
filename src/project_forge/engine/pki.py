@@ -285,14 +285,21 @@ def admits(idea: Idea, score: float) -> tuple[bool, str]:
 
 async def score_pending_pki_urgency(db: Database, limit: int = 50) -> dict[str, Any]:
     """Score active PKI-board ideas that don't yet have a pki_urgency_score.
-    Scoped to PKI_CATEGORIES — the axis is the board's ranking, not a
-    universal property. Also back-fills `pki_anchor` when the prose cites
-    one. Idempotent; returns a summary."""
+
+    Scoped to PKI_CATEGORIES *and* `generation_mode = 'pki'` — the axis is the
+    board's ranking, not a universal property, and a score is what puts an
+    idea on the board. Without the mode filter this cadence was the back
+    door: it scored every PKI-category idea the ordinary rotation produced,
+    putting ungated content on a board that advertises a hard admission gate.
+
+    Also back-fills `pki_anchor` when the prose cites one. Idempotent;
+    returns a summary."""
     placeholders = ",".join("?" * len(PKI_CATEGORIES))
     cur = await db.db.execute(
         f"SELECT id FROM ideas "  # noqa: S608
         f"WHERE pki_urgency_score IS NULL "
         f"AND category IN ({placeholders}) "
+        f"AND generation_mode = 'pki' "
         f"AND status NOT IN ('archived', 'rejected') "
         f"ORDER BY generated_at DESC LIMIT ?",
         (*[c.value for c in PKI_CATEGORIES], limit),

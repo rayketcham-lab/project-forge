@@ -528,6 +528,25 @@ async def _fire_pki_score(db: Database) -> None:
     logger.info("PKI scoring cycle scored %d ideas", result.get("scored", 0))
 
 
+async def _record_pki_drop(
+    db: Database,
+    gap: dict,
+    *,
+    anchor: str | None,
+    reason: str,
+    score: float | None = None,
+) -> None:
+    """Log a probe that stored nothing. Every rejection stage funnels through
+    here so a quiet hour always says which stage did the dropping."""
+    await db.record_pki_probe(
+        gap_summary=gap.get("title"),
+        anchor=anchor,
+        admitted=False,
+        reason=reason,
+        urgency_score=score,
+    )
+
+
 async def _fire_pki(db: Database) -> None:
     """The hourly PKI probe: ONE target, and it is allowed to come back empty.
 
@@ -536,24 +555,37 @@ async def _fire_pki(db: Database) -> None:
     probe, picks the single highest-leverage gap it found, works that one
     gap hard, and then applies an admission gate that most attempts fail.
 
-      probe -> pick ONE gap -> generate one spec-grade item -> gate -> store or DROP
+      probe -> pick ONE gap -> generate draft -> red-team panel -> gate ->
+      prior-art check -> store or DROP
 
-    There is no fallback generation. If the probe finds nothing, or the
-    generator produces something unanchored, or the urgency score lands
-    below the threshold, this cadence stores NOTHING and logs why. That is
-    the intended behavior: the board is a short list of things that matter,
-    not an hourly deposit. Every attempt is recorded in `pki_probes` so the
-    quiet hours are auditable and so the schedule has a watermark that
-    advances even when nothing is stored.
+    Selectivity alone was not enough. A gate that admits one draft in ten
+    still admits a single LLM pass: a paragraph that cites an RFC and that a
+    CA engineer would not act on, because nobody tried to break it. So two
+    stages sit either side of the gate. `deepen()` breaks the draft three
+    ways and rewrites it around what survived, and can kill it outright.
+    `check_prior_art()` then asks the question that actually kills
+    certificate tooling — somebody shipped this in 2017 and it has four
+    thousand stars.
+
+    There is no fallback generation. If the probe finds nothing, the panel
+    kills the draft, the score lands below the threshold, or a maintained
+    tool already does the job, this cadence stores NOTHING and logs why.
+    That is the intended behavior: the board is a short list of things that
+    matter, not an hourly deposit. Every attempt is recorded in `pki_probes`
+    so the quiet hours are auditable and so the schedule has a watermark
+    that advances even when nothing is stored.
 
     Touches no GitHub state — governance rule for autonomous cadences.
     """
     from project_forge.engine.dedup import filter_and_save
     from project_forge.engine.llm_generator import generate_idea_llm
     from project_forge.engine.pki import admits, extract_anchor, score_pki_urgency
+    from project_forge.engine.pki_depth import deepen
+    from project_forge.engine.pki_prior_art import check_prior_art
     from project_forge.feeds.pki_probe import fetch_pki_gaps, gap_to_seed, pick_top_gap
     from project_forge.models import IdeaCategory
 
+    gap: dict | None = None
     try:
         # 1. Probe the real sources. Never raises; [] is a normal outcome.
         recent = await db.list_pki_probes(limit=200)
@@ -597,28 +629,64 @@ async def _fire_pki(db: Database) -> None:
         idea.generation_mode = "pki"
         idea.pki_anchor = extract_anchor(idea) or (gap.get("url") or None)
 
-        # 4. The gate. Anchor + urgency threshold + right board.
+        # 4. Has somebody already shipped this? Three cheap HTTP searches,
+        #    and they run FIRST: a duplicate should never cost five LLM
+        #    calls, and the near-misses are the evidence the red team's
+        #    novelty lens needs to adjudicate instead of guess. Fails open by
+        #    design — a rate limit must never masquerade as "already exists".
+        prior = await check_prior_art(idea)
+        if prior.exists:
+            await _record_pki_drop(db, gap, anchor=idea.pki_anchor, reason=prior.reason)
+            logger.info("PKI probe: prior art killed %r — %s", idea.name, prior.reason)
+            return
+
+        # 5. The red team. Three adversarial lenses plus one rewrite around
+        #    what survived. A fatal "already solved" hit, or two landed hits
+        #    anywhere, kills the draft — rewording cannot save an idea that
+        #    is wrong in two dimensions. Keyless this is a free no-op.
+        depth = await deepen(idea, prior_art=prior.matches)
+        if not depth.survived:
+            await _record_pki_drop(
+                db,
+                gap,
+                anchor=idea.pki_anchor,
+                reason=f"red-team panel killed it: {depth.strongest or 'no surviving rationale'}",
+            )
+            logger.info("PKI probe: panel killed %r after %d passes", idea.name, depth.passes)
+            return
+
+        # Score the REVISED text, not the draft the panel tore up. The
+        # objection is only published when the rewrite actually landed —
+        # otherwise the card would show a counterargument the text below it
+        # never answers.
+        idea = depth.idea
+        idea.pki_objection = depth.strongest
+
+        # 6. The gate. Anchor + urgency threshold + right board.
         score = await score_pki_urgency(idea)
         idea.pki_urgency_score = score
         ok, reason = admits(idea, score)
         if not ok:
-            await db.record_pki_probe(
-                gap_summary=gap.get("title"),
+            await _record_pki_drop(
+                db,
+                gap,
                 anchor=idea.pki_anchor or gap.get("url"),
-                admitted=False,
                 reason=reason,
-                urgency_score=score,
+                score=score,
             )
             logger.info("PKI probe: rejected %r — %s", idea.name, reason)
             return
 
-        # 5. Survived the gate; dedup still gets the last word.
+        # 7. Survived everything; dedup still gets the last word. The closest
+        #    prior art rides along on the admitted probe: it is the only
+        #    calibration data available for tuning the match threshold, and
+        #    it was being thrown away every hour.
         _saved, stored, dedup_reason = await filter_and_save(idea, db)
         await db.record_pki_probe(
             gap_summary=gap.get("title"),
             anchor=idea.pki_anchor,
             admitted=bool(stored),
-            reason="admitted" if stored else f"dedup rejected: {dedup_reason}",
+            reason=f"admitted ({prior.reason})" if stored else f"dedup rejected: {dedup_reason}",
             idea_id=idea.id if stored else None,
             urgency_score=score,
         )
@@ -629,8 +697,23 @@ async def _fire_pki(db: Database) -> None:
             score,
             idea.pki_anchor,
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("PKI probe cycle failed")
+        # The watermark is MAX(pki_probes.probed_at), so a crash that records
+        # nothing leaves the cadence permanently overdue: it re-fires every
+        # tick, and because `seen_urls` also comes from the probe log it picks
+        # the SAME gap each time. A deterministic failure would become an
+        # unbounded LLM burn loop on one gap. Recording the crash advances the
+        # watermark and retires the gap.
+        try:
+            await db.record_pki_probe(
+                gap_summary=(gap or {}).get("title"),
+                anchor=(gap or {}).get("url"),
+                admitted=False,
+                reason=f"probe crashed: {type(exc).__name__}: {exc}"[:400],
+            )
+        except Exception:
+            logger.exception("PKI probe: could not record the crash either")
 
 
 async def _fire_auto_promote(db: Database) -> None:

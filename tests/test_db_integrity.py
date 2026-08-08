@@ -142,6 +142,8 @@ EXPECTED_COLUMNS = {
             # so locking them here catches a dropped migration.
             "pki_urgency_score",
             "pki_anchor",
+            # The red-team panel's surviving objection, surfaced on the card.
+            "pki_objection",
         }
     ),
     "filtered_ideas": frozenset(

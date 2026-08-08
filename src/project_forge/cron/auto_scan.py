@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from project_forge.engine.categories import CATEGORY_SEEDS, COMBINATORIC_TEMPLATES, CONTRARIAN_PROMPTS
 from project_forge.engine.dedup import filter_and_save
 from project_forge.engine.quality_review import review_idea
-from project_forge.models import GenerationRun, Idea, IdeaCategory
+from project_forge.models import GATED_CATEGORIES, GenerationRun, Idea, IdeaCategory
 from project_forge.storage.db import Database
 
 logger = logging.getLogger(__name__)
@@ -478,7 +478,11 @@ def generate_local_idea(
     if category is None:
         # SELF_IMPROVEMENT is generated only by the introspection engine, never
         # by the generic combinatoric path (which produces garbled SI names).
-        category = random.choice([c for c in IdeaCategory if c != IdeaCategory.SELF_IMPROVEMENT])
+        # GATED_CATEGORIES are excluded for the same reason: their board only
+        # shows what its own gated cadence produced.
+        category = random.choice(
+            [c for c in IdeaCategory if c != IdeaCategory.SELF_IMPROVEMENT and c not in GATED_CATEGORIES]
+        )
 
     seeds = CATEGORY_SEEDS[category]
     concepts = seeds["seed_concepts"]
@@ -582,7 +586,7 @@ async def run_auto_scan(db: Database, count: int = 5) -> list[Idea]:
         IdeaCategory.VULNERABILITY_RESEARCH,
         IdeaCategory.COMPLIANCE,
     }
-    categories = [c for c in IdeaCategory if c != IdeaCategory.SELF_IMPROVEMENT]
+    categories = [c for c in IdeaCategory if c != IdeaCategory.SELF_IMPROVEMENT and c not in GATED_CATEGORIES]
     random.shuffle(categories)
     security_extra = [c for c in categories if c in security_core]
     random.shuffle(security_extra)
