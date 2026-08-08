@@ -797,6 +797,12 @@ async def api_churn(request: Request):
     )
     from project_forge.engine.snipe import score_snipe
 
+    # Most expensive endpoint in the system (LLM generation + scoring, plus
+    # live incumbent HTTP calls on lab=snipe). Rate limit before dispatch so a
+    # spammed Churn Now button can't burn API credit.
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"churn:{client_ip}")
+
     try:
         payload = await request.json()
     except Exception:
