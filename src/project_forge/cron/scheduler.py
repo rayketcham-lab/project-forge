@@ -13,14 +13,17 @@ from project_forge.engine.quality_review import review_idea
 from project_forge.engine.scorer import is_high_value, score_idea
 from project_forge.feeds import get_external_seeds
 from project_forge.feeds.cache import FeedCache
-from project_forge.models import GenerationRun, Idea, IdeaCategory
+from project_forge.models import GATED_CATEGORIES, GenerationRun, Idea, IdeaCategory
 from project_forge.scaffold.builder import build_scaffold_spec, render_scaffold
 from project_forge.scaffold.github import create_issue, create_label, create_repo, push_initial_commit
 from project_forge.storage.db import Database
 
 logger = logging.getLogger(__name__)
 
-ALL_CATEGORIES = list(IdeaCategory)
+# Gated categories are excluded: their board admits only what its own cadence
+# produced, so generating into them here just makes pool noise the board will
+# never surface. See GATED_CATEGORIES in models.py.
+ALL_CATEGORIES = [c for c in IdeaCategory if c not in GATED_CATEGORIES]
 
 
 def _feeds_dir() -> Path:
@@ -101,8 +104,8 @@ def _create_enhancement_issue(repo: str, idea: Idea, reason: str) -> str:
 async def generate_and_store(db: Database, generator: IdeaGenerator) -> Idea:
     """Generate one idea, score it, route it, and store it."""
     category = await pick_category(db)
-    recent_ideas_objs = await db.list_ideas(limit=5)
-    recent_names = [i.name for i in recent_ideas_objs]
+    recent_ideas_objs = await db.list_ideas(limit=10)
+    recent_names = [f"{i.name}: {i.tagline}" for i in recent_ideas_objs]
 
     # Alternate between prompt modes for variety
     run_count = await db.count_ideas()

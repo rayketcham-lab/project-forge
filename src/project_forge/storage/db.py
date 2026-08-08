@@ -333,6 +333,9 @@ class Database:
             # anchored to. Both NULL outside the PKI categories.
             "ALTER TABLE ideas ADD COLUMN pki_urgency_score REAL",
             "ALTER TABLE ideas ADD COLUMN pki_anchor TEXT",
+            # The surviving red-team objection from the depth panel. NULL
+            # when the panel found nothing, or ran keyless.
+            "ALTER TABLE ideas ADD COLUMN pki_objection TEXT",
         ):
             try:
                 await self._db.execute(stmt)
@@ -403,8 +406,8 @@ class Database:
                  github_issue_url, project_repo_url, content_hash, source_url,
                  generation_mode, fundability_score, auto_promoted_at, ambition_score,
                 artifact_type, snipe_score, target_incumbent, mission_id, cashflow_score,
-                pki_urgency_score, pki_anchor)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                pki_urgency_score, pki_anchor, pki_objection)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     idea.id,
                     idea.name,
@@ -432,6 +435,7 @@ class Database:
                     getattr(idea, "cashflow_score", None),
                     getattr(idea, "pki_urgency_score", None),
                     getattr(idea, "pki_anchor", None),
+                    getattr(idea, "pki_objection", None),
                 ),
             )
             await self.db.commit()
@@ -1500,6 +1504,7 @@ class Database:
             cashflow_score=(row["cashflow_score"] if "cashflow_score" in keys else None),
             pki_urgency_score=(row["pki_urgency_score"] if "pki_urgency_score" in keys else None),
             pki_anchor=(row["pki_anchor"] if "pki_anchor" in keys else None),
+            pki_objection=(row["pki_objection"] if "pki_objection" in keys else None),
         )
 
     # === RESOURCE CRUD ===

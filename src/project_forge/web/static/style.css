@@ -162,6 +162,24 @@ a:hover { color: var(--accent); }
 .pki-anchor a { color: #3fb8af; text-decoration: none; }
 .pki-anchor a:hover { text-decoration: underline; }
 
+/* The surviving red-team objection. Deliberately styled as a caveat, not as
+   a feature: amber left rule, dimmer than the tagline it sits under. */
+.pki-objection {
+    margin-top: 0.5rem;
+    padding-left: 0.5rem;
+    border-left: 2px solid #c9902f;
+    font-size: 0.72rem;
+    line-height: 1.45;
+}
+.pki-objection-label {
+    display: block;
+    font-size: 0.62rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #c9902f;
+}
+.pki-objection-text { color: var(--text-dim, #8b93a7); }
+
 .probe-log {
     margin-top: 2.5rem;
     padding-top: 1.5rem;
@@ -201,12 +219,28 @@ a:hover { color: var(--accent); }
     color: #3fb8af;
     word-break: break-all;
 }
-.probe-reason { color: var(--text-dim, #8b93a7); font-style: italic; }
+/* Panel and prior-art rejections are a whole sentence (and sometimes a repo
+   URL), so this claims its own row rather than fighting the gap text. */
+.probe-reason {
+    flex: 1 1 100%;
+    color: var(--text-dim, #8b93a7);
+    font-style: italic;
+    overflow-wrap: anywhere;
+}
 .probe-score {
     font-family: var(--mono, ui-monospace, monospace);
     color: var(--text-dim, #8b93a7);
 }
 .probe-empty { font-size: 0.8rem; color: var(--text-dim, #8b93a7); }
+
+/* Churn on /pki is the raw path — flag it so the vetted-pipeline copy above
+   the button isn't read as a promise this button keeps. */
+.churn-note {
+    margin: 0.5rem 0 0;
+    font-size: 0.72rem;
+    color: var(--text-dim, #8b93a7);
+    font-style: italic;
+}
 
 /* Sniper board accents — the "vs. incumbent" line, the snipe angle pill,
    and the Snipe-Now button tint. */

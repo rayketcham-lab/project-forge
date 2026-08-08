@@ -172,6 +172,21 @@ PKI_CATEGORIES: tuple["IdeaCategory", ...] = (
 )
 
 
+# Categories whose board owns its own ADMISSION GATE. The general generation
+# rotation (expand, template auto-scan, super-idea horizontal) must not
+# produce into these: anything that arrives outside the gated cadence would
+# otherwise land in the category, get back-filled a score, and appear on a
+# board that advertises itself as selective.
+#
+# This is the "back door" fix. The PKI board shipped with a hard gate on its
+# own cadence while the ordinary rotation kept generating into the same five
+# categories — 28 of the first 77 board items had never seen the gate, and
+# 201 more were queued behind the score back-fill. The board query ALSO
+# filters on generation_mode, so this constant is the efficiency half (stop
+# generating what the board will never show) and the query is the guarantee.
+GATED_CATEGORIES: tuple["IdeaCategory", ...] = PKI_CATEGORIES
+
+
 IdeaStatus = Literal["new", "approved", "scaffolded", "rejected", "archived", "contributed", "implemented"]
 
 
@@ -243,6 +258,11 @@ class Idea(BaseModel):
     # CA/B Forum ballot, a tracker issue, a compliance deadline. Required
     # for admission to /pki: no anchor means it's a vibe, not a finding.
     pki_anchor: str | None = None
+    # The strongest counterargument the red-team panel raised that the
+    # revision could not make go away. Surfaced on the card on purpose: a
+    # finding that admits what is wrong with it is worth more to an engineer
+    # than one that pretends the objection was never made.
+    pki_objection: str | None = None
 
 
 MissionStatus = Literal["active", "paused", "archived"]
