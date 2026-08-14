@@ -294,3 +294,48 @@ class TestCadence:
     async def test_cadence_is_registered_on_a_schedule(self, sched):
         names = sched.cadence_names() if hasattr(sched, "cadence_names") else []
         assert "bot_strategy" in names or any("bot" in n for n in names)
+
+
+@pytest.mark.asyncio
+class TestCategoryRotation:
+    """The probe kept routing to whatever the SDK release notes talked about,
+    which is market-making and basis-carry — the two categories where fees
+    genuinely eat a retail-size edge. Three live cycles produced three
+    flagged strategies and never once tried capital-automation or
+    incentive-capture, where the venue PAYS you rather than you extracting
+    from other traders.
+    """
+
+    async def test_routed_category_is_used_when_it_is_under_represented(self, db, sched):
+        picked = await sched._pick_bot_category(db, IdeaCategory.MARKET_MAKING)
+        assert picked is IdeaCategory.MARKET_MAKING
+
+    async def test_rotates_away_from_a_saturated_category(self, db, sched):
+        for i in range(3):
+            idea = _idea(name=f"Maker {i}", category=IdeaCategory.MARKET_MAKING)
+            idea.content_hash = f"mm{i}"
+            idea.bot_edge_score = 0.8
+            await db.save_idea(idea)
+
+        picked = await sched._pick_bot_category(db, IdeaCategory.MARKET_MAKING)
+        assert picked is not IdeaCategory.MARKET_MAKING
+        from project_forge.models import MONEY_CATEGORIES
+
+        assert picked in MONEY_CATEGORIES
+
+    async def test_prefers_the_least_used_category(self, db, sched):
+        for cat, n in (
+            (IdeaCategory.MARKET_MAKING, 3),
+            (IdeaCategory.BASIS_CARRY, 2),
+            (IdeaCategory.CROSS_VENUE_ARBITRAGE, 2),
+            (IdeaCategory.INCENTIVE_CAPTURE, 1),
+        ):
+            for i in range(n):
+                idea = _idea(name=f"{cat.value} {i}", category=cat)
+                idea.content_hash = f"{cat.value}{i}"
+                idea.bot_edge_score = 0.8
+                await db.save_idea(idea)
+
+        # capital-automation has none at all — it should win.
+        picked = await sched._pick_bot_category(db, IdeaCategory.MARKET_MAKING)
+        assert picked is IdeaCategory.CAPITAL_AUTOMATION

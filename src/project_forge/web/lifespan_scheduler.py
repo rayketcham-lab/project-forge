@@ -28,6 +28,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
+from project_forge.models import IdeaCategory
 from project_forge.storage.db import Database
 
 logger = logging.getLogger(__name__)
@@ -766,6 +767,46 @@ async def _bot_score(idea) -> float:
     return await score_bot_edge(idea)
 
 
+async def _pick_bot_category(db: Database, routed):
+    """Which bot category to work, given where the signal routed.
+
+    The signal's own routing is used when that category is not already
+    over-represented. It usually is: SDK release notes talk about order
+    books and funding rates, so the probe kept landing on market-making and
+    basis-carry — the two categories where fees genuinely eat a retail-size
+    edge. Three live cycles produced three flagged strategies and never once
+    tried capital-automation or incentive-capture, where the venue PAYS you
+    rather than you extracting from other traders.
+
+    So a saturated route yields to the least-explored category. The signal
+    still grounds the strategy; it just gets applied somewhere the operator
+    has a chance of clearing costs.
+    """
+    from project_forge.models import MONEY_CATEGORIES
+
+    counts = {c: 0 for c in MONEY_CATEGORIES}
+    cur = await db.db.execute(
+        "SELECT category, COUNT(*) AS n FROM ideas "
+        "WHERE generation_mode = 'bot' AND status NOT IN ('archived', 'rejected') "
+        "GROUP BY category"
+    )
+    for row in await cur.fetchall():
+        try:
+            cat = IdeaCategory(row["category"])
+        except ValueError:
+            continue
+        if cat in counts:
+            counts[cat] = row["n"]
+
+    least = min(counts.values())
+    routed_count = counts.get(routed, 0)
+    # Within one of the least-explored category is close enough to keep the
+    # signal's own routing, which is better grounded.
+    if routed in counts and routed_count <= least + 1:
+        return routed
+    return min(counts, key=lambda c: (counts[c], c.value))
+
+
 async def _record_bot_drop(
     db: Database,
     program: dict,
@@ -834,9 +875,12 @@ async def _fire_bot_strategy(db: Database) -> None:
             return
 
         try:
-            category = IdeaCategory(program.get("category") or "capital-automation")
+            routed = IdeaCategory(program.get("category") or "capital-automation")
         except ValueError:
-            category = IdeaCategory.CAPITAL_AUTOMATION
+            routed = IdeaCategory.CAPITAL_AUTOMATION
+        # Rotate off a saturated route so the board explores the categories
+        # where small capital actually clears its costs.
+        category = await _pick_bot_category(db, routed)
 
         # 3. Compose the live program with a mechanism already known to pay.
         primitive = pick_primitive(rng=_rnd.Random(), category=category)

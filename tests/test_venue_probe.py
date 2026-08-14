@@ -282,3 +282,40 @@ class TestJurisdiction:
         monkeypatch.setattr(settings, "operator_jurisdiction", "")
         seed = venue_probe.program_to_seed(self._program(), primitive=None)
         assert "operator is based in" not in seed
+
+
+class TestFeeArithmetic:
+    """Every live kill so far was fee arithmetic, so the seed must demand it.
+
+    Observed: drafts quoted "0.035% round-trip" when that figure was one
+    fill on each venue — entry only. The true round trip is double. The
+    generator has to do that sum itself, because the panel doing it later
+    costs a whole cycle.
+    """
+
+    def _program(self) -> dict:
+        return {
+            "venue": "Hyperliquid",
+            "family": BotVenueFamily.CRYPTO_DEFI.value,
+            "category": IdeaCategory.BASIS_CARRY.value,
+            "title": "funding endpoint",
+            "url": "https://example.com/x",
+            "summary": "funding history",
+            "source": "github-release",
+            "program_score": 5,
+        }
+
+    def test_seed_demands_round_trip_costs(self):
+        seed = venue_probe.program_to_seed(self._program(), primitive=None).lower()
+        assert "round trip" in seed or "round-trip" in seed
+        assert "entry and exit" in seed or "both legs" in seed
+
+    def test_seed_demands_a_net_return(self):
+        seed = venue_probe.program_to_seed(self._program(), primitive=None).lower()
+        assert "net of" in seed
+
+    def test_seed_tells_it_to_walk_away(self):
+        """A strategy that cannot clear its costs should be abandoned in the
+        prompt, not defended and then killed by the panel."""
+        seed = venue_probe.program_to_seed(self._program(), primitive=None).lower()
+        assert "does not clear" in seed or "cannot clear" in seed
