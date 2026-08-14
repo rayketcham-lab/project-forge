@@ -51,6 +51,15 @@ class Venue(BaseModel):
     name: str
     family: BotVenueFamily
     docs_url: str
+    # Whether a US-based operator can use it:
+    #   eligible   — US-regulated or openly available to US persons
+    #   restricted — offshore / geoblocked / bars US persons
+    #   verify     — genuinely depends (state law, account type, asset)
+    #
+    # This is the engine's working belief, not legal advice, and it is why
+    # `eligibility_note` stays mandatory on every entry. Venue terms and
+    # state-level availability move; this file does not track them.
+    us_status: str = "verify"
     # What the operator must confirm on the live docs before funding a bot
     # here — eligibility is not the same question everywhere.
     eligibility_note: str = ""
@@ -61,96 +70,227 @@ class Venue(BaseModel):
 # than nothing. The probe supplies the live citation; this supplies the
 # venue's identity and where to start reading.
 VENUE_REGISTRY: tuple[Venue, ...] = (
-    Venue(
-        name="Polymarket",
-        family=BotVenueFamily.PREDICTION_MARKETS,
-        docs_url="https://docs.polymarket.com/",
-        eligibility_note="Jurisdictional eligibility and any market-specific restrictions must be confirmed first.",
-    ),
+    # --- prediction markets -------------------------------------------- #
     Venue(
         name="Kalshi",
         family=BotVenueFamily.PREDICTION_MARKETS,
         docs_url="https://trading-api.readme.io/",
-        eligibility_note="A regulated US exchange — check account eligibility and API terms before automating.",
+        us_status="eligible",
+        eligibility_note=(
+            "A CFTC-regulated US exchange with a published API. Confirm current API terms before automating."
+        ),
     ),
     Venue(
-        name="Hyperliquid",
-        family=BotVenueFamily.CRYPTO_DEFI,
-        docs_url="https://hyperliquid.gitbook.io/hyperliquid-docs",
-        eligibility_note="Perpetuals are restricted in many jurisdictions; confirm access and leverage limits.",
+        name="Polymarket US",
+        family=BotVenueFamily.PREDICTION_MARKETS,
+        docs_url="https://docs.polymarket.com/",
+        us_status="eligible",
+        eligibility_note=(
+            "The US-regulated entity, NOT the offshore CLOB. Confirm which entity your account "
+            "is on and that its API exposes the mechanic you are trading — the two venues do not "
+            "share market structure."
+        ),
     ),
     Venue(
-        name="dYdX",
-        family=BotVenueFamily.CRYPTO_DEFI,
-        docs_url="https://docs.dydx.xyz/",
-        eligibility_note="Confirm jurisdictional access and the current chain deployment before integrating.",
+        name="Polymarket",
+        family=BotVenueFamily.PREDICTION_MARKETS,
+        docs_url="https://docs.polymarket.com/",
+        us_status="restricted",
+        eligibility_note=(
+            "The offshore CLOB bars US persons. Out of scope for this operator — use the US "
+            "entity, whose mechanics differ."
+        ),
     ),
-    Venue(
-        name="Aave",
-        family=BotVenueFamily.CRYPTO_DEFI,
-        docs_url="https://aave.com/docs",
-        eligibility_note="Smart-contract risk is the dominant risk; read the current audits and risk parameters.",
-    ),
-    Venue(
-        name="Morpho",
-        family=BotVenueFamily.CRYPTO_DEFI,
-        docs_url="https://docs.morpho.org/",
-        eligibility_note="Market parameters are per-market; read the specific market's risk configuration.",
-    ),
-    Venue(
-        name="Uniswap",
-        family=BotVenueFamily.CRYPTO_DEFI,
-        docs_url="https://docs.uniswap.org/",
-        eligibility_note="Divergence loss is the core risk for any liquidity position; model it before depositing.",
-    ),
-    Venue(
-        name="CCXT-covered exchanges",
-        family=BotVenueFamily.CRYPTO_DEFI,
-        docs_url="https://docs.ccxt.com/",
-        eligibility_note="A unified client over many venues — each venue's own terms and fee schedule still govern.",
-    ),
+    # --- brokerage ----------------------------------------------------- #
     Venue(
         name="Alpaca",
         family=BotVenueFamily.BROKERAGE,
         docs_url="https://docs.alpaca.markets/",
-        eligibility_note="Brokerage account and any options approval level must be in place before automating.",
+        us_status="eligible",
+        eligibility_note="US brokerage with a first-class API. Options approval level gates some strategies.",
     ),
     Venue(
         name="Interactive Brokers",
         family=BotVenueFamily.BROKERAGE,
         docs_url="https://www.interactivebrokers.com/campus/category/ibkr-api-software/",
-        eligibility_note="Pattern-day-trading and margin rules apply; confirm account type and permissions.",
+        us_status="eligible",
+        eligibility_note="US broker. Pattern-day-trading and margin rules apply; confirm account type and permissions.",
     ),
     Venue(
-        name="Betfair",
-        family=BotVenueFamily.SPORTSBOOK,
-        docs_url="https://developer.betfair.com/",
-        eligibility_note="An exchange with a published API — jurisdiction and licensing govern eligibility.",
+        name="Tradier",
+        family=BotVenueFamily.BROKERAGE,
+        docs_url="https://documentation.tradier.com/",
+        us_status="eligible",
+        eligibility_note="US brokerage API. Confirm commission schedule — it decides whether a small edge survives.",
     ),
+    # --- crypto, US-available ------------------------------------------ #
+    Venue(
+        name="Coinbase",
+        family=BotVenueFamily.CRYPTO_DEFI,
+        docs_url="https://docs.cdp.coinbase.com/",
+        us_status="eligible",
+        eligibility_note=(
+            "US-regulated exchange. Advanced Trade fees are the binding constraint on most spread strategies."
+        ),
+    ),
+    Venue(
+        name="Kraken",
+        family=BotVenueFamily.CRYPTO_DEFI,
+        docs_url="https://docs.kraken.com/api/",
+        us_status="eligible",
+        eligibility_note=(
+            "US-available exchange; some products are restricted by state. Confirm what your account can trade."
+        ),
+    ),
+    Venue(
+        name="Aave",
+        family=BotVenueFamily.CRYPTO_DEFI,
+        docs_url="https://aave.com/docs",
+        us_status="verify",
+        eligibility_note=(
+            "A public protocol reachable from self-custody, but front-end availability and asset "
+            "listings vary. Smart-contract risk dominates; read current audits and risk parameters."
+        ),
+    ),
+    Venue(
+        name="Uniswap",
+        family=BotVenueFamily.CRYPTO_DEFI,
+        docs_url="https://docs.uniswap.org/",
+        us_status="verify",
+        eligibility_note=(
+            "Public protocol; interface availability varies by asset and region. Divergence loss "
+            "is the core risk for any liquidity position — model it before depositing."
+        ),
+    ),
+    Venue(
+        name="Morpho",
+        family=BotVenueFamily.CRYPTO_DEFI,
+        docs_url="https://docs.morpho.org/",
+        us_status="verify",
+        eligibility_note="Public lending protocol; parameters are per-market. Read the specific market's risk config.",
+    ),
+    # --- offshore: recorded so the gate can refuse them by name --------- #
+    Venue(
+        name="Hyperliquid",
+        family=BotVenueFamily.CRYPTO_DEFI,
+        docs_url="https://hyperliquid.gitbook.io/hyperliquid-docs",
+        us_status="restricted",
+        eligibility_note="Offshore perpetuals, geoblocked for US persons. Out of scope for this operator.",
+    ),
+    Venue(
+        name="dYdX",
+        family=BotVenueFamily.CRYPTO_DEFI,
+        docs_url="https://docs.dydx.xyz/",
+        us_status="restricted",
+        eligibility_note="Offshore perpetuals; US access is restricted. Out of scope for this operator.",
+    ),
+    Venue(
+        name="Binance",
+        family=BotVenueFamily.CRYPTO_DEFI,
+        docs_url="https://developers.binance.com/",
+        us_status="restricted",
+        eligibility_note="Binance global bars US persons. Out of scope for this operator.",
+    ),
+    Venue(
+        name="Bybit",
+        family=BotVenueFamily.CRYPTO_DEFI,
+        docs_url="https://bybit-exchange.github.io/docs/",
+        us_status="restricted",
+        eligibility_note="Offshore exchange; US persons are barred. Out of scope for this operator.",
+    ),
+    Venue(
+        name="OKX",
+        family=BotVenueFamily.CRYPTO_DEFI,
+        docs_url="https://www.okx.com/docs-v5/en/",
+        us_status="restricted",
+        eligibility_note="Offshore exchange; US access is restricted. Out of scope for this operator.",
+    ),
+    Venue(
+        name="CCXT-covered exchanges",
+        family=BotVenueFamily.CRYPTO_DEFI,
+        docs_url="https://docs.ccxt.com/",
+        us_status="verify",
+        eligibility_note=(
+            "A unified client over many venues, most of them offshore. Whichever venue it points "
+            "at governs — name that venue explicitly, not the library."
+        ),
+    ),
+    # --- sportsbook exchanges ------------------------------------------ #
     Venue(
         name="ProphetX",
         family=BotVenueFamily.SPORTSBOOK,
         docs_url="https://www.prophetx.co/",
-        eligibility_note="Confirm whether programmatic placement is permitted by the current terms of service.",
+        us_status="verify",
+        eligibility_note=(
+            "US exchange-style sportsbook, live state by state. Confirm your state AND whether the "
+            "terms permit programmatic placement at all."
+        ),
     ),
     Venue(
         name="Novig",
         family=BotVenueFamily.SPORTSBOOK,
         docs_url="https://novig.us/",
-        eligibility_note="Confirm whether programmatic placement is permitted by the current terms of service.",
+        us_status="verify",
+        eligibility_note=(
+            "US exchange-style sportsbook, availability varies by state. Confirm programmatic "
+            "placement is permitted before building anything."
+        ),
+    ),
+    Venue(
+        name="Betfair",
+        family=BotVenueFamily.SPORTSBOOK,
+        docs_url="https://developer.betfair.com/",
+        us_status="restricted",
+        eligibility_note="Not available to US customers. Out of scope for this operator.",
     ),
 )
 
 _VENUE_BY_NAME: dict[str, Venue] = {v.name: v for v in VENUE_REGISTRY}
 
+
+def us_eligible_venues() -> tuple[Venue, ...]:
+    """Venues a US-based operator can actually deploy capital on."""
+    return tuple(v for v in VENUE_REGISTRY if v.us_status == "eligible")
+
+
+def venue_us_status(text: str) -> str:
+    """Resolve a free-text venue string to a US eligibility status.
+
+    Specs name venues in prose — "Polymarket (CLOB)", "Hyperliquid perps
+    paired against Bybit" — so this matches on substrings, longest name
+    first so "Polymarket US" wins over "Polymarket".
+
+    Fails CLOSED in two ways, both deliberate:
+      * an unrecognised venue is "verify", never "eligible";
+      * a string naming BOTH an eligible and a restricted venue resolves to
+        restricted, because a two-legged strategy is only as tradeable as
+        its worst leg.
+    """
+    blob = (text or "").lower()
+    matched = [v for v in sorted(VENUE_REGISTRY, key=lambda v: -len(v.name)) if v.name.lower() in blob]
+    if not matched:
+        return "verify"
+    # "Polymarket US" and "Polymarket" both match the US string; the longer
+    # name was checked first, so prefer it unless a restricted venue is also
+    # named independently.
+    best = matched[0]
+    others = [v for v in matched[1:] if v.name.lower() not in best.name.lower()]
+    if any(v.us_status == "restricted" for v in others):
+        return "restricted"
+    return best.us_status
+
+
 # (repo, venue name). Every repo here returned HTTP 200 when this list was
 # written; a later 404 degrades to "source unavailable" and is logged.
+# Only venues a US operator can use — probing an offshore book produces
+# signals that the gate will refuse anyway, which is a wasted cycle and a
+# wasted generation. Every repo returned HTTP 200 when this list was
+# written; a later 404 degrades to "source unavailable" and is logged.
 PROBE_REPOS: tuple[tuple[str, str], ...] = (
-    ("Polymarket/py-clob-client", "Polymarket"),
-    ("hyperliquid-dex/hyperliquid-python-sdk", "Hyperliquid"),
-    ("dydxprotocol/v4-clients", "dYdX"),
+    ("Kalshi/kalshi-starter-code-python", "Kalshi"),
+    ("Kalshi/tools-and-analysis", "Kalshi"),
     ("alpacahq/alpaca-py", "Alpaca"),
-    ("ccxt/ccxt", "CCXT-covered exchanges"),
+    ("coinbase/coinbase-advanced-py", "Coinbase"),
     ("aave/aave-v3-core", "Aave"),
     ("morpho-org/morpho-blue", "Morpho"),
     ("Uniswap/v3-core", "Uniswap"),
@@ -367,6 +507,24 @@ def program_to_seed(
     from project_forge.config import settings
 
     jurisdiction = (settings.operator_jurisdiction or "").strip()
+
+    # The money board is US-only. This is not a hint — the admission gate
+    # refuses a restricted or unverified venue outright, so a draft that
+    # ignores this is a wasted cycle.
+    eligible = ", ".join(v.name for v in us_eligible_venues())
+    us_block = (
+        "\n## Hard constraint: the operator is US-based\n"
+        f"Propose a strategy ONLY on a venue a US person can legally use. Known-eligible "
+        f"venues: {eligible}.\n"
+        "Offshore venues are out of scope and will be refused automatically: the offshore "
+        "Polymarket CLOB, Hyperliquid, dYdX, Binance, Bybit, OKX, Betfair. Note that "
+        "**Polymarket US** (the CFTC-regulated entity) is a DIFFERENT venue from the offshore "
+        "Polymarket CLOB — they do not share market structure, so name which one you mean and "
+        "use its actual mechanics.\n"
+        "If the signal above concerns a venue the operator cannot use, say so in one line and "
+        "build the strategy on an eligible venue instead.\n"
+    )
+
     jurisdiction_block = ""
     if jurisdiction:
         jurisdiction_block = (
@@ -416,6 +574,7 @@ def program_to_seed(
         f'Signal: "{title}"\n'
         f"URL: {url}\n"
         f"Context: {summary}\n"
+        f"{us_block}"
         f"{jurisdiction_block}"
         f"{lessons_block}"
         f"{known_block}\n"

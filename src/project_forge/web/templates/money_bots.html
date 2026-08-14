@@ -170,7 +170,10 @@
                         </td>
                         <td class="probe-venue">{{ (spec.venue if spec else '—') | truncate(24, True, '…') }}</td>
                         <td class="ref-note">
-                            {% if spec and spec.surviving_objection %}
+                            {% if spec and spec.panel_verdict == 'us-ineligible' %}
+                            <span class="verdict-pill verdict-flagged">not US-tradeable</span>
+                            {{ spec.venue | truncate(60, True, '…') }}
+                            {% elif spec and spec.surviving_objection %}
                             <span class="probe-reason" title="{{ spec.surviving_objection }}">{{ spec.surviving_objection }}</span>
                             {% else %}
                             &mdash;

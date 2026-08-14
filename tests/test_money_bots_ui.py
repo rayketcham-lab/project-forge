@@ -75,7 +75,7 @@ async def client(tmp_path):
             "Reward Minute Maker",
             IdeaCategory.INCENTIVE_CAPTURE,
             0.90,
-            _spec("Polymarket", BotVenueFamily.PREDICTION_MARKETS, 500.0),
+            _spec("Kalshi", BotVenueFamily.PREDICTION_MARKETS, 500.0),
         )
     )
     await db.save_idea(
@@ -83,7 +83,7 @@ async def client(tmp_path):
             "Funding Carry Holder",
             IdeaCategory.BASIS_CARRY,
             0.65,
-            _spec("Hyperliquid", BotVenueFamily.CRYPTO_DEFI, 2000.0),
+            _spec("Coinbase", BotVenueFamily.CRYPTO_DEFI, 2000.0),
         )
     )
     await db.save_idea(
@@ -91,7 +91,7 @@ async def client(tmp_path):
             "Thin Book Quoter",
             IdeaCategory.MARKET_MAKING,
             0.40,
-            _spec("ProphetX", BotVenueFamily.SPORTSBOOK, 1000.0),
+            _spec("Alpaca", BotVenueFamily.BROKERAGE, 1000.0),
         )
     )
     await db.save_idea(_bot_idea("Unscored Draft", IdeaCategory.CROSS_VENUE_ARBITRAGE, None))
@@ -139,7 +139,7 @@ class TestApiTop:
             "status",
         ):
             assert field in item
-        assert item["venue"] == "Polymarket"
+        assert item["venue"] == "Kalshi"
         assert item["capital_floor_usd"] == 500.0
 
 
@@ -158,8 +158,8 @@ class TestHtmlPage:
     @pytest.mark.asyncio
     async def test_card_shows_the_spec_not_just_prose(self, client):
         html = (await client.get("/money-bots")).text
-        assert "Polymarket" in html
-        assert "Hyperliquid" in html
+        assert "Kalshi" in html
+        assert "Coinbase" in html
         # Capital band, the mechanism, and the stop condition all surface.
         assert "500" in html
         assert "published liquidity budget" in html
@@ -210,7 +210,7 @@ class TestHtmlPage:
             "Doomed Quoter",
             IdeaCategory.MARKET_MAKING,
             0.62,
-            _spec("Polymarket", BotVenueFamily.PREDICTION_MARKETS),
+            _spec("Kalshi", BotVenueFamily.PREDICTION_MARKETS),
         )
         killed.bot_spec.panel_verdict = "flagged"
         killed.bot_spec.surviving_objection = "the reward is smaller than the minimum tick"
@@ -263,7 +263,7 @@ class TestChurn:
             "Churned Carry Bot",
             IdeaCategory.BASIS_CARRY,
             None,
-            _spec("Hyperliquid", BotVenueFamily.CRYPTO_DEFI, 2000.0),
+            _spec("Coinbase", BotVenueFamily.CRYPTO_DEFI, 2000.0),
         )
         fresh.generation_mode = "bot"
 
@@ -292,7 +292,7 @@ class TestChurn:
         data = (await client.post("/api/churn", json={"lab": "money"})).json()
         assert data["idea"] is not None
         assert data["idea"]["name"] == "Churned Carry Bot"
-        assert data["idea"]["venue"] == "Hyperliquid"
+        assert data["idea"]["venue"] == "Coinbase"
         assert data["idea"]["bot_edge_score"] == 0.77
 
 
@@ -389,7 +389,7 @@ class TestFlaggedAreCountedNotDisplayed:
             "Doomed Quoter Two",
             IdeaCategory.MARKET_MAKING,
             0.62,
-            _spec("Polymarket", BotVenueFamily.PREDICTION_MARKETS),
+            _spec("Kalshi", BotVenueFamily.PREDICTION_MARKETS),
         )
         killed.bot_spec.panel_verdict = "flagged"
         killed.bot_spec.surviving_objection = "the reward is smaller than the minimum tick"
@@ -408,7 +408,7 @@ class TestFlaggedAreCountedNotDisplayed:
             "Collapsed Check",
             IdeaCategory.BASIS_CARRY,
             0.5,
-            _spec("Hyperliquid", BotVenueFamily.CRYPTO_DEFI),
+            _spec("Coinbase", BotVenueFamily.CRYPTO_DEFI),
         )
         killed.bot_spec.panel_verdict = "flagged"
         await db.save_idea(killed)

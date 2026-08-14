@@ -20,7 +20,7 @@ import pytest
 from project_forge.models import BotSpec, BotVenueFamily, Idea, IdeaCategory
 
 _PROGRAM = {
-    "venue": "Polymarket",
+    "venue": "Polymarket US",
     "family": BotVenueFamily.PREDICTION_MARKETS.value,
     "category": IdeaCategory.INCENTIVE_CAPTURE.value,
     "title": "Liquidity rewards: qualifying spread not documented",
@@ -33,7 +33,7 @@ _PROGRAM = {
 
 def _spec(**over) -> BotSpec:
     base = dict(
-        venue="Polymarket",
+        venue="Polymarket US",
         venue_url="https://docs.polymarket.com/rewards",
         family=BotVenueFamily.PREDICTION_MARKETS,
         api_primitives=["CLOB REST order placement", "websocket book feed"],
@@ -104,14 +104,14 @@ class TestProbeLog:
     async def test_records_and_lists(self, db):
         await db.record_bot_probe(
             program_summary="Polymarket rewards",
-            venue="Polymarket",
+            venue="Polymarket US",
             anchor="https://example.com/1",
             admitted=False,
             reason="panel killed it",
         )
         rows = await db.list_bot_probes(limit=5)
         assert len(rows) == 1
-        assert rows[0]["venue"] == "Polymarket"
+        assert rows[0]["venue"] == "Polymarket US"
         assert rows[0]["admitted"] is False
         assert rows[0]["reason"] == "panel killed it"
 
@@ -273,13 +273,13 @@ class TestCadence:
         assert stored.generation_mode == "bot"
         assert stored.bot_edge_score == 0.82
         assert stored.bot_spec is not None
-        assert stored.bot_spec.venue == "Polymarket"
+        assert stored.bot_spec.venue == "Polymarket US"
 
     async def test_already_probed_programs_are_skipped(self, db, sched, monkeypatch):
         """The same GitHub issue must not be worked twice."""
         await db.record_bot_probe(
             program_summary="seen",
-            venue="Polymarket",
+            venue="Polymarket US",
             anchor=_PROGRAM["url"],
             admitted=False,
             reason="already worked",

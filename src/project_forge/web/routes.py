@@ -666,7 +666,7 @@ async def money_bots(
         return (idea.bot_spec.panel_verdict if idea.bot_spec else None) or "unknown"
 
     vetted = [i for i in ideas if _verdict(i) in ("vetted", "objection-stands", "unknown")]
-    flagged = [i for i in ideas if _verdict(i) in ("flagged", "below-bar")]
+    flagged = [i for i in ideas if _verdict(i) in ("flagged", "below-bar", "us-ineligible", "review-incomplete")]
 
     # Total in scope (no score filter — show the headline).
     cur = await db.db.execute(

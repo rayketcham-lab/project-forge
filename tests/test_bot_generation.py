@@ -27,7 +27,7 @@ from project_forge.engine.strategy_library import STRATEGY_LIBRARY
 from project_forge.models import BotSpec, BotVenueFamily, Idea, IdeaCategory
 
 _PROGRAM = {
-    "venue": "Polymarket",
+    "venue": "Polymarket US",
     "family": BotVenueFamily.PREDICTION_MARKETS.value,
     "category": IdeaCategory.INCENTIVE_CAPTURE.value,
     "title": "Liquidity rewards: qualifying spread not documented",
@@ -50,7 +50,7 @@ _GOOD_PAYLOAD = {
     "tech_stack": ["python", "websockets"],
     "feasibility_score": 0.72,
     "bot_spec": {
-        "venue": "Polymarket",
+        "venue": "Polymarket US",
         "venue_url": "https://docs.polymarket.com/rewards",
         "family": "prediction-markets",
         "api_primitives": ["CLOB REST order placement", "websocket book feed", "rewards endpoint"],
@@ -127,7 +127,7 @@ class TestGenerateBotLlm:
         assert result.idea.category is IdeaCategory.INCENTIVE_CAPTURE
         spec = result.idea.bot_spec
         assert spec is not None
-        assert spec.venue == "Polymarket"
+        assert spec.venue == "Polymarket US"
         assert spec.capital_floor_usd == 500.0
         assert "rewards endpoint" in spec.api_primitives
 
@@ -245,6 +245,20 @@ class TestEdgePanel:
         assert not result.survived
         assert "still positive" in (result.strongest or "")
 
+    async def test_revise_prompt_carries_both_the_strategy_and_the_output_contract(self):
+        """A conditional expression once swallowed the whole output block.
+
+        `... f"**Capital:** ..." if spec else "" "\\n## Output\\n" ...` parses as
+        one ternary, so a strategy WITH a spec — every real one — was asked to
+        revise with no JSON contract and no field list, and a spec-less one got
+        the contract with no strategy. Both halves must always be present."""
+        prompt = bot_depth.revise_prompt(_idea(), [bot_depth.Objection("arithmetic", 0.8, "fees")])
+        assert "Reward Minute Maker" in prompt
+        assert "**Capital:** $500 / $10,000" in prompt
+        assert "## Output" in prompt
+        assert "capital_floor_usd" in prompt
+        assert "kill_criteria" in prompt
+
     async def test_a_revision_that_answers_the_objection_survives(self, monkeypatch):
         replies = (
             [_objection(0.9, "the claimed return is asserted, never derived")]
@@ -288,7 +302,7 @@ class TestEdgePanel:
         result = await bot_depth.stress(_idea())
         assert result.survived
         assert result.idea.name == "Reward Minute Maker"
-        assert result.idea.bot_spec.venue == "Polymarket"
+        assert result.idea.bot_spec.venue == "Polymarket US"
         assert "published per-minute liquidity reward" in result.idea.bot_spec.mechanism
 
     async def test_unparseable_revision_leaves_it_dead(self, monkeypatch):

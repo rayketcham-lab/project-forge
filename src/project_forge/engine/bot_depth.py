@@ -295,6 +295,7 @@ def revise_prompt(idea: Idea, objections: list[Objection]) -> str:
     original."""
     listed = "\n".join(f"- [{o.lens}, severity {o.severity:.2f}] {o.text}" for o in objections)
     spec = idea.bot_spec
+    capital = f"**Capital:** ${spec.capital_floor_usd:,.0f} / ${spec.capital_target_usd:,.0f}\n" if spec else ""
     return (
         "A review panel attacked this strategy and landed the objections "
         "below. Rewrite it to ANSWER them honestly.\n\n"
@@ -316,9 +317,7 @@ def revise_prompt(idea: Idea, objections: list[Objection]) -> str:
         f"**Scope:** {idea.mvp_scope}\n"
         f"**Expected return:** {spec.expected_return if spec else ''}\n"
         f"**Edge decay:** {spec.edge_decay if spec else ''}\n"
-        f"**Capital:** ${spec.capital_floor_usd:,.0f} / ${spec.capital_target_usd:,.0f}\n"
-        if spec
-        else ""
+        f"{capital}"
         "\n## Output\n"
         "Respond with JSON only. Include only the fields you are changing:\n"
         '{"tagline": "...", "description": "...", "market_analysis": "...", '
