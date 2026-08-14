@@ -24,6 +24,7 @@ from project_forge.engine.llm_generator import (
 from project_forge.models import (
     CLAUDE_LAB_CATEGORIES,
     MONEY_CATEGORIES,
+    PRODUCT_MONEY_CATEGORIES,
     IdeaCategory,
 )
 
@@ -52,8 +53,12 @@ class TestEnumAndGroupings:
             assert isinstance(cat, IdeaCategory)
 
     def test_new_money_categories_are_grouped_as_money(self):
+        # v0.24: the money BOARD is now capital-deployment bots. These
+        # v0.16 product shapes live on under PRODUCT_MONEY_CATEGORIES —
+        # still generated, still fundability-scored, still Sniper's range.
         for cat in NEW_MONEY:
-            assert cat in MONEY_CATEGORIES
+            assert cat in PRODUCT_MONEY_CATEGORIES
+            assert cat not in MONEY_CATEGORIES
 
     def test_new_claude_lab_categories_are_grouped_as_claude_lab(self):
         for cat in NEW_CLAUDE_LAB:
@@ -69,7 +74,7 @@ class TestEnumAndGroupings:
             IdeaCategory.CONSUMER_APP,
             IdeaCategory.PRODUCTIVITY,
         ):
-            assert cat in MONEY_CATEGORIES
+            assert cat in PRODUCT_MONEY_CATEGORIES
 
 
 class TestSeedsAndPersonas:

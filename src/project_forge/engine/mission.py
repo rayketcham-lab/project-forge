@@ -16,7 +16,7 @@ import random
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
-from project_forge.models import MONEY_CATEGORIES, Idea, Mission
+from project_forge.models import PRODUCT_MONEY_CATEGORIES, Idea, Mission
 from project_forge.storage.db import Database
 
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ async def generate_mission_idea(
     from project_forge.engine import dedup, fundability, llm_generator
 
     seed = await build_mission_seed(mission, fetcher=fetcher)
-    category = mission.category or random.choice(MONEY_CATEGORIES)
+    category = mission.category or random.choice(PRODUCT_MONEY_CATEGORIES)
     result = await llm_generator.generate_idea_llm(db, category, mode="novel", seed=seed)
     if result is None:
         logger.info("mission %s: no idea produced (no backend or parse failure)", mission.id)

@@ -29,7 +29,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from project_forge.config import settings
-from project_forge.models import MONEY_CATEGORIES, Idea, IdeaCategory
+from project_forge.models import PRODUCT_MONEY_CATEGORIES, Idea, IdeaCategory
 from project_forge.storage.db import Database
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 # Default money-friendly categories. Env override comma-separated values.
 # Sourced from the canonical money grouping so a new money category is
 # promotion-eligible the moment it's added.
-_DEFAULT_PROMOTE_CATEGORIES = MONEY_CATEGORIES
+_DEFAULT_PROMOTE_CATEGORIES = PRODUCT_MONEY_CATEGORIES
 
 
 def _promote_categories() -> list[IdeaCategory]:

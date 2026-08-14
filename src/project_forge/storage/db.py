@@ -14,6 +14,7 @@ import aiosqlite
 
 from project_forge.models import (
     MONEY_CATEGORIES,
+    BotSpec,
     Challenge,
     FilteredIdea,
     GenerationRun,
@@ -31,6 +32,24 @@ logger = logging.getLogger(__name__)
 
 # Query profiling threshold in seconds
 _SLOW_QUERY_THRESHOLD = 0.1  # 100ms
+
+
+def _parse_bot_spec(raw: str | None) -> BotSpec | None:
+    """Decode a persisted BotSpec, tolerating rows we can't trust.
+
+    The column is JSON written by us, but a hand-edited row, a truncated
+    write, or a spec written before a field became required must degrade to
+    "this idea has no spec" rather than take the whole board down with a
+    500 on one bad row.
+    """
+    if not raw:
+        return None
+    try:
+        return BotSpec.model_validate_json(raw)
+    except Exception as exc:  # noqa: BLE001 — any malformed row degrades to None
+        logger.warning("Discarding unreadable bot_spec: %s", str(exc)[:160])
+        return None
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS ideas (
@@ -236,6 +255,22 @@ CREATE TABLE IF NOT EXISTS pki_probes (
     idea_id TEXT,
     urgency_score REAL
 );
+
+-- v0.24 Money Bots — the same audit trail for the bot cadence. It works ONE
+-- venue program per fire and is expected to store nothing most of the time,
+-- so this log is both the schedule's watermark and the answer to "what did
+-- it do in the quiet hours".
+CREATE TABLE IF NOT EXISTS bot_probes (
+    id TEXT PRIMARY KEY,
+    probed_at TEXT NOT NULL,
+    program_summary TEXT,
+    venue TEXT,
+    anchor TEXT,
+    admitted INTEGER NOT NULL DEFAULT 0,
+    reason TEXT,
+    idea_id TEXT,
+    edge_score REAL
+);
 """
 
 
@@ -336,6 +371,11 @@ class Database:
             # The surviving red-team objection from the depth panel. NULL
             # when the panel found nothing, or ran keyless.
             "ALTER TABLE ideas ADD COLUMN pki_objection TEXT",
+            # v0.24 — Money Bots rework: the capital-deployment axis plus the
+            # strategy itself (BotSpec, JSON). Both NULL for every idea that
+            # is not a money bot, which is most of them.
+            "ALTER TABLE ideas ADD COLUMN bot_edge_score REAL",
+            "ALTER TABLE ideas ADD COLUMN bot_spec TEXT",
         ):
             try:
                 await self._db.execute(stmt)
@@ -398,6 +438,7 @@ class Database:
     async def save_idea(self, idea: Idea) -> Idea:
         content_hash = getattr(idea, "content_hash", None)
         auto_ts = getattr(idea, "auto_promoted_at", None)
+        bot_spec = getattr(idea, "bot_spec", None)
         async with self._write_lock:
             await self.db.execute(
                 """INSERT OR REPLACE INTO ideas
@@ -406,8 +447,8 @@ class Database:
                  github_issue_url, project_repo_url, content_hash, source_url,
                  generation_mode, fundability_score, auto_promoted_at, ambition_score,
                 artifact_type, snipe_score, target_incumbent, mission_id, cashflow_score,
-                pki_urgency_score, pki_anchor, pki_objection)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                pki_urgency_score, pki_anchor, pki_objection, bot_edge_score, bot_spec)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     idea.id,
                     idea.name,
@@ -436,6 +477,8 @@ class Database:
                     getattr(idea, "pki_urgency_score", None),
                     getattr(idea, "pki_anchor", None),
                     getattr(idea, "pki_objection", None),
+                    getattr(idea, "bot_edge_score", None),
+                    bot_spec.model_dump_json() if bot_spec is not None else None,
                 ),
             )
             await self.db.commit()
@@ -1505,6 +1548,8 @@ class Database:
             pki_urgency_score=(row["pki_urgency_score"] if "pki_urgency_score" in keys else None),
             pki_anchor=(row["pki_anchor"] if "pki_anchor" in keys else None),
             pki_objection=(row["pki_objection"] if "pki_objection" in keys else None),
+            bot_edge_score=(row["bot_edge_score"] if "bot_edge_score" in keys else None),
+            bot_spec=_parse_bot_spec(row["bot_spec"] if "bot_spec" in keys else None),
         )
 
     # === RESOURCE CRUD ===
@@ -1722,6 +1767,80 @@ class Database:
             }
             for r in rows
         ]
+
+    async def record_bot_probe(
+        self,
+        *,
+        program_summary: str | None,
+        venue: str | None,
+        anchor: str | None,
+        admitted: bool,
+        reason: str | None,
+        idea_id: str | None = None,
+        edge_score: float | None = None,
+    ) -> str:
+        """Log one money-bot probe attempt. Called on EVERY fire, including
+        the ones that store no strategy — that is what advances the cadence
+        watermark and what makes an empty board auditable."""
+        from uuid import uuid4
+
+        probe_id = uuid4().hex[:12]
+        async with self._write_lock:
+            await self.db.execute(
+                """INSERT INTO bot_probes
+                (id, probed_at, program_summary, venue, anchor, admitted, reason, idea_id, edge_score)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    probe_id,
+                    datetime.now(UTC).isoformat(),
+                    program_summary,
+                    venue,
+                    anchor,
+                    1 if admitted else 0,
+                    reason,
+                    idea_id,
+                    edge_score,
+                ),
+            )
+            await self.db.commit()
+        return probe_id
+
+    async def list_bot_probes(self, limit: int = 24) -> list[dict]:
+        """Recent bot-probe attempts, newest first."""
+        cursor = await self.db.execute(
+            "SELECT * FROM bot_probes ORDER BY probed_at DESC LIMIT ?",
+            (limit,),
+        )
+        rows = await cursor.fetchall()
+        return [
+            {
+                "id": r["id"],
+                "probed_at": r["probed_at"],
+                "program_summary": r["program_summary"],
+                "venue": r["venue"],
+                "anchor": r["anchor"],
+                "admitted": bool(r["admitted"]),
+                "reason": r["reason"],
+                "idea_id": r["idea_id"],
+                "edge_score": r["edge_score"],
+            }
+            for r in rows
+        ]
+
+    async def bot_probe_stats(self) -> dict:
+        """Admission rate over the bot-probe log."""
+        cursor = await self.db.execute(
+            "SELECT COUNT(*) AS total, COALESCE(SUM(admitted), 0) AS admitted FROM bot_probes"
+        )
+        row = await cursor.fetchone()
+        total = row["total"] or 0
+        admitted = row["admitted"] or 0
+        return {
+            "probes": total,
+            "admitted": admitted,
+            "rejected": total - admitted,
+            "admit_rate": round(admitted / total, 3) if total else 0.0,
+        }
 
     async def pki_probe_stats(self) -> dict:
         """Admission rate over the probe log — the honest measure of how

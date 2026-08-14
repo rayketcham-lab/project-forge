@@ -88,6 +88,12 @@ PKI_INTERVAL = _interval_from_env("FORGE_PKI_INTERVAL_HOURS", 1.0)
 # Keeps pki_urgency_score fresh for anything that reached the board by
 # churn or predates the axis.
 PKI_SCORE_INTERVAL = _interval_from_env("FORGE_PKI_SCORE_INTERVAL_HOURS", 24.0)
+# v0.24 Money Bots — one venue program worked per fire. Two hours, not one:
+# venue mechanics move slower than IETF drafts, and each fire costs a
+# generation plus a four-lens panel.
+BOT_INTERVAL = _interval_from_env("FORGE_BOT_INTERVAL_HOURS", 2.0)
+# Keeps bot_edge_score fresh for gated strategies that predate the axis.
+BOT_SCORE_INTERVAL = _interval_from_env("FORGE_BOT_SCORE_INTERVAL_HOURS", 24.0)
 
 
 def _seconds_from_env(var: str, default_seconds: float) -> timedelta:
@@ -258,6 +264,18 @@ async def seconds_until_next_pki(db: Database, interval: timedelta) -> float:
     log advances on every attempt, admitted or rejected, which is exactly
     the semantics this schedule needs."""
     cursor = await db.db.execute("SELECT MAX(probed_at) FROM pki_probes")
+    row = await cursor.fetchone()
+    return _delay_from_watermark(row[0] if row else None, interval)
+
+
+async def seconds_until_next_bot(db: Database, interval: timedelta) -> float:
+    """Delay until the next money-bot probe.
+
+    Watermark = MAX(bot_probes.probed_at), for the same reason as the PKI
+    probe: this cadence is designed to store nothing most cycles, so an
+    idea-based watermark would leave it permanently overdue and re-firing
+    every tick on the same program."""
+    cursor = await db.db.execute("SELECT MAX(probed_at) FROM bot_probes")
     row = await cursor.fetchone()
     return _delay_from_watermark(row[0] if row else None, interval)
 
@@ -716,6 +734,188 @@ async def _fire_pki(db: Database) -> None:
             logger.exception("PKI probe: could not record the crash either")
 
 
+# --------------------------------------------------------------------------- #
+# v0.24 Money Bots — the capital-deployment cadence                           #
+# --------------------------------------------------------------------------- #
+#
+# The four seams below exist so the cadence can be tested without reaching
+# the network or a model. Each is a thin indirection over the real module.
+
+
+def _bot_fetch_programs() -> list[dict]:
+    from project_forge.feeds.venue_probe import fetch_venue_programs
+
+    return fetch_venue_programs()
+
+
+async def _bot_generate(db: Database, category, program: dict, primitive):
+    from project_forge.engine.llm_generator import generate_bot_llm
+
+    return await generate_bot_llm(db, category, program=program, primitive=primitive)
+
+
+async def _bot_stress(idea):
+    from project_forge.engine.bot_depth import stress
+
+    return await stress(idea)
+
+
+async def _bot_score(idea) -> float:
+    from project_forge.engine.bot_edge import score_bot_edge
+
+    return await score_bot_edge(idea)
+
+
+async def _record_bot_drop(
+    db: Database,
+    program: dict,
+    *,
+    reason: str,
+    score: float | None = None,
+) -> None:
+    """Log a probe that stored nothing. Every rejection stage funnels through
+    here so a quiet cycle always says which stage did the dropping."""
+    await db.record_bot_probe(
+        program_summary=program.get("title"),
+        venue=program.get("venue"),
+        anchor=program.get("url"),
+        admitted=False,
+        reason=reason[:400],
+        edge_score=score,
+    )
+
+
+async def _fire_bot_strategy(db: Database) -> None:
+    """The money board's probe: ONE venue program, and it may come back empty.
+
+      probe venues -> pick ONE program -> compose with a known-working
+      mechanism -> generate a strategy + spec -> red-team panel -> gate ->
+      store or DROP
+
+    Same philosophy as the PKI probe, for the same reason. The old money
+    board ranked whatever the general rotation produced, which is how a
+    board named for bots filled up with SaaS dashboards. This one only
+    admits a strategy that names a venue, the API calls it makes, where the
+    money comes from, how the edge decays, and when to switch itself off —
+    and it stores NOTHING when the panel kills the draft or the gate refuses
+    it. Every attempt is recorded in `bot_probes`, so the quiet cycles are
+    auditable and the schedule has a watermark that advances regardless.
+
+    Touches no GitHub state — governance rule for autonomous cadences.
+    """
+    import random as _rnd
+
+    from project_forge.engine.bot_edge import admits
+    from project_forge.engine.dedup import filter_and_save
+    from project_forge.engine.strategy_library import pick_primitive
+    from project_forge.feeds.venue_probe import pick_top_program
+    from project_forge.models import IdeaCategory
+
+    program: dict | None = None
+    try:
+        # 1. Probe the venues. Never raises; [] is a normal outcome.
+        recent = await db.list_bot_probes(limit=200)
+        seen_urls = {p["anchor"] for p in recent if p.get("anchor")}
+        # Sixteen blocking HTTP calls — off the event loop, or the web app
+        # stops answering for as long as GitHub takes.
+        programs = await asyncio.to_thread(_bot_fetch_programs)
+
+        # 2. Exactly one program gets worked this cycle.
+        program = pick_top_program(programs, seen_urls=seen_urls)
+        if program is None:
+            await db.record_bot_probe(
+                program_summary=None,
+                venue=None,
+                anchor=None,
+                admitted=False,
+                reason="no new venue program surfaced from any source",
+            )
+            logger.info("bot probe: no new program surfaced — storing nothing")
+            return
+
+        try:
+            category = IdeaCategory(program.get("category") or "capital-automation")
+        except ValueError:
+            category = IdeaCategory.CAPITAL_AUTOMATION
+
+        # 3. Compose the live program with a mechanism already known to pay.
+        primitive = pick_primitive(rng=_rnd.Random(), category=category)
+        result = await _bot_generate(db, category, program, primitive)
+        if result is None:
+            await _record_bot_drop(db, program, reason="generator returned no usable strategy")
+            logger.info("bot probe: generator produced nothing for %r", program.get("title"))
+            return
+
+        idea = result.idea
+        idea.generation_mode = "bot"
+
+        # 4. The red team: arithmetic, competition, legality, operations.
+        #    Keyless this is a free no-op.
+        depth = await _bot_stress(idea)
+        if not depth.survived:
+            await _record_bot_drop(
+                db,
+                program,
+                reason=f"red-team panel killed it: {depth.strongest or 'no surviving rationale'}",
+            )
+            logger.info("bot probe: panel killed %r after %d passes", idea.name, depth.passes)
+            return
+        idea = depth.idea
+
+        # 5. The gate: right board, legitimate, has a spec, clears threshold.
+        score = await _bot_score(idea)
+        idea.bot_edge_score = score
+        ok, reason = admits(idea, score)
+        if not ok:
+            await _record_bot_drop(db, program, reason=reason, score=score)
+            logger.info("bot probe: rejected %r — %s", idea.name, reason)
+            return
+
+        # 6. Survived everything; dedup still gets the last word.
+        _saved, stored, dedup_reason = await filter_and_save(idea, db)
+        await db.record_bot_probe(
+            program_summary=program.get("title"),
+            venue=program.get("venue"),
+            anchor=program.get("url"),
+            admitted=bool(stored),
+            reason="admitted" if stored else f"dedup rejected: {dedup_reason}",
+            idea_id=idea.id if stored else None,
+            edge_score=score,
+        )
+        logger.info(
+            "bot probe: %s %r (edge=%.2f, venue=%s)",
+            "ADMITTED" if stored else "dedup-rejected",
+            idea.name,
+            score,
+            program.get("venue"),
+        )
+    except Exception as exc:
+        logger.exception("bot probe cycle failed")
+        # Same reasoning as the PKI probe: the watermark is
+        # MAX(bot_probes.probed_at), so a crash that records nothing leaves
+        # the cadence permanently overdue AND re-picking the same program
+        # every tick — an unbounded LLM burn loop on one signal. Recording
+        # the crash advances the watermark and retires the program.
+        try:
+            await db.record_bot_probe(
+                program_summary=(program or {}).get("title"),
+                venue=(program or {}).get("venue"),
+                anchor=(program or {}).get("url"),
+                admitted=False,
+                reason=f"probe crashed: {type(exc).__name__}: {exc}"[:400],
+            )
+        except Exception:
+            logger.exception("bot probe: could not record the crash either")
+
+
+async def _fire_bot_edge_score(db: Database) -> None:
+    """Back-fill bot_edge_score for gated strategies that don't have one."""
+    from project_forge.engine.bot_edge import score_pending_bot_edge
+
+    report = await score_pending_bot_edge(db, limit=50)
+    logger.info("bot edge back-fill: scored %d", report["scored"])
+
+
 async def _fire_auto_promote(db: Database) -> None:
     """Pick top-fundability money-bot idea, file a GH issue, flip to
     'approved'. The money-flipper loop."""
@@ -831,12 +1031,12 @@ async def _fire_pulse(db: Database) -> None:
         pick_hot_signal,
         signal_to_seed,
     )
-    from project_forge.models import MONEY_CATEGORIES
+    from project_forge.models import PRODUCT_MONEY_CATEGORIES
 
     try:
         hot = pick_hot_signal(fetch_pulse_signals())
         seed = signal_to_seed(hot) if hot else None
-        category = _random.choice(MONEY_CATEGORIES)
+        category = _random.choice(PRODUCT_MONEY_CATEGORIES)
         result = await generate_idea_llm(db, category, mode="novel", seed=seed)
         if result is None:
             logger.info("Pulse cycle: no idea produced")
@@ -957,8 +1157,17 @@ async def introspect_tick(db: Database, interval: timedelta) -> None:
 # --------------------------------------------------------------------------- #
 
 
+def cadence_names() -> list[str]:
+    """Names of every registered production cadence.
+
+    Cheap introspection for tests and for the status surfaces — asking for
+    the names should not require building and holding the Cadence objects
+    at the call site."""
+    return [c.name for c in default_cadences()]
+
+
 def default_cadences() -> list[Cadence]:
-    """The five production cadences."""
+    """The production cadences."""
     initial = INITIAL_DELAY.total_seconds()
     return [
         Cadence(
@@ -1144,6 +1353,27 @@ def default_cadences() -> list[Cadence]:
             runner=_fire_pki,
             delay_query=seconds_until_next_pki,
             tick_interval=900.0,  # re-check every 15min; fires per watermark
+            initial_delay=initial,
+        ),
+        Cadence(
+            # v0.24 — Money Bots: grounded venue probe, ONE gated strategy
+            # per fire, most fires deliberately store nothing. Watermark is
+            # bot_probes.probed_at for the same reason as the PKI probe.
+            # Read-only external fetches; touches no GitHub state.
+            name="bot_strategy",
+            interval=BOT_INTERVAL,
+            runner=_fire_bot_strategy,
+            delay_query=seconds_until_next_bot,
+            tick_interval=900.0,  # re-check every 15min; fires per watermark
+            initial_delay=initial,
+        ),
+        Cadence(
+            # v0.24 — bot edge back-fill for gated strategies with no score.
+            name="bot_score",
+            interval=BOT_SCORE_INTERVAL,
+            runner=_fire_bot_edge_score,
+            delay_query=None,
+            tick_interval=BOT_SCORE_INTERVAL.total_seconds(),
             initial_delay=initial,
         ),
         Cadence(

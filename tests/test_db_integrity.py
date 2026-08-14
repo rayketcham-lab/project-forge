@@ -115,6 +115,7 @@ EXPECTED_TABLES = frozenset(
         "calibration_weights",  # v0.17 Scoreboard auto-tune
         "missions",  # v0.18 Missions (#84) — operator directives
         "pki_probes",  # v0.23 PKI board — hourly probe log + cadence watermark
+        "bot_probes",  # v0.24 Money Bots — venue probe log + cadence watermark
     }
 )
 

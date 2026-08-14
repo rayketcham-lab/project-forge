@@ -1,8 +1,17 @@
-"""Tests for the /money-bots page + /api/money-bots/top endpoint.
+"""Tests for the /money-bots board + /api/money-bots/top endpoint.
 
-Covers what the auto-promote cadence surfaces to the user: fundability-
-ranked listing across the 4 money categories, only ideas with a
-non-NULL fundability_score, and a JSON API that returns the same data.
+v0.24 rework. The board used to be /explore filtered to eight product
+categories and ranked by fundability, which is why it produced SaaS
+pitches instead of bots. It now lists CAPITAL-DEPLOYMENT STRATEGIES across
+the five bot categories, ranked by bot_edge_score, and every card carries
+the strategy itself: venue, the API primitives the bot calls, the
+mechanism the yield comes from, capital band, how the edge decays, and
+when to switch it off.
+
+Two things this pins deliberately:
+  * an idea with no bot_edge_score never reaches the board (the gate), and
+  * a card renders the BotSpec, not a paragraph of prose — if the spec
+    stops being surfaced, the board is back to being explore with a filter.
 """
 
 from __future__ import annotations
@@ -11,11 +20,34 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from project_forge.models import Idea, IdeaCategory
+from project_forge.models import BotSpec, BotVenueFamily, Idea, IdeaCategory
 from project_forge.web.app import app, db
 
 
-def _money_idea(name: str, cat: IdeaCategory, score: float | None) -> Idea:
+def _spec(venue: str, family: BotVenueFamily, floor: float = 500.0) -> BotSpec:
+    return BotSpec(
+        venue=venue,
+        venue_url=f"https://docs.example.com/{venue.lower()}/rewards",
+        family=family,
+        api_primitives=["REST order placement", "websocket book feed"],
+        mechanism=f"{venue} pays a published liquidity budget for resting two-sided size.",
+        capital_floor_usd=floor,
+        capital_target_usd=floor * 20,
+        expected_return="Share of the reward pool, diluted pro-rata",
+        edge_decay="Reward pool is fixed — yield falls as competing makers arrive",
+        kill_criteria=["reward per minute drops below fees plus adverse selection"],
+        validation_plan=["one book, floor capital, 14 days, measure realised share"],
+        legality_note="Published venue program with public rules",
+        human_touchpoints="Weekly book selection review",
+    )
+
+
+def _bot_idea(
+    name: str,
+    cat: IdeaCategory,
+    score: float | None,
+    spec: BotSpec | None = None,
+) -> Idea:
     idea = Idea(
         name=name,
         tagline=f"tag {name}",
@@ -24,9 +56,10 @@ def _money_idea(name: str, cat: IdeaCategory, score: float | None) -> Idea:
         market_analysis="m" * 40,
         feasibility_score=0.7,
         mvp_scope="mvp" * 5,
-        tech_stack=["python", "fastapi"],
+        tech_stack=["python", "websockets"],
     )
-    idea.fundability_score = score
+    idea.bot_edge_score = score
+    idea.bot_spec = spec
     return idea
 
 
@@ -34,12 +67,33 @@ def _money_idea(name: str, cat: IdeaCategory, score: float | None) -> Idea:
 async def client(tmp_path):
     db.db_path = tmp_path / "test_money_bots.db"
     await db.connect()
-    # Seed: 3 money ideas with scores, 1 with NULL score, 1 in a non-money cat.
-    await db.save_idea(_money_idea("Money Top", IdeaCategory.AUTOMATION_INCOME, 0.90))
-    await db.save_idea(_money_idea("Money Mid", IdeaCategory.CREATOR_TOOLS, 0.65))
-    await db.save_idea(_money_idea("Money Low", IdeaCategory.PRODUCTIVITY, 0.40))
-    await db.save_idea(_money_idea("Unscored", IdeaCategory.CONSUMER_APP, None))
-    await db.save_idea(_money_idea("Sec Tool", IdeaCategory.SECURITY_TOOL, 0.99))
+    # 3 scored strategies, 1 unscored (gated out), 1 outside the board.
+    await db.save_idea(
+        _bot_idea(
+            "Reward Minute Maker",
+            IdeaCategory.INCENTIVE_CAPTURE,
+            0.90,
+            _spec("Polymarket", BotVenueFamily.PREDICTION_MARKETS, 500.0),
+        )
+    )
+    await db.save_idea(
+        _bot_idea(
+            "Funding Carry Holder",
+            IdeaCategory.BASIS_CARRY,
+            0.65,
+            _spec("Hyperliquid", BotVenueFamily.CRYPTO_DEFI, 2000.0),
+        )
+    )
+    await db.save_idea(
+        _bot_idea(
+            "Thin Book Quoter",
+            IdeaCategory.MARKET_MAKING,
+            0.40,
+            _spec("ProphetX", BotVenueFamily.SPORTSBOOK, 1000.0),
+        )
+    )
+    await db.save_idea(_bot_idea("Unscored Draft", IdeaCategory.CROSS_VENUE_ARBITRAGE, None))
+    await db.save_idea(_bot_idea("Sec Tool", IdeaCategory.SECURITY_TOOL, 0.99))
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -48,18 +102,16 @@ async def client(tmp_path):
 
 class TestApiTop:
     @pytest.mark.asyncio
-    async def test_returns_only_money_categories_with_scores(self, client):
+    async def test_returns_only_scored_bot_categories(self, client):
         resp = await client.get("/api/money-bots/top?limit=10")
         assert resp.status_code == 200
-        data = resp.json()
-        names = [d["name"] for d in data]
-        # All three scored money ideas — and ONLY those.
-        assert set(names) == {"Money Top", "Money Mid", "Money Low"}
+        names = [d["name"] for d in resp.json()]
+        assert set(names) == {"Reward Minute Maker", "Funding Carry Holder", "Thin Book Quoter"}
 
     @pytest.mark.asyncio
-    async def test_sorted_by_fundability_desc(self, client):
+    async def test_sorted_by_bot_edge_desc(self, client):
         resp = await client.get("/api/money-bots/top?limit=10")
-        scores = [d["fundability_score"] for d in resp.json()]
+        scores = [d["bot_edge_score"] for d in resp.json()]
         assert scores == sorted(scores, reverse=True)
 
     @pytest.mark.asyncio
@@ -68,7 +120,8 @@ class TestApiTop:
         assert len(resp.json()) == 2
 
     @pytest.mark.asyncio
-    async def test_payload_shape(self, client):
+    async def test_payload_carries_the_strategy(self, client):
+        """The API is only useful if it returns the edge, not just a title."""
         resp = await client.get("/api/money-bots/top?limit=1")
         item = resp.json()[0]
         for field in (
@@ -76,43 +129,169 @@ class TestApiTop:
             "name",
             "tagline",
             "category",
-            "fundability_score",
-            "generation_mode",
+            "bot_edge_score",
+            "venue",
+            "family",
+            "mechanism",
+            "capital_floor_usd",
             "status",
-            "github_issue_url",
-            "auto_promoted_at",
         ):
             assert field in item
+        assert item["venue"] == "Polymarket"
+        assert item["capital_floor_usd"] == 500.0
 
 
 class TestHtmlPage:
     @pytest.mark.asyncio
-    async def test_renders_with_money_table(self, client):
+    async def test_renders_scored_strategies(self, client):
         resp = await client.get("/money-bots")
         assert resp.status_code == 200
         html = resp.text
-        assert "Money-Bots" in html or "money-bot" in html.lower()
-        assert "Money Top" in html
-        assert "Money Mid" in html
-        # The non-money category and unscored ideas don't surface here.
+        assert "Reward Minute Maker" in html
+        assert "Funding Carry Holder" in html
+        # Gated out: no score, and outside the board entirely.
+        assert "Unscored Draft" not in html
         assert "Sec Tool" not in html
-        assert "Unscored" not in html
+
+    @pytest.mark.asyncio
+    async def test_card_shows_the_spec_not_just_prose(self, client):
+        html = (await client.get("/money-bots")).text
+        assert "Polymarket" in html
+        assert "Hyperliquid" in html
+        # Capital band, the mechanism, and the stop condition all surface.
+        assert "500" in html
+        assert "published liquidity budget" in html
+        assert "adverse selection" in html
+
+    @pytest.mark.asyncio
+    async def test_api_primitives_are_listed(self, client):
+        html = (await client.get("/money-bots")).text
+        assert "websocket book feed" in html
 
     @pytest.mark.asyncio
     async def test_category_filter_narrows_results(self, client):
-        resp = await client.get("/money-bots?category=automation-income")
+        resp = await client.get("/money-bots?category=incentive-capture")
         html = resp.text
-        assert "Money Top" in html
-        # Other money categories filtered out.
-        assert "Money Mid" not in html
+        assert "Reward Minute Maker" in html
+        assert "Funding Carry Holder" not in html
 
     @pytest.mark.asyncio
     async def test_unknown_category_falls_back_to_all(self, client):
-        """A bogus category param shouldn't 500; we silently widen to all."""
         resp = await client.get("/money-bots?category=not-real")
         assert resp.status_code == 200
-        html = resp.text
-        assert "Money Top" in html
+        assert "Reward Minute Maker" in resp.text
+
+    @pytest.mark.asyncio
+    async def test_playbook_of_known_strategies_is_linked(self, client):
+        """The board carries the library of edges that already work."""
+        html = (await client.get("/money-bots")).text
+        assert "playbook" in html.lower()
+
+
+class TestChurn:
+    """Churn Now on this board must run the GROUNDED bot pipeline.
+
+    The generic churn path produces an idea with no BotSpec, which the gate
+    rejects and the board never shows — a button that silently does nothing
+    useful. Here it runs one probe cycle and reports what happened.
+    """
+
+    @pytest.mark.asyncio
+    async def test_churn_runs_a_probe_cycle_and_reports_a_quiet_one(self, client, monkeypatch):
+        from project_forge.web import lifespan_scheduler as ls
+
+        monkeypatch.setattr(ls, "_bot_fetch_programs", lambda: [])
+        resp = await client.post("/api/churn", json={"lab": "money"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["idea"] is None
+        assert "no new venue program" in (data["message"] or "")
+
+        # The attempt is still on the record.
+        assert (await db.list_bot_probes(limit=1))[0]["admitted"] is False
+
+    @pytest.mark.asyncio
+    async def test_churn_returns_the_strategy_when_one_is_admitted(self, client, monkeypatch):
+        from project_forge.engine.bot_depth import StressResult
+        from project_forge.web import lifespan_scheduler as ls
+
+        program = {
+            "venue": "Hyperliquid",
+            "family": BotVenueFamily.CRYPTO_DEFI.value,
+            "category": IdeaCategory.BASIS_CARRY.value,
+            "title": "funding rate endpoint added",
+            "url": "https://github.com/example/sdk/releases/tag/v1",
+            "summary": "funding history endpoint",
+            "source": "github-release",
+            "program_score": 5,
+        }
+        fresh = _bot_idea(
+            "Churned Carry Bot",
+            IdeaCategory.BASIS_CARRY,
+            None,
+            _spec("Hyperliquid", BotVenueFamily.CRYPTO_DEFI, 2000.0),
+        )
+        fresh.generation_mode = "bot"
+
+        class _Result:
+            idea = fresh
+            mode = "bot"
+            persona = "p"
+            backend = "fake"
+            raw_response = "{}"
+            artifact_type = None
+
+        async def _gen(*_a, **_k):
+            return _Result()
+
+        async def _survive(idea):
+            return StressResult(idea=idea, survived=True, passes=4)
+
+        async def _score(_i):
+            return 0.77
+
+        monkeypatch.setattr(ls, "_bot_fetch_programs", lambda: [program])
+        monkeypatch.setattr(ls, "_bot_generate", _gen)
+        monkeypatch.setattr(ls, "_bot_stress", _survive)
+        monkeypatch.setattr(ls, "_bot_score", _score)
+
+        data = (await client.post("/api/churn", json={"lab": "money"})).json()
+        assert data["idea"] is not None
+        assert data["idea"]["name"] == "Churned Carry Bot"
+        assert data["idea"]["venue"] == "Hyperliquid"
+        assert data["idea"]["bot_edge_score"] == 0.77
+
+
+class TestScaffoldEndpoint:
+    @pytest.mark.asyncio
+    async def test_scaffolds_a_runnable_repo(self, client, tmp_path, monkeypatch):
+        from project_forge.web import routes
+
+        monkeypatch.setattr(routes, "_bot_scaffold_root", lambda: tmp_path)
+        top = (await client.get("/api/money-bots/top?limit=1")).json()[0]
+
+        resp = await client.post(f"/api/scaffold-bot/{top['id']}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["scaffolded"] is True
+        assert "README.md" in data["files"]
+        assert (tmp_path / data["repo_name"] / "src").is_dir()
+
+    @pytest.mark.asyncio
+    async def test_refuses_an_idea_with_no_spec(self, client, tmp_path, monkeypatch):
+        from project_forge.web import routes
+
+        monkeypatch.setattr(routes, "_bot_scaffold_root", lambda: tmp_path)
+        spec_less = _bot_idea("No Spec Here", IdeaCategory.MARKET_MAKING, 0.8)
+        await db.save_idea(spec_less)
+
+        resp = await client.post(f"/api/scaffold-bot/{spec_less.id}")
+        assert resp.status_code == 400
+        assert "spec" in resp.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_unknown_idea_is_404(self, client):
+        assert (await client.post("/api/scaffold-bot/deadbeef")).status_code == 404
 
 
 class TestDashboardStats:
@@ -123,5 +302,5 @@ class TestDashboardStats:
         data = resp.json()
         assert "money_bot_count" in data
         assert "auto_promoted_count" in data
-        # 4 ideas across money categories (Money Top, Money Mid, Money Low, Unscored).
+        # 4 ideas across the bot categories (3 scored + 1 unscored draft).
         assert data["money_bot_count"] == 4

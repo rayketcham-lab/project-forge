@@ -87,6 +87,16 @@ class IdeaCategory(StrEnum):
     PQC_MIGRATION = "pqc-migration"
     CA_OPERATIONS = "ca-operations"
     CERT_IDENTITY = "cert-identity"
+    # v0.24 Money Bots rework — the board finally means what it says. These
+    # are not product shapes; they are ways to put CAPITAL to work through a
+    # venue's API with little or no human intervention. The unit of value is
+    # an edge (a mechanism that pays), not a customer. Everything the old
+    # money board pitched still exists under PRODUCT_MONEY_CATEGORIES.
+    MARKET_MAKING = "market-making"
+    INCENTIVE_CAPTURE = "incentive-capture"
+    CROSS_VENUE_ARBITRAGE = "cross-venue-arbitrage"
+    BASIS_CARRY = "basis-carry"
+    CAPITAL_AUTOMATION = "capital-automation"
 
 
 # --------------------------------------------------------------------------- #
@@ -97,7 +107,24 @@ class IdeaCategory(StrEnum):
 # the dashboard stats counter, and the auto-promote picker can't drift
 # apart — add a category in ONE place and every surface picks it up.
 
+# v0.24 — the /money-bots board. A money bot deploys capital through a
+# venue's API and earns from a named mechanism: quoting a book, capturing a
+# published incentive, closing a price difference, holding a carry, or
+# automating a legal cash-management loop. Scored by bot_edge_score, gated
+# on having a real venue and a real API surface.
 MONEY_CATEGORIES: tuple["IdeaCategory", ...] = (
+    IdeaCategory.MARKET_MAKING,
+    IdeaCategory.INCENTIVE_CAPTURE,
+    IdeaCategory.CROSS_VENUE_ARBITRAGE,
+    IdeaCategory.BASIS_CARRY,
+    IdeaCategory.CAPITAL_AUTOMATION,
+)
+
+# The product shapes the money board used to hold (v0.12–v0.16). Still
+# generated, still fundability-scored, still what Sniper hunts and what the
+# promote loop files issues against — they just no longer occupy the board
+# named for bots. Reachable on /explore.
+PRODUCT_MONEY_CATEGORIES: tuple["IdeaCategory", ...] = (
     IdeaCategory.AUTOMATION_INCOME,
     IdeaCategory.CREATOR_TOOLS,
     IdeaCategory.CONSUMER_APP,
@@ -123,7 +150,7 @@ CLAUDE_LAB_CATEGORIES: tuple["IdeaCategory", ...] = (
 # the operator's home turf. The /sniper page itself filters on
 # snipe_score IS NOT NULL, so these only bound where churn picks from.
 SNIPER_CATEGORIES: tuple["IdeaCategory", ...] = (
-    *MONEY_CATEGORIES,
+    *PRODUCT_MONEY_CATEGORIES,
     IdeaCategory.SECURITY_TOOL,
     IdeaCategory.DEVOPS_TOOLING,
     IdeaCategory.OBSERVABILITY,
@@ -188,6 +215,86 @@ GATED_CATEGORIES: tuple["IdeaCategory", ...] = PKI_CATEGORIES
 
 
 IdeaStatus = Literal["new", "approved", "scaffolded", "rejected", "archived", "contributed", "implemented"]
+
+
+class BotVenueFamily(StrEnum):
+    """Where the capital is deployed. Drives which probe sources apply and
+    which regulatory footnote the board shows."""
+
+    PREDICTION_MARKETS = "prediction-markets"
+    CRYPTO_DEFI = "crypto-defi"
+    SPORTSBOOK = "sportsbook"
+    BROKERAGE = "brokerage"
+    OTHER = "other"
+
+
+class BotSpec(BaseModel):
+    """The executable half of a money-bot idea.
+
+    An idea on the money board is only admitted if it can fill this in.
+    Every field exists because leaving it out is how a "trading bot idea"
+    stays a vibe: without a venue there is nothing to connect to, without
+    api_primitives nobody knows if the venue even exposes the operation,
+    without a mechanism the returns are magic, and without kill_criteria a
+    bot with real money on it has no defined way to stop.
+    """
+
+    venue: str
+    venue_url: str | None = None
+    family: BotVenueFamily = BotVenueFamily.OTHER
+    # The concrete API operations the bot needs — the first thing to check
+    # against the venue's real docs before writing a line of code.
+    api_primitives: list[str] = Field(default_factory=list)
+    # Where the money actually comes from. "The spread", "the venue's
+    # published reward budget", "the funding payment" — not "AI predictions".
+    mechanism: str
+    capital_floor_usd: float = Field(ge=0.0)
+    capital_target_usd: float = Field(ge=0.0)
+    expected_return: str = ""
+    # Why this stops working. Every real edge decays; a spec that claims
+    # otherwise is the one to distrust.
+    edge_decay: str
+    kill_criteria: list[str] = Field(default_factory=list)
+    validation_plan: list[str] = Field(default_factory=list)
+    legality_note: str = ""
+    human_touchpoints: str = ""
+    # The strongest objection the red-team panel raised that the strategy
+    # could not make go away. Published with the strategy on purpose: a bot
+    # that admits where it breaks is worth more than one that pretends the
+    # objection was never made.
+    surviving_objection: str | None = None
+
+    @field_validator("venue", "mechanism", "edge_decay")
+    @classmethod
+    def _required_text(cls, v: str) -> str:
+        stripped = (v or "").strip()
+        if not stripped:
+            raise ValueError("field cannot be empty — a bot spec without it is not actionable")
+        return stripped
+
+    @field_validator("api_primitives")
+    @classmethod
+    def _needs_api_surface(cls, v: list[str]) -> list[str]:
+        cleaned = [p.strip() for p in v if p and p.strip()]
+        if not cleaned:
+            raise ValueError("at least one API primitive — a strategy with no API surface is a wish")
+        return cleaned
+
+    @field_validator("kill_criteria")
+    @classmethod
+    def _needs_kill_switch(cls, v: list[str]) -> list[str]:
+        cleaned = [k.strip() for k in v if k and k.strip()]
+        if not cleaned:
+            raise ValueError("at least one kill criterion — real capital needs a defined stop")
+        return cleaned
+
+    @field_validator("capital_target_usd")
+    @classmethod
+    def _target_at_least_floor(cls, v: float, info) -> float:
+        floor = info.data.get("capital_floor_usd")
+        if floor is not None and v < floor:
+            raise ValueError(f"capital_target_usd ({v}) below capital_floor_usd ({floor})")
+        return v
 
 
 class Idea(BaseModel):
@@ -263,6 +370,13 @@ class Idea(BaseModel):
     # finding that admits what is wrong with it is worth more to an engineer
     # than one that pretends the objection was never made.
     pki_objection: str | None = None
+    # v0.24 Money Bots — the capital-deployment axis. fundability asks "can
+    # we sell it"; bot_edge asks "does this edge survive fees, competition
+    # and capacity, and can a bot run it unattended". Doubles as the board's
+    # admission gate, like pki_urgency_score.
+    bot_edge_score: float | None = None
+    # The strategy itself. None for every idea that is not a money bot.
+    bot_spec: BotSpec | None = None
 
 
 MissionStatus = Literal["active", "paused", "archived"]

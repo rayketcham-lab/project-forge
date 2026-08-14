@@ -23,6 +23,7 @@ from project_forge.models import (
     CRYPTO_CATEGORIES,
     MONEY_CATEGORIES,
     PKI_CATEGORIES,
+    PRODUCT_MONEY_CATEGORIES,
     SNIPER_CATEGORIES,
     Challenge,
     Idea,
@@ -215,6 +216,10 @@ async def explore(
 # /claude-lab, the stats counter, and the auto-promote picker can't drift.
 # Kept as plain .value strings here to match the SQL bindings below.
 _MONEY_CATEGORIES = tuple(c.value for c in MONEY_CATEGORIES)
+
+# v0.24 — the product shapes the money board used to hold. Pulse churn and
+# the promote loop still work this set; only the BOARD changed hands.
+_PRODUCT_MONEY_CATEGORIES = tuple(c.value for c in PRODUCT_MONEY_CATEGORIES)
 
 _CLAUDE_LAB_CATEGORIES = tuple(c.value for c in CLAUDE_LAB_CATEGORIES)
 
@@ -522,7 +527,7 @@ async def api_pulse_churn():
     signals = fetch_pulse_signals()
     hot = pick_hot_signal(signals)
     seed = signal_to_seed(hot) if hot else None
-    category = IdeaCategory(_random.choice(_MONEY_CATEGORIES))
+    category = IdeaCategory(_random.choice(_PRODUCT_MONEY_CATEGORIES))
     result = await generate_idea_llm(db, category, mode="novel", seed=seed)
     if result is None:
         return {"idea": None, "message": "LLM backend returned no idea; try again.", "seed": seed}
@@ -629,16 +634,22 @@ async def money_bots(
     category: str | None = None,
     limit: int = Query(default=30, ge=1, le=100),
 ):
-    """Top monetizable ideas across money-friendly categories, sorted by
-    fundability_score DESC. Optionally filter by a specific category."""
+    """v0.24 — capital-deployment strategies, ranked by bot_edge_score DESC.
+
+    Only scored strategies reach the board: a bot_edge_score is what the
+    admission gate stamps, so filtering on it is the same thing as showing
+    only what passed the gate. Optionally filter by a specific category."""
+    from project_forge.engine.strategy_library import STRATEGY_LIBRARY
+    from project_forge.feeds.venue_probe import VENUE_REGISTRY
+
     cats = (category,) if category in _MONEY_CATEGORIES else _MONEY_CATEGORIES
     placeholders = ",".join("?" * len(cats))
     cur = await db.db.execute(
         f"SELECT id FROM ideas "  # noqa: S608
         f"WHERE category IN ({placeholders}) "
         f"AND status NOT IN ('archived', 'rejected') "
-        f"AND fundability_score IS NOT NULL "
-        f"ORDER BY fundability_score DESC, generated_at DESC LIMIT ?",
+        f"AND bot_edge_score IS NOT NULL "
+        f"ORDER BY bot_edge_score DESC, generated_at DESC LIMIT ?",
         (*cats, limit),
     )
     rows = await cur.fetchall()
@@ -647,7 +658,7 @@ async def money_bots(
         idea = await db.get_idea(r["id"])
         if idea is not None:
             ideas.append(idea)
-    # Total in scope (no fundability_score filter — show the headline).
+    # Total in scope (no score filter — show the headline).
     cur = await db.db.execute(
         f"SELECT COUNT(*) FROM ideas WHERE category IN ({placeholders}) "  # noqa: S608
         f"AND status NOT IN ('archived', 'rejected')",
@@ -662,6 +673,11 @@ async def money_bots(
             "total": total,
             "categories": list(_MONEY_CATEGORIES),
             "category_filter": category if category in _MONEY_CATEGORIES else None,
+            # The mechanism inventory, readable without generating anything.
+            "playbook": STRATEGY_LIBRARY,
+            "venues": VENUE_REGISTRY,
+            "probe_stats": await db.bot_probe_stats(),
+            "probes": await db.list_bot_probes(limit=8),
         },
     )
 
@@ -811,6 +827,40 @@ async def api_churn(request: Request):
         "pki": _PKI_CATEGORIES,
     }.get(lab, _MONEY_CATEGORIES)
 
+    # v0.24 — the money board is grounded end to end. Churning it means
+    # running ONE probe cycle: sweep venues, work a program, red-team it,
+    # gate it. The generic path would hand back an idea with no BotSpec,
+    # which the gate refuses and the board never shows — a button that
+    # looks like it worked and did nothing.
+    if lab == "money":
+        from project_forge.web.lifespan_scheduler import _fire_bot_strategy
+
+        await _fire_bot_strategy(db)
+        probes = await db.list_bot_probes(limit=1)
+        latest = probes[0] if probes else None
+        if latest is None or not latest["admitted"] or not latest["idea_id"]:
+            return {
+                "idea": None,
+                "message": (latest or {}).get("reason") or "probe produced nothing",
+            }
+        idea = await db.get_idea(latest["idea_id"])
+        if idea is None:
+            return {"idea": None, "message": "strategy vanished between probe and read"}
+        spec = idea.bot_spec
+        return {
+            "idea": {
+                "id": idea.id,
+                "name": idea.name,
+                "tagline": idea.tagline,
+                "category": idea.category.value,
+                "bot_edge_score": idea.bot_edge_score,
+                "venue": spec.venue if spec else None,
+                "mechanism": spec.mechanism if spec else None,
+                "capital_floor_usd": spec.capital_floor_usd if spec else None,
+                "generation_mode": idea.generation_mode,
+            }
+        }
+
     cat_str = (payload.get("category") or "").strip()
     if cat_str in allowed:
         category = IdeaCategory(cat_str)
@@ -882,32 +932,102 @@ async def api_churn(request: Request):
 
 @router.get("/api/money-bots/top")
 async def api_money_bots_top(limit: int = Query(default=10, ge=1, le=100)):
-    """JSON: top-N money-bot ideas across money categories by fundability_score."""
+    """JSON: top-N capital-deployment strategies by bot_edge_score.
+
+    Carries the strategy itself, not just a title — venue, mechanism and
+    capital floor are what make a row actionable, and a consumer that has
+    to re-fetch each idea to learn where the orders go is useless."""
     placeholders = ",".join("?" * len(_MONEY_CATEGORIES))
     cur = await db.db.execute(
-        f"SELECT id, name, tagline, category, fundability_score, "  # noqa: S608
-        f"generation_mode, status, github_issue_url, auto_promoted_at "
-        f"FROM ideas WHERE category IN ({placeholders}) "
+        f"SELECT id FROM ideas "  # noqa: S608
+        f"WHERE category IN ({placeholders}) "
         f"AND status NOT IN ('archived', 'rejected') "
-        f"AND fundability_score IS NOT NULL "
-        f"ORDER BY fundability_score DESC, generated_at DESC LIMIT ?",
+        f"AND bot_edge_score IS NOT NULL "
+        f"ORDER BY bot_edge_score DESC, generated_at DESC LIMIT ?",
         (*_MONEY_CATEGORIES, limit),
     )
     rows = await cur.fetchall()
-    return [
-        {
-            "id": r["id"],
-            "name": r["name"],
-            "tagline": r["tagline"],
-            "category": r["category"],
-            "fundability_score": r["fundability_score"],
-            "generation_mode": r["generation_mode"],
-            "status": r["status"],
-            "github_issue_url": r["github_issue_url"],
-            "auto_promoted_at": r["auto_promoted_at"],
-        }
-        for r in rows
-    ]
+    out = []
+    for r in rows:
+        idea = await db.get_idea(r["id"])
+        if idea is None:
+            continue
+        spec = idea.bot_spec
+        out.append(
+            {
+                "id": idea.id,
+                "name": idea.name,
+                "tagline": idea.tagline,
+                "category": idea.category.value,
+                "bot_edge_score": idea.bot_edge_score,
+                "venue": spec.venue if spec else None,
+                "venue_url": spec.venue_url if spec else None,
+                "family": spec.family.value if spec else None,
+                "mechanism": spec.mechanism if spec else None,
+                "api_primitives": list(spec.api_primitives) if spec else [],
+                "capital_floor_usd": spec.capital_floor_usd if spec else None,
+                "capital_target_usd": spec.capital_target_usd if spec else None,
+                "expected_return": spec.expected_return if spec else None,
+                "edge_decay": spec.edge_decay if spec else None,
+                "kill_criteria": list(spec.kill_criteria) if spec else [],
+                "surviving_objection": spec.surviving_objection if spec else None,
+                "generation_mode": idea.generation_mode,
+                "status": idea.status,
+                "project_repo_url": idea.project_repo_url,
+            }
+        )
+    return out
+
+
+def _bot_scaffold_root() -> Path:
+    """Where generated bot repos land: `<db dir>/bots`.
+
+    A sibling of the database rather than a temp dir — the operator is meant
+    to go read the scaffold, fill in the venue client, and push it when they
+    choose. Nothing here touches GitHub."""
+    from project_forge.config import settings
+
+    root = Path(settings.db_path).parent / "bots"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+@router.post("/api/scaffold-bot/{idea_id}")
+async def api_scaffold_bot(idea_id: str):
+    """Render a runnable bot skeleton from a strategy's BotSpec.
+
+    Human-initiated only, and local only: it writes files and returns a
+    manifest. Creating the repository, and deciding whether this strategy
+    deserves one, stays with the operator."""
+    from project_forge.scaffold.bot_builder import render_bot_scaffold
+
+    idea = await db.get_idea(idea_id)
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+    if idea.bot_spec is None:
+        raise HTTPException(
+            status_code=400,
+            detail="This idea has no BotSpec — there is no venue or API surface to scaffold from.",
+        )
+
+    try:
+        root = render_bot_scaffold(idea, _bot_scaffold_root())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    files = sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_file())
+    return {
+        "scaffolded": True,
+        "idea_id": idea.id,
+        "repo_name": root.name,
+        "path": str(root),
+        "venue": idea.bot_spec.venue,
+        "files": files,
+        "next_step": (
+            "Implement the venue client stubs against the venue's real documentation, "
+            "then work VALIDATION.md before any capital moves."
+        ),
+    }
 
 
 @router.get("/cashflow", response_class=HTMLResponse)

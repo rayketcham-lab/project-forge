@@ -1,17 +1,18 @@
 # Project Forge
 
-![Version](https://img.shields.io/badge/version-0.23-blue) ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/rayketcham-lab/project-forge/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-1860+-passing?color=brightgreen) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+![Version](https://img.shields.io/badge/version-0.24-blue) ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/rayketcham-lab/project-forge/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-2100+-passing?color=brightgreen) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 **[Quickstart](#quick-start) · [Boards](#the-six-boards) · [Dashboard](#dashboard) · [Labs](#labs--autonomous-avenues-v017) · [Architecture](#architecture) · [Config](#configuration) · [Roadmap](#roadmap)**
 
-An autonomous project idea generator. It runs an in-process scheduler inside the FastAPI app, calls an LLM (or falls back to deterministic heuristics), scores ideas on **six orthogonal axes**, deduplicates aggressively, and stores everything in SQLite. A web dashboard lets a human review, approve, and — with a single click — promote ideas into GitHub issues with full MVP specs.
+An autonomous project idea generator. It runs an in-process scheduler inside the FastAPI app, calls an LLM (or falls back to deterministic heuristics), scores ideas on **seven orthogonal axes**, deduplicates aggressively, and stores everything in SQLite. A web dashboard lets a human review, approve, and — with a single click — promote ideas into GitHub issues with full MVP specs.
 
 **Promotion is human-gated**: the engine ranks and surfaces, you approve.
 
 | Axis | Question it answers | Sorts |
 |------|--------------------|-------|
 | `feasibility_score` | Can we build it? | universal, required |
-| `fundability_score` | Can we sell it? | `/money-bots`, `/crypto` |
+| `fundability_score` | Can we sell it? | `/crypto` |
+| `bot_edge_score` | Does this edge survive fees, competition and capacity? | `/money-bots` |
 | `ambition_score` | Does it push the frontier? | `/claude-lab` |
 | `snipe_score` | Can we wedge into a proven incumbent? | `/sniper` |
 | `cashflow_score` | How fast does it become actual dollars? | `/cashflow` |
@@ -41,7 +42,7 @@ Each board frames the corpus with its own question, its own category family, and
 
 | Board | Question | Categories | Sorted by |
 |-------|----------|-----------|-----------|
-| **/money-bots** | Can we sell it? | 8 money-friendly (automation-income, creator-tools, consumer-app, productivity, micro-saas, vertical-saas, ecommerce-tools, fintech-tools) | `fundability_score` |
+| **/money-bots** | Can a bot make money with capital? | 5 capital-deployment (market-making, incentive-capture, cross-venue-arbitrage, basis-carry, capital-automation) | `bot_edge_score` |
 | **/claude-lab** | Does it push the frontier? | 6 Claude/agent (claude-skills-agents, ai-marketplace, agent-infra, claude-evals, agent-security, context-memory) | `ambition_score` |
 | **/sniper** | Can we take a slice of a proven market? | 14 hunting grounds (the money categories + fat-incumbent IT/security) | `snipe_score` |
 | **/crypto** | Where are the real crypto budgets? | 5 on-chain (onchain-security, web3-infra, defi-tooling, stablecoin-payments, crypto-compliance) | `fundability_score` |
@@ -65,6 +66,57 @@ Three ways to fail, all deliberate: wrong board, **no concrete anchor** (an RFC,
 `pki_urgency_score` is **deadline pressure × blast radius × how badly today's tooling fails** — deliberately not a money question, because fundability would rank a certificate dashboard above a CRL-partitioning planner.
 
 Because an empty board is indistinguishable from a broken one, every attempt is written to a `pki_probes` table and rendered as a **probe log** on the page (also at `GET /api/pki/probes`), with the admission rate. The log doubles as the cadence watermark — keying the schedule off *stored ideas* would leave a mostly-silent cadence permanently overdue and re-firing every tick.
+
+### /money-bots — capital-deployment strategies (v0.24)
+
+Until v0.24 this board was `/explore` filtered to eight product categories and
+ranked by fundability, which is why it produced SaaS pitches: a dashboard for
+traders scores well on "can we sell it" and has no edge at all. It now holds a
+different object entirely — a **strategy** that deploys capital through a
+venue's API and earns from a named mechanism, with little or no human
+intervention.
+
+Every admitted item carries a `BotSpec`: the venue and its documentation, the
+exact API operations the bot calls, where the money comes from, the capital
+floor and target, how the edge decays, the conditions under which the bot
+switches itself off, and how to prove the edge small before scaling.
+
+```
+probe venues → pick ONE program → compose with a known-working mechanism →
+generate strategy + spec → red team → gate → store or DROP
+```
+
+The probe sweeps SDK release notes and open issues on the clients traders
+actually use, so every strategy is anchored to a live signal about a venue's
+mechanics. Generation composes that signal with a **playbook** of ~20 mechanisms
+that are publicly documented and demonstrably real (maker rebates, per-minute
+liquidity rewards, funding carry, cash-and-carry basis, cross-book middling,
+idle-cash sweeps) — each carrying its decay story and its honest risks, because
+an idea generated from a mechanism alone comes back claiming a permanent edge.
+
+A four-lens red team then attacks the draft where these actually die:
+**arithmetic** (recompute the P&L net of fees and slippage), **competition**
+(who is already doing this, and what capacity does it have), **legality** (does
+the venue permit it, is the operator eligible), and **operations** (can it
+really run unattended). A knocked-down draft gets one rewrite and then the
+hardest lens is re-asked against the rewrite — a rewrite has to survive the
+same attack. Whatever objection still stands is published on the card.
+
+The gate refuses anything with no spec, nothing to verify against, or a
+mechanism that only works through manipulation, non-public information, bug
+exploitation, or evading a venue's terms — regardless of score. In early live
+runs the panel killed every draft on quantitative grounds (a reward smaller
+than the venue's minimum tick; a funding gate demanding 48–78 bp when funding
+pays a fraction of that; an offshore venue barring the operator's
+jurisdiction). That is the board working, not failing.
+
+Admitted strategies can be scaffolded into a runnable repo — venue client,
+strategy loop, risk guards, ledger, validation checklist. The venue client is
+deliberately **unimplemented**: every primitive raises with the documentation
+URL attached, because a generated client for an API nobody verified would look
+finished while sending real orders to guessed endpoints. Paper mode is the
+default in both the config file and the code, live mode needs a second
+environment-variable opt-in, and an unimplemented risk guard halts the bot.
 
 ### /missions — operator-directed generation (v0.18)
 
@@ -242,7 +294,8 @@ src/project_forge/
     prompts.py               Generation / URL-ingest / text-ingest templates
     diversity_prompts.py     Combinatoric / contrarian / persona templates
     scorer.py                novelty + specificity + scope realism → feasibility
-    fundability.py           "Can we sell it"        → /money-bots, /crypto
+    fundability.py           "Can we sell it"        → /crypto
+    bot_edge.py              "Does the edge hold"    → /money-bots
     ambition.py              "Does it push the ceiling" → /claude-lab
     snipe.py                 "Can we wedge an incumbent" → /sniper
     cashflow.py              "How soon is the first dollar" → /cashflow
@@ -320,7 +373,8 @@ class Idea(BaseModel):
     content_hash: str | None         # dedup
     source_url: str | None           # URL-ingest provenance
     generation_mode: str | None      # which generator mode/cadence produced it
-    fundability_score: float | None  # "can we sell it?"      → /money-bots, /crypto
+    fundability_score: float | None  # "can we sell it?"      → /crypto
+    bot_edge_score: float | None     # "does the edge hold?"  → /money-bots
     ambition_score: float | None     # "frontier?"            → /claude-lab
     snipe_score: float | None        # "wedge an incumbent?"  → /sniper
     target_incumbent: str | None     # powers the "vs. X" badge
@@ -466,6 +520,7 @@ The north star: **from "generates and scores ideas" → "builds, ships, and lear
 | **Now** | Real outcome data into the Scoreboard (revenue / inline 👍👎, not just OSS-challenger stars) · Foundry generates a *working* MVP + smoke tests, not just a skeleton · cost-per-cadence attribution |
 | **Next** | Launchpad → a deployed landing page for demand validation · calibrate the scorers once outcome data exists · weekly engine-written retro |
 | **Later** | Model router + per-cadence budget guard · idea-quality regression suite (canary vs prompt drift) · opt-in per-idea share links |
+| **Designed, not built** | `/rfc` — a standards-gap board that finds load-bearing things with no RFC (PQ-native revocation and enrolment profiles being the motivating example), evidences the absence, and assembles a gap dossier a working-group participant could carry. Build brief: [docs/rfc-board-instruction.md](docs/rfc-board-instruction.md). Nothing it produces is ever submitted anywhere. |
 
 It's a personal project, so this is intent and direction — not a delivery commitment.
 
@@ -473,7 +528,7 @@ It's a personal project, so this is intent and direction — not a delivery comm
 
 ## Status
 
-Active. The scheduler fires generation hourly, the PKI probe hourly, issue-sync hourly, Pulse every 3h, missions every 4h, grounded snipes every 6h, scoring + audits + feed refresh + siphon daily, and the challenge + cartographer cadences weekly. Promotion to GitHub is human-gated. Self-improvement and Mechanic are disarmed unless explicitly enabled.
+Active. The scheduler fires generation hourly, the PKI probe hourly, the money-bot venue probe every 2h, issue-sync hourly, Pulse every 3h, missions every 4h, grounded snipes every 6h, scoring + audits + feed refresh + siphon daily, and the challenge + cartographer cadences weekly. Promotion to GitHub is human-gated. Self-improvement and Mechanic are disarmed unless explicitly enabled.
 
 Issues / PRs welcome but not necessarily merged on any timeline — see `CONTRIBUTING.md` and `SECURITY.md`.
 
