@@ -319,3 +319,46 @@ class TestFeeArithmetic:
         prompt, not defended and then killed by the panel."""
         seed = venue_probe.program_to_seed(self._program(), primitive=None).lower()
         assert "does not clear" in seed or "cannot clear" in seed
+
+
+class TestAvoidLessons:
+    """Rejections are the cheapest training signal this board has.
+
+    The panel kept killing the same two errors — a one-way fee quoted as a
+    round trip, and a capacity claim the reward pool cannot pay. Nothing
+    carried that back into the next generation, so it made them again.
+    """
+
+    def _program(self) -> dict:
+        return {
+            "venue": "Polymarket",
+            "family": BotVenueFamily.PREDICTION_MARKETS.value,
+            "category": IdeaCategory.INCENTIVE_CAPTURE.value,
+            "title": "rewards",
+            "url": "https://example.com/x",
+            "summary": "reward budget",
+            "source": "github-issue",
+            "program_score": 5,
+        }
+
+    def test_lessons_reach_the_seed(self):
+        seed = venue_probe.program_to_seed(
+            self._program(),
+            primitive=None,
+            avoid_lessons=[
+                "Reward Minute Maker: quoted a one-way fee as a round trip",
+                "Carry Bot: capacity claim exceeded what the reward pool pays",
+            ],
+        )
+        assert "one-way fee as a round trip" in seed
+        assert "capacity claim exceeded" in seed
+
+    def test_seed_tells_it_not_to_repeat_them(self):
+        seed = venue_probe.program_to_seed(
+            self._program(), primitive=None, avoid_lessons=["X: fees were wrong"]
+        ).lower()
+        assert "already rejected" in seed or "do not repeat" in seed
+
+    def test_no_lessons_is_fine(self):
+        seed = venue_probe.program_to_seed(self._program(), primitive=None, avoid_lessons=[])
+        assert "Polymarket" in seed

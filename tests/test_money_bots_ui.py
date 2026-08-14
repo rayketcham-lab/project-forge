@@ -16,6 +16,8 @@ Two things this pins deliberately:
 
 from __future__ import annotations
 
+import re
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -336,3 +338,87 @@ class TestDashboardStats:
         assert "auto_promoted_count" in data
         # 4 ideas across the bot categories (3 scored + 1 unscored draft).
         assert data["money_bot_count"] == 4
+
+
+class TestCardIsCompact:
+    """Cards were dumping the entire spec inline — 600 chars of return text,
+    600 of objection, and up to ten kill criteria per card. Four of those is
+    a wall of text, not a board.
+
+    The card now shows what you scan by (venue, edge, capital, one-line
+    mechanism) and folds the rest behind one toggle.
+    """
+
+    @pytest.mark.asyncio
+    async def test_long_fields_are_behind_a_toggle(self, client):
+        html = (await client.get("/money-bots")).text
+        assert 'class="card-more"' in html
+
+        card_start = html.index('class="strategy-card')
+        card = html[card_start : card_start + 40000]
+        more_at = card.index('class="card-more"')
+
+        # The scannable half comes first...
+        assert card.index("strategy-name") < more_at
+        assert card.index("capital-chip") < more_at
+        # ...and the long-form spec is inside the toggle.
+        assert card.index("Switches off when") > more_at
+
+    @pytest.mark.asyncio
+    async def test_mechanism_is_clamped_not_dumped(self, client):
+        html = (await client.get("/money-bots")).text
+        assert 'class="card-mech"' in html
+
+    @pytest.mark.asyncio
+    async def test_the_old_inline_dump_is_gone(self, client):
+        html = (await client.get("/money-bots")).text
+        assert 'class="strategy-facts"' not in html
+
+
+class TestFlaggedAreCountedNotDisplayed:
+    """Flagged strategies are a learning signal, not board content.
+
+    The board shows what survived the red team. What did not survived is
+    counted and listed compactly — you can see it and audit it, but it does
+    not compete for attention with the strategies that actually passed.
+    """
+
+    @pytest.mark.asyncio
+    async def test_flagged_are_not_rendered_as_cards(self, client):
+        killed = _bot_idea(
+            "Doomed Quoter Two",
+            IdeaCategory.MARKET_MAKING,
+            0.62,
+            _spec("Polymarket", BotVenueFamily.PREDICTION_MARKETS),
+        )
+        killed.bot_spec.panel_verdict = "flagged"
+        killed.bot_spec.surviving_objection = "the reward is smaller than the minimum tick"
+        await db.save_idea(killed)
+
+        html = (await client.get("/money-bots")).text
+        cards = re.findall(r'<article class="strategy-card.*?</article>', html, re.S)
+        assert not any("Doomed Quoter Two" in c for c in cards), "a flagged strategy must not render as a card"
+        # But it is visible and counted somewhere on the page.
+        assert "Doomed Quoter Two" in html
+        assert "flagged" in html.lower()
+
+    @pytest.mark.asyncio
+    async def test_flagged_block_is_collapsed(self, client):
+        killed = _bot_idea(
+            "Collapsed Check",
+            IdeaCategory.BASIS_CARRY,
+            0.5,
+            _spec("Hyperliquid", BotVenueFamily.CRYPTO_DEFI),
+        )
+        killed.bot_spec.panel_verdict = "flagged"
+        await db.save_idea(killed)
+
+        html = (await client.get("/money-bots")).text
+        block = html[html.index('id="flagged-log"') :][:120]
+        assert "open" not in block
+
+    @pytest.mark.asyncio
+    async def test_counts_are_shown(self, client):
+        html = (await client.get("/money-bots")).text
+        assert "vetted" in html.lower()
+        assert "flagged" in html.lower()

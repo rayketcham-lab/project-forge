@@ -339,7 +339,12 @@ def pick_top_program(candidates: list[dict], *, seen_urls: set[str] | None = Non
     return None
 
 
-def program_to_seed(program: dict, *, primitive: Any = None) -> str:
+def program_to_seed(
+    program: dict,
+    *,
+    primitive: Any = None,
+    avoid_lessons: list[str] | None = None,
+) -> str:
     """Turn a probed program plus a known-working mechanism into a seed.
 
     The composition is the point: the probe says "this venue's mechanics
@@ -373,6 +378,22 @@ def program_to_seed(program: dict, *, primitive: Any = None) -> str:
             f"strategy the operator cannot legally run.\n"
         )
 
+    # Rejections are the cheapest training signal this board has. The panel
+    # kept killing the same two errors — a one-way fee quoted as a round
+    # trip, and a capacity claim the reward pool cannot pay — and nothing
+    # carried that back into the next generation, so it made them again.
+    lessons_block = ""
+    if avoid_lessons:
+        listed = "\n".join(f"- {lesson}" for lesson in avoid_lessons[:8])
+        lessons_block = (
+            "\n## Strategies already rejected on this board, and why\n"
+            f"{listed}\n"
+            "Do not repeat these mistakes, and do not re-propose these "
+            "strategies. If your idea shares a failure mode with one of them, "
+            "either fix that specific thing explicitly and show the corrected "
+            "arithmetic, or propose something else.\n"
+        )
+
     known_block = ""
     if primitive is not None:
         known_block = (
@@ -396,6 +417,7 @@ def program_to_seed(program: dict, *, primitive: Any = None) -> str:
         f"URL: {url}\n"
         f"Context: {summary}\n"
         f"{jurisdiction_block}"
+        f"{lessons_block}"
         f"{known_block}\n"
         "## What to produce\n"
         "A specific strategy runnable with little or no human intervention. "

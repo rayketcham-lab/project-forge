@@ -749,10 +749,41 @@ def _bot_fetch_programs() -> list[dict]:
     return fetch_venue_programs()
 
 
-async def _bot_generate(db: Database, category, program: dict, primitive):
+async def _bot_generate(db: Database, category, program: dict, primitive, avoid_lessons=None):
     from project_forge.engine.llm_generator import generate_bot_llm
 
-    return await generate_bot_llm(db, category, program=program, primitive=primitive)
+    return await generate_bot_llm(
+        db,
+        category,
+        program=program,
+        primitive=primitive,
+        avoid_lessons=avoid_lessons,
+    )
+
+
+async def _bot_avoid_lessons(db: Database, limit: int = 6) -> list[str]:
+    """What the red team already rejected, and why.
+
+    Fed back into the next generation. The panel kept killing the same two
+    errors — a one-way fee quoted as a round trip, and a capacity claim the
+    reward pool cannot pay — and nothing carried that forward, so the
+    generator made them again on the next cycle.
+    """
+    cur = await db.db.execute(
+        "SELECT name, json_extract(bot_spec, '$.surviving_objection') AS objection "
+        "FROM ideas WHERE generation_mode = 'bot' "
+        "AND json_extract(bot_spec, '$.panel_verdict') IN ('flagged', 'below-bar') "
+        "AND status NOT IN ('archived', 'rejected') "
+        "ORDER BY generated_at DESC LIMIT ?",
+        (limit,),
+    )
+    lessons = []
+    for row in await cur.fetchall():
+        objection = (row["objection"] or "").strip()
+        if not objection:
+            continue
+        lessons.append(f"{row['name']}: {objection[:280]}")
+    return lessons
 
 
 async def _bot_stress(idea):
@@ -884,7 +915,8 @@ async def _fire_bot_strategy(db: Database) -> None:
 
         # 3. Compose the live program with a mechanism already known to pay.
         primitive = pick_primitive(rng=_rnd.Random(), category=category)
-        result = await _bot_generate(db, category, program, primitive)
+        lessons = await _bot_avoid_lessons(db)
+        result = await _bot_generate(db, category, program, primitive, lessons)
         if result is None:
             await _record_bot_drop(db, program, reason="generator returned no usable strategy")
             logger.info("bot probe: generator produced nothing for %r", program.get("title"))

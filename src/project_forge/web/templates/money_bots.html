@@ -5,89 +5,82 @@
 {% set spec = idea.bot_spec %}
 <article class="strategy-card {% if flagged %}strategy-card-flagged{% endif %}" data-idea-id="{{ idea.id }}">
     <button class="idea-reject-btn" type="button" title="Reject this strategy">&times;</button>
+
     <header class="strategy-head">
         <span class="edge-badge edge-{{ ((idea.bot_edge_score or 0) * 10) | int }}">
             {{ "%.2f"|format(idea.bot_edge_score or 0) }}
         </span>
         {% if spec %}
-        <span class="venue-badge">{{ spec.venue }}</span>
-        <span class="family-pill family-{{ spec.family.value }}">{{ spec.family.value }}</span>
+        <span class="venue-badge">{{ spec.venue | truncate(28, True, '…') }}</span>
         {% if spec.panel_verdict == 'flagged' %}
-        <span class="verdict-pill verdict-flagged">red team says no</span>
+        <span class="verdict-pill verdict-flagged">flagged</span>
         {% elif spec.panel_verdict == 'below-bar' %}
-        <span class="verdict-pill verdict-below">below the bar</span>
+        <span class="verdict-pill verdict-below">below bar</span>
+        {% elif spec.panel_verdict == 'review-incomplete' %}
+        <span class="verdict-pill verdict-incomplete">review incomplete</span>
         {% elif spec.panel_verdict == 'vetted' %}
-        <span class="verdict-pill verdict-vetted">&#10003; survived the red team</span>
+        <span class="verdict-pill verdict-vetted">&#10003; vetted</span>
         {% endif %}
         {% endif %}
     </header>
 
     <h3 class="strategy-name">{{ idea.name }}</h3>
-    <p class="strategy-tagline">{{ idea.tagline }}</p>
-
     {% if spec %}
-    <dl class="strategy-facts">
-        <div class="fact">
-            <dt>Mechanism</dt>
-            <dd>{{ spec.mechanism }}</dd>
-        </div>
-        <div class="fact">
-            <dt>Capital</dt>
-            <dd>${{ "{:,.0f}".format(spec.capital_floor_usd) }} floor
-                &rarr; ${{ "{:,.0f}".format(spec.capital_target_usd) }} target</dd>
-        </div>
-        {% if spec.expected_return %}
-        <div class="fact">
-            <dt>Return</dt>
-            <dd>{{ spec.expected_return }}</dd>
-        </div>
-        {% endif %}
-        <div class="fact">
-            <dt>Decays because</dt>
-            <dd>{{ spec.edge_decay }}</dd>
-        </div>
+    <p class="card-mech">{{ spec.mechanism | truncate(240, True, '…') }}</p>
+
+    <div class="card-chips">
+        <span class="capital-chip">
+            ${{ "{:,.0f}".format(spec.capital_floor_usd) }}&ndash;${{ "{:,.0f}".format(spec.capital_target_usd) }}
+        </span>
+        <span class="family-pill family-{{ spec.family.value }}">{{ spec.family.value }}</span>
+        <code class="cat-tag">{{ idea.category.value }}</code>
         {% if spec.api_primitives %}
-        <div class="fact">
-            <dt>API surface</dt>
-            <dd>
-                {% for prim in spec.api_primitives %}
-                <code class="api-chip">{{ prim }}</code>
-                {% endfor %}
-            </dd>
-        </div>
+        <span class="api-count">{{ spec.api_primitives|length }} API calls</span>
         {% endif %}
-        {% if spec.kill_criteria %}
-        <div class="fact">
-            <dt>Switches off when</dt>
-            <dd>
-                <ul class="kill-list">
-                    {% for k in spec.kill_criteria %}<li>{{ k }}</li>{% endfor %}
-                </ul>
-            </dd>
-        </div>
-        {% endif %}
-    </dl>
+    </div>
 
     {% if spec.surviving_objection %}
-    <p class="strategy-objection">
-        <strong>{% if spec.panel_verdict == 'flagged' %}Why the red team killed it:{% else %}Unanswered objection:{% endif %}</strong>
-        {{ spec.surviving_objection }}
-    </p>
+    <p class="card-objection">{{ spec.surviving_objection | truncate(200, True, '…') }}</p>
     {% endif %}
+
+    <details class="card-more">
+        <summary>full spec</summary>
+        <dl class="spec-list">
+            {% if spec.expected_return %}
+            <dt>Return</dt><dd>{{ spec.expected_return }}</dd>
+            {% endif %}
+            <dt>Decays because</dt><dd>{{ spec.edge_decay }}</dd>
+            {% if spec.api_primitives %}
+            <dt>API surface</dt>
+            <dd>{% for prim in spec.api_primitives %}<code class="api-chip">{{ prim }}</code>{% endfor %}</dd>
+            {% endif %}
+            {% if spec.kill_criteria %}
+            <dt>Switches off when</dt>
+            <dd><ul class="kill-list">{% for k in spec.kill_criteria %}<li>{{ k }}</li>{% endfor %}</ul></dd>
+            {% endif %}
+            {% if spec.validation_plan %}
+            <dt>Prove it first</dt>
+            <dd><ul class="kill-list">{% for v in spec.validation_plan %}<li>{{ v }}</li>{% endfor %}</ul></dd>
+            {% endif %}
+            {% if spec.surviving_objection %}
+            <dt>{% if spec.panel_verdict == 'flagged' %}Why it was flagged{% else %}Open objection{% endif %}</dt>
+            <dd>{{ spec.surviving_objection }}</dd>
+            {% endif %}
+        </dl>
+    </details>
     {% endif %}
 
     <footer class="strategy-foot">
-        <code class="cat-tag">{{ idea.category.value }}</code>
         {% if spec and spec.venue_url %}
-        <a href="{{ spec.venue_url }}" target="_blank" rel="noopener" class="venue-link">venue docs &#8599;</a>
+        <a href="{{ spec.venue_url }}" target="_blank" rel="noopener" class="venue-link">docs &#8599;</a>
         {% endif %}
+        <a href="/ideas/{{ idea.id }}" class="venue-link">detail &rarr;</a>
         {% if idea.project_repo_url %}
         <a href="{{ idea.project_repo_url }}" target="_blank" rel="noopener" class="venue-link">repo &#8599;</a>
         {% elif not flagged %}
         <button class="scaffold-bot-btn" data-idea-id="{{ idea.id }}" type="button"
-                title="Generate a runnable bot scaffold from this spec">Scaffold bot &#10142;</button>
+                title="Generate a runnable bot scaffold from this spec">Scaffold &#10142;</button>
         {% endif %}
-        <a href="/ideas/{{ idea.id }}" class="venue-link">detail &rarr;</a>
     </footer>
 </article>
 {% endmacro %}
@@ -100,9 +93,9 @@
         <p class="page-subtitle">
             Ways to make money with a bot and some capital. Every entry names a venue, the API
             calls the bot makes, where the money actually comes from, and when to switch it off.
-            <strong>{{ vetted|length }} vetted</strong> and
-            <strong>{{ flagged|length }} flagged</strong> strategies here, built from
-            <strong>{{ playbook|length }} proven mechanisms</strong> (at the bottom of the page).
+            <strong>{{ vetted|length }} vetted</strong> on the board;
+            <strong>{{ flagged|length }} flagged</strong> by the red team and kept out of it,
+            built from <strong>{{ playbook|length }} proven mechanisms</strong> (bottom of page).
         </p>
     </div>
 </section>
@@ -147,27 +140,52 @@
         </div>
 
         {% if vetted %}
-        <h3 class="subsection-head">Vetted &mdash; survived the red team</h3>
         <div class="strategy-grid">
             {% for idea in vetted %}{{ strategy_card(idea) }}{% endfor %}
         </div>
         {% endif %}
 
         {% if flagged %}
-        <h3 class="subsection-head">Flagged &mdash; and exactly why</h3>
-        <p class="muted subsection-note">
-            These name a real venue and a real mechanism, but the red team found a number that
-            does not hold. Kept because "this looks great and here is the arithmetic that kills
-            it" is worth more than a blank page.
-        </p>
-        <div class="strategy-grid">
-            {% for idea in flagged %}{{ strategy_card(idea, flagged=True) }}{% endfor %}
-        </div>
+        <details class="ref-block ref-block-flagged" id="flagged-log">
+            <summary>
+                <span class="ref-title">Flagged by the red team</span>
+                <span class="ref-count">{{ flagged|length }} rejected</span>
+            </summary>
+            <p class="muted ref-intro">
+                These named a real venue and a real mechanism, but the review found a number
+                that does not hold. They stay off the board and are fed back into generation
+                as things not to repeat.
+            </p>
+            <table class="ref-table">
+                <thead>
+                    <tr><th>Strategy</th><th>Venue</th><th>Why it failed</th></tr>
+                </thead>
+                <tbody>
+                    {% for idea in flagged %}
+                    {% set spec = idea.bot_spec %}
+                    <tr>
+                        <td>
+                            <a href="/ideas/{{ idea.id }}">{{ idea.name }}</a><br>
+                            <code class="cat-tag">{{ idea.category.value }}</code>
+                        </td>
+                        <td class="probe-venue">{{ (spec.venue if spec else '—') | truncate(24, True, '…') }}</td>
+                        <td class="ref-note">
+                            {% if spec and spec.surviving_objection %}
+                            <span class="probe-reason" title="{{ spec.surviving_objection }}">{{ spec.surviving_objection }}</span>
+                            {% else %}
+                            &mdash;
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </details>
         {% endif %}
 
-        {% if not vetted and not flagged %}
+        {% if not vetted %}
         <div class="board-empty">
-            <h3>No generated strategies yet</h3>
+            <h3>{% if flagged %}Nothing has passed the red team yet{% else %}No generated strategies yet{% endif %}</h3>
             <p>Hit <strong>Generate one now</strong> &mdash; it reads live venue changes, builds a
             strategy against a known mechanism, and red-teams it. Takes a couple of
             minutes. Whatever comes out lands here, passed or failed.</p>

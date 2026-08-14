@@ -339,3 +339,48 @@ class TestCategoryRotation:
         # capital-automation has none at all — it should win.
         picked = await sched._pick_bot_category(db, IdeaCategory.MARKET_MAKING)
         assert picked is IdeaCategory.CAPITAL_AUTOMATION
+
+
+@pytest.mark.asyncio
+class TestLessonsFeedBack:
+    """What the red team rejected must reach the next generation."""
+
+    async def test_flagged_objections_become_lessons(self, db, sched):
+        killed = _idea(name="Bad Carry")
+        killed.content_hash = "bc1"
+        killed.bot_spec.panel_verdict = "flagged"
+        killed.bot_spec.surviving_objection = "quoted a one-way fee as a round trip"
+        await db.save_idea(killed)
+
+        lessons = await sched._bot_avoid_lessons(db)
+        assert any("one-way fee" in lesson for lesson in lessons)
+        assert any("Bad Carry" in lesson for lesson in lessons)
+
+    async def test_vetted_strategies_are_not_lessons(self, db, sched):
+        good = _idea(name="Good Carry")
+        good.content_hash = "gc1"
+        good.bot_spec.panel_verdict = "vetted"
+        good.bot_spec.surviving_objection = "minor capacity note"
+        await db.save_idea(good)
+
+        assert await sched._bot_avoid_lessons(db) == []
+
+    async def test_lessons_are_passed_to_the_generator(self, db, sched, monkeypatch):
+        killed = _idea(name="Bad Carry")
+        killed.content_hash = "bc2"
+        killed.bot_spec.panel_verdict = "flagged"
+        killed.bot_spec.surviving_objection = "capacity claim exceeded the reward pool"
+        await db.save_idea(killed)
+
+        seen = {}
+
+        async def _gen(_db, _cat, _program, _primitive, avoid_lessons=None):
+            seen["lessons"] = avoid_lessons
+            return None
+
+        monkeypatch.setattr(sched, "_bot_fetch_programs", lambda: [_PROGRAM])
+        monkeypatch.setattr(sched, "_bot_generate", _gen)
+        await sched._fire_bot_strategy(db)
+
+        assert seen["lessons"]
+        assert any("capacity claim" in lesson for lesson in seen["lessons"])

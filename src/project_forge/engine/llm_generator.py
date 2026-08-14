@@ -1141,6 +1141,7 @@ async def generate_bot_llm(
     *,
     program: dict[str, Any] | None = None,
     primitive: Any = None,
+    avoid_lessons: list[str] | None = None,
     backend: LLMBackend | None = None,
 ) -> LLMGenerationResult | None:
     """One grounded money-bot generation.
@@ -1162,7 +1163,7 @@ async def generate_bot_llm(
     if program is None:
         return None
 
-    seed = program_to_seed(program, primitive=primitive)
+    seed = program_to_seed(program, primitive=primitive, avoid_lessons=avoid_lessons)
     persona = _pick_persona(category)
     avoid = await _recent_idea_lines(db, category)
     prompt = _build_bot_prompt(category, persona, seed, avoid)
