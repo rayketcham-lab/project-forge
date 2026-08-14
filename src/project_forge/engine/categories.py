@@ -1941,6 +1941,246 @@ CATEGORY_SEEDS: dict[IdeaCategory, dict] = {
             "enterprise endpoint management",
         ],
     },
+    # ----------------------------------------------------------------- #
+    # v0.24 Money Bots — capital-deployment strategies, not products.    #
+    # Seeds here are written as MECHANISMS, because the board's gate     #
+    # rejects anything that can't say where the money comes from. Every  #
+    # one of these must be runnable against a published API by a bot     #
+    # nobody watches, and must be legal on its face — no manipulation,   #
+    # no exploiting a venue bug, no trading on non-public information.   #
+    # ----------------------------------------------------------------- #
+    IdeaCategory.MARKET_MAKING: {
+        "description": (
+            "Bots that earn by QUOTING: resting two-sided orders and getting "
+            "paid the spread, the maker rebate, or the venue's liquidity "
+            "budget for being there. The whole game is whether the spread "
+            "plus rebate exceeds fees plus adverse selection — the cost of "
+            "being filled by someone who knew more than the quote did."
+        ),
+        "seed_concepts": [
+            "two-sided quoter on thin event-market books that sizes to the published max-spread band",
+            "inventory-skewed maker that widens the side it is already long to bleed risk down passively",
+            "maker-rebate harvester that only quotes venues where the rebate alone covers the round-trip fee",
+            "queue-position-aware requoter that cancels and re-rests only when it loses priority materially",
+            "adverse-selection monitor that pulls quotes when realised fill-to-mid drift exceeds the spread earned",
+            "delta-neutral quoter that hedges every fill on a second venue within seconds to strip directional risk",
+            "spread-capture bot on a book whose natural flow is retail and uninformed rather than professional",
+            "quote scheduler that only makes markets during the venue's published reward or rebate windows",
+            "resolution-aware market maker that stops quoting event books as the settlement date approaches",
+            "wide-market seeder for newly listed books before professional makers arrive",
+            "fee-tier-aware quoter that sizes volume to reach the next maker-fee tier and no further",
+            "latency-tolerant maker that quotes deliberately wide so it never needs colocation to survive",
+            "correlated-book quoter that hedges an illiquid market with a liquid one tracking the same outcome",
+            "cancel-rate governor that respects venue message limits instead of getting rate-limited off the book",
+            "book-imbalance responder that leans quotes with persistent order-flow imbalance",
+            "overnight maker that harvests the wider spreads of low-attention trading hours",
+            "size-laddered quoter that rests progressively larger clips further from mid",
+            "post-only enforcer that structurally cannot pay taker fees even on a mis-priced quote",
+            "market-maker-program applicant bot that tracks and holds the venue's published obligation thresholds",
+            "inventory kill switch that flattens and stops quoting when position exceeds a hard capital fraction",
+        ],
+        "domains_to_cross": [
+            "prediction markets",
+            "crypto perpetual exchanges",
+            "crypto spot exchanges",
+            "decentralized order books",
+            "sportsbook exchanges",
+            "equity options",
+            "listed futures",
+            "stablecoin pairs",
+            "newly listed markets",
+            "low-liquidity long-tail books",
+            "regulated designated-market-maker programs",
+            "retail-heavy venues",
+            "24/7 versus session-limited venues",
+        ],
+    },
+    IdeaCategory.INCENTIVE_CAPTURE: {
+        "description": (
+            "Bots that earn from a venue's PUBLISHED incentive budget rather "
+            "than from being right about price: liquidity rewards paid per "
+            "minute of resting size, LP incentive programs, volume rebate "
+            "tiers, staking and points programs. The money is real, the rules "
+            "are public, and the yield falls as more capital shows up — so "
+            "every one of these needs a share-decay model, not a fixed APR."
+        ),
+        "seed_concepts": [
+            "reward-minute maximizer that keeps two-sided size resting inside the qualifying band",
+            "reward-per-dollar ranker that moves capital nightly to whichever books pay most per unit of risk",
+            "pro-rata share estimator that predicts dilution from competing makers before committing capital",
+            "qualifying-band tracker that follows a moving mid so orders never silently stop earning rewards",
+            "LP incentive farmer that enters only pools where incentives exceed expected impermanent loss",
+            "hedged liquidity provider that neutralizes pool exposure on a perp venue and keeps the incentive",
+            "incentive-program calendar bot that enters at program start and exits before the emissions cliff",
+            "volume-tier optimizer that routes just enough volume to hold a fee tier that pays for itself",
+            "staking and validator yield router that moves stake to the best net-of-commission rate",
+            "points-program participant that tracks published criteria and abandons programs with unstated terms",
+            "reward-claim automator that compounds claimed incentives without leaving dust unclaimed",
+            "capital efficiency scorer comparing reward yield against the risk-free rate before deploying anything",
+            "program terms watcher that alerts and unwinds the moment a venue changes reward formulas",
+            "multi-venue reward allocator that treats each venue's budget as a yield curve and rebalances across them",
+            "minimum-qualifying-size solver that earns the same reward share with the least capital at risk",
+            "reward-versus-fee reconciler that proves realised rewards actually exceeded trading costs",
+            "cold-start reward capture on newly launched markets before the reward pool is crowded",
+            "emissions decay modeller that projects yield forward and exits before it crosses the hurdle rate",
+            "self-audit ledger that reconciles every credited reward against the venue's published formula",
+            "capital withdrawal scheduler that respects lockups and unbonding periods in its yield math",
+        ],
+        "domains_to_cross": [
+            "prediction market liquidity rewards",
+            "perpetual exchange maker programs",
+            "AMM liquidity mining",
+            "lending protocol incentives",
+            "sportsbook exchange rebates",
+            "brokerage rebate and payment programs",
+            "staking and validator rewards",
+            "points and loyalty programs",
+            "newly launched venues",
+            "market-maker obligation programs",
+            "fee-tier ladders",
+            "referral and affiliate programs with public terms",
+            "seasonal and campaign-limited incentives",
+        ],
+    },
+    IdeaCategory.CROSS_VENUE_ARBITRAGE: {
+        "description": (
+            "Bots that earn from the SAME exposure being priced differently "
+            "in two places, or from a set of prices that cannot all be right "
+            "at once. Not a speed race by default — the durable versions live "
+            "where settlement friction, capital lockup, or venue fragmentation "
+            "keeps faster players out. Fees, slippage, and the cost of having "
+            "capital stranded on both sides are the entire margin."
+        ),
+        "seed_concepts": [
+            "complementary-outcome scanner that buys every leg when the outcome set prices below certainty net of fees",
+            "same-event price gap monitor across two prediction venues with independent order books",
+            "cross-book middling bot that takes both sides at different lines for the middle",
+            "CEX-to-DEX spread taker that only fires when the gap clears gas plus both venue fees",
+            "stablecoin peg reversion bot that provides liquidity at the band edges, not chasing breaks",
+            "settlement-date arbitrage between markets resolving on the same underlying at different times",
+            "capital pre-positioning planner keeping balances on both venues, no transfer in the path",
+            "fee-aware executioner that computes the true breakeven gap per venue pair before quoting anything",
+            "correlated-outcome relative-value bot for markets that must move together but do not",
+            "cross-venue inventory rebalancer that keeps both legs funded without repeated withdrawal fees",
+            "slow arbitrage on venues with deliberate order delays, where latency advantage is structurally capped",
+            "listing-lag arbitrage where one venue lists an event hours before its competitors",
+            "withdrawal-risk scorer that refuses to hold size on venues with poor withdrawal reliability records",
+            "spread persistence tracker that only trades gaps that historically survive longer than execution takes",
+            "partial-fill handler that unwinds the completed leg when the second leg misses",
+            "currency and funding cost adjuster for cross-border venue pairs",
+            "duplicate-market matcher that proves two markets resolve on identical criteria",
+            "resolution-source verifier that refuses pairs whose settlement oracles could disagree",
+            "counterparty concentration limiter that caps capital per venue however good the spread",
+            "post-trade reconciliation ledger that proves realised arbitrage profit net of every fee and transfer",
+        ],
+        "domains_to_cross": [
+            "prediction market pairs",
+            "sportsbook exchange versus retail book lines",
+            "centralized versus decentralized crypto venues",
+            "spot versus perpetual markets",
+            "stablecoin pairs and pegs",
+            "cross-chain deployments of the same asset",
+            "duplicate event markets across venues",
+            "listed futures versus underlying",
+            "regional venue fragmentation",
+            "settlement timing differences",
+            "fee-tier differences between accounts",
+            "markets with delayed or capped matching",
+            "oracle and resolution-source differences",
+        ],
+    },
+    IdeaCategory.BASIS_CARRY: {
+        "description": (
+            "Bots that earn a KNOWN, published payment for holding a hedged "
+            "position: perpetual funding, futures basis, lending-rate spreads, "
+            "borrow demand. Directionally flat by construction, so the risk is "
+            "not price — it is funding flipping, liquidation under a hedge leg, "
+            "counterparty failure, and capital that cannot be recalled fast."
+        ),
+        "seed_concepts": [
+            "funding-rate carry bot that holds spot and shorts the perp while funding stays positive net of fees",
+            "funding-flip detector that unwinds before an inverted funding regime eats the accumulated carry",
+            "cash-and-carry futures basis capture that holds to expiry so the basis converges rather than guessed",
+            "calendar spread roller that harvests term structure without ever taking outright direction",
+            "lending-rate spread router that borrows on the cheapest venue and lends on the richest",
+            "stablecoin yield spread allocator comparing on-chain lending against short-duration cash equivalents",
+            "collateral efficiency optimizer that maximizes carry per dollar of margin posted",
+            "liquidation-distance monitor that deleverages on hedge-leg margin stress before the venue does it",
+            "cross-venue carry that puts the spot leg where custody is safest and the hedge where funding is richest",
+            "delta-neutral LP position that hedges pool exposure and keeps fee income as the carry",
+            "hard-to-borrow securities lending bot that lends inventory only against acceptable collateral terms",
+            "covered-call income writer with mechanical strike and roll rules and no discretionary overrides",
+            "box-spread financing bot that borrows at implied rates cheaper than the broker's margin rate",
+            "carry hurdle-rate gate that refuses any position paying less than the risk-free rate plus a risk premium",
+            "funding-payment reconciler that proves realised carry matched the venue's published schedule",
+            "unwind-cost estimator that prices the exit before entering a leveraged carry position",
+            "counterparty exposure ladder that caps carry capital per venue and per custodian",
+            "basis convergence tracker that closes early when the remaining basis no longer pays for the margin",
+            "auto-deleverager that scales the whole book down when aggregate funding volatility spikes",
+            "tax-lot and holding-period aware roller for carry positions in taxable accounts",
+        ],
+        "domains_to_cross": [
+            "perpetual funding markets",
+            "dated futures and expiry basis",
+            "crypto lending protocols",
+            "centralized lending desks",
+            "securities lending and borrow",
+            "money market and cash equivalents",
+            "options income structures",
+            "stablecoin yield venues",
+            "AMM fee income with hedges",
+            "margin and collateral regimes",
+            "cross-custodian risk",
+            "taxable versus tax-advantaged accounts",
+            "regulated versus offshore venues",
+        ],
+    },
+    IdeaCategory.CAPITAL_AUTOMATION: {
+        "description": (
+            "Bots that make idle capital earn without taking a market view: "
+            "sweeping cash to the best available rate, rebalancing on rules, "
+            "automating collateral and fees, harvesting published rebates. The "
+            "returns are modest and boring by design; the edge is that nobody "
+            "does this by hand consistently, and a bot does it every day."
+        ),
+        "seed_concepts": [
+            "treasury sweep bot that moves idle balances to the best net rate across venues on a schedule",
+            "rules-based rebalancer that trades only when drift exceeds a band, minimizing turnover and tax drag",
+            "collateral optimizer that posts the cheapest acceptable asset and recalls the rest to earning positions",
+            "auto-compounder that reinvests yield at the interval where gas or fees stop eating the gain",
+            "cash ladder builder that rolls short-duration instruments so liquidity is always available on schedule",
+            "fee and gas scheduler that batches non-urgent transactions into low-cost windows",
+            "tax-lot harvester that realizes losses under documented wash-sale-safe rules",
+            "dust consolidator that sweeps unusable balances into a single earning position",
+            "idle-margin detector that finds capital posted as collateral but earning nothing",
+            "subscription-and-redemption scheduler that respects notice periods so yield is never trapped",
+            "rate-change watcher that migrates deposits within hours of a published rate cut",
+            "multi-account allocator that keeps every account above minimums for its best fee tier",
+            "settlement float manager that keeps operating cash earning until the hour it is needed",
+            "rebate and cashback capture bot that routes qualifying flows through published reward programs",
+            "automated invoice and payables timing that holds cash to the last honest day",
+            "custody diversification enforcer that caps balance per institution automatically",
+            "unused credit and margin cost eliminator that pays down the most expensive borrowing first",
+            "yield-versus-lockup evaluator that refuses terms whose exit penalty exceeds the extra yield",
+            "reconciliation bot that proves every automated movement landed and nothing is unaccounted for",
+            "operational kill switch that halts all automated movement on any unexplained balance discrepancy",
+        ],
+        "domains_to_cross": [
+            "brokerage cash management",
+            "crypto exchange balances",
+            "on-chain lending and savings",
+            "business operating accounts",
+            "money market funds",
+            "collateral and margin systems",
+            "multi-venue trading capital",
+            "payment processors and float",
+            "taxable investment accounts",
+            "retirement and tax-advantaged accounts",
+            "corporate treasury",
+            "stablecoin cash equivalents",
+            "cross-currency balances",
+        ],
+    },
 }
 
 

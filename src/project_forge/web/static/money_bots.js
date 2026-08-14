@@ -1,16 +1,20 @@
-// Money-bots page interactions. Loaded from /money-bots.
-// CSP-compliant: no inline scripts, no innerHTML on LLM data.
-(function() {
+// Money-bots board interactions. Loaded from /money-bots.
+// CSP-compliant: no inline scripts, every node built with DOM APIs.
+(function () {
     'use strict';
 
-    var rootEl = document.getElementById('money-bots-root');
-    var categoryFilter = rootEl ? (rootEl.dataset.categoryFilter || '') : '';
+    function authHeaders() {
+        return Object.assign(
+            { 'Content-Type': 'application/json' },
+            (typeof getAuthHeaders === 'function' ? getAuthHeaders() : {})
+        );
+    }
 
-    // === Churn Now button ===
+    // === Churn Now — runs ONE grounded probe cycle ===
     var btn = document.getElementById('churn-btn');
     var statusEl = document.getElementById('churn-status');
 
-    function renderSuccess(idea) {
+    function renderStrategy(idea) {
         statusEl.textContent = '';
         var check = document.createElement('span');
         check.textContent = '✓ ';
@@ -18,40 +22,36 @@
         var strong = document.createElement('strong');
         strong.textContent = idea.name;
         statusEl.appendChild(strong);
+        var edge = (typeof idea.bot_edge_score === 'number' ? idea.bot_edge_score : 0).toFixed(2);
         var meta = document.createElement('span');
-        var fund = (typeof idea.fundability_score === 'number' ? idea.fundability_score : 0).toFixed(2);
-        meta.textContent = ' — fund ' + fund + ' · mode ';
+        meta.textContent = ' — edge ' + edge + ' · ' + (idea.venue || 'unknown venue');
         statusEl.appendChild(meta);
-        var code = document.createElement('code');
-        code.textContent = idea.generation_mode || 'template';
-        statusEl.appendChild(code);
         statusEl.className = 'churn-status churn-status-success';
     }
 
     if (btn && statusEl) {
-        btn.addEventListener('click', async function() {
+        btn.addEventListener('click', async function () {
             btn.disabled = true;
             btn.classList.add('is-loading');
-            statusEl.textContent = 'asking the engine...';
+            // The probe sweeps venues, generates, red-teams and gates — slow
+            // on purpose, so say so rather than looking hung.
+            statusEl.textContent = 'probing venues, working one program…';
             statusEl.className = 'churn-status churn-status-loading';
             try {
-                var headers = Object.assign(
-                    {'Content-Type': 'application/json'},
-                    (typeof getAuthHeaders === 'function' ? getAuthHeaders() : {})
-                );
                 var resp = await fetch('/api/churn', {
                     method: 'POST',
-                    headers: headers,
-                    body: JSON.stringify({ category: categoryFilter })
+                    headers: authHeaders(),
+                    body: JSON.stringify({ lab: 'money' })
                 });
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 var data = await resp.json();
                 if (data.idea) {
-                    renderSuccess(data.idea);
-                    setTimeout(function() { window.location.reload(); }, 1500);
+                    renderStrategy(data.idea);
+                    setTimeout(function () { window.location.reload(); }, 1500);
                 } else {
-                    statusEl.textContent = data.message || 'no idea produced (backend returned empty)';
-                    statusEl.className = 'churn-status churn-status-error';
+                    // A quiet cycle is the designed outcome, not a failure.
+                    statusEl.textContent = 'stored nothing: ' + (data.message || 'no reason given');
+                    statusEl.className = 'churn-status';
                 }
             } catch (e) {
                 statusEl.textContent = 'failed: ' + e.message;
@@ -63,39 +63,46 @@
         });
     }
 
-    // === Per-card Promote → GitHub issue (human-initiated) ===
-    document.querySelectorAll('.promote-btn').forEach(function(promoteBtn) {
-        promoteBtn.addEventListener('click', async function(ev) {
+    // === Per-card Scaffold bot ===
+    var scaffoldStatus = document.getElementById('scaffold-status');
+
+    function reportScaffold(data) {
+        if (!scaffoldStatus) return;
+        scaffoldStatus.textContent = '';
+        var strong = document.createElement('strong');
+        strong.textContent = '✓ ' + data.repo_name;
+        scaffoldStatus.appendChild(strong);
+        var where = document.createElement('span');
+        where.textContent = ' scaffolded to ' + data.path + ' (' + data.files.length + ' files). ';
+        scaffoldStatus.appendChild(where);
+        var next = document.createElement('em');
+        next.textContent = data.next_step || '';
+        scaffoldStatus.appendChild(next);
+        scaffoldStatus.className = 'churn-status churn-status-success';
+    }
+
+    document.querySelectorAll('.scaffold-bot-btn').forEach(function (scaffoldBtn) {
+        scaffoldBtn.addEventListener('click', async function (ev) {
             ev.preventDefault();
             ev.stopPropagation();
-            var ideaId = promoteBtn.getAttribute('data-idea-id');
+            var ideaId = scaffoldBtn.getAttribute('data-idea-id');
             if (!ideaId) return;
-            if (!confirm('File a GitHub issue with the full MVP spec for this idea?')) return;
-            promoteBtn.disabled = true;
-            var prevLabel = promoteBtn.textContent;
-            promoteBtn.textContent = 'promoting...';
+            scaffoldBtn.disabled = true;
+            var prev = scaffoldBtn.textContent;
+            scaffoldBtn.textContent = 'scaffolding…';
             try {
-                var headers = Object.assign(
-                    {'Content-Type': 'application/json'},
-                    (typeof getAuthHeaders === 'function' ? getAuthHeaders() : {})
-                );
-                var resp = await fetch('/api/promote/' + encodeURIComponent(ideaId), {
-                    method: 'POST', headers: headers,
+                var resp = await fetch('/api/scaffold-bot/' + encodeURIComponent(ideaId), {
+                    method: 'POST',
+                    headers: authHeaders()
                 });
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                var data = await resp.json();
-                if (data.issue_url) {
-                    promoteBtn.textContent = '✓ promoted — reloading';
-                    setTimeout(function() { window.location.reload(); }, 800);
-                } else {
-                    promoteBtn.textContent = 'no issue created';
-                    promoteBtn.disabled = false;
-                }
+                reportScaffold(await resp.json());
+                scaffoldBtn.textContent = '✓ scaffolded';
             } catch (e) {
-                promoteBtn.textContent = 'failed: ' + e.message;
-                setTimeout(function() {
-                    promoteBtn.textContent = prevLabel;
-                    promoteBtn.disabled = false;
+                scaffoldBtn.textContent = 'failed: ' + e.message;
+                setTimeout(function () {
+                    scaffoldBtn.textContent = prev;
+                    scaffoldBtn.disabled = false;
                 }, 2500);
             }
         });

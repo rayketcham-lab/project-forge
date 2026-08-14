@@ -5,11 +5,13 @@
 <div id="money-bots-root" data-category-filter="{{ category_filter or '' }}"></div>
 <section class="page-header">
     <div class="container">
-        <h1>&#128176; Top Money-Bots</h1>
+        <h1>&#129302; Money Bots</h1>
         <p class="page-subtitle">
-            {{ total }} monetizable ideas across {{ categories|length }} categories,
-            sorted by fundability score. Every Monday the engine auto-promotes the
-            highest-scoring idea into a GitHub issue with the full MVP spec.
+            Capital-deployment strategies &mdash; a venue, the API calls the bot makes, and the
+            mechanism that pays. Ranked by edge, not by how sellable it is.
+            {{ probe_stats.admitted }} admitted from {{ probe_stats.probes }} probes
+            ({{ (probe_stats.admit_rate * 100) | round(0) | int }}% admit rate);
+            most cycles store nothing on purpose.
         </p>
         <div class="churn-row">
             <button id="churn-btn" class="btn btn-primary btn-churn" type="button">
@@ -40,60 +42,212 @@
         </div>
 
         {% if ideas %}
-        <div class="moneybot-grid">
+        <div class="strategy-grid">
             {% for idea in ideas %}
-            <div class="moneybot-card" data-idea-id="{{ idea.id }}"
-                 data-idea-name="{{ idea.name }}"
-                 data-idea-tagline="{{ idea.tagline }}"
-                 data-fundability-score="{{ idea.fundability_score or '' }}"
-                 data-feasibility-score="{{ idea.feasibility_score }}"
-                 data-generation-mode="{{ idea.generation_mode or '' }}">
-                <button class="idea-reject-btn" type="button" title="Reject this idea">&times;</button>
-                <div class="moneybot-card-body-wrap">
-                    <div class="moneybot-card-head">
-                        <span class="fundability-badge fundability-{{ ((idea.fundability_score or 0) * 10) | int }}">
-                            {{ "%.2f"|format(idea.fundability_score or 0) }}
-                        </span>
-                        {# Show "✓ promoted" ONLY while the promotion is still live
-                           (status='approved' AND auto_promoted_at). Once the operator
-                           closes the GH issue, the issue-sync cadence flips the idea
-                           to 'contributed' or 'archived' and we show that real status
-                           instead — was the v0.14c stale-badge bug. #}
-                        {% if idea.auto_promoted_at and idea.status == 'approved' %}
-                            <span class="status-pill status-promoted">&#10003; promoted</span>
-                        {% else %}
-                            <span class="status-pill status-{{ idea.status }}">{{ idea.status }}</span>
-                        {% endif %}
+            {% set spec = idea.bot_spec %}
+            <article class="strategy-card" data-idea-id="{{ idea.id }}">
+                <button class="idea-reject-btn" type="button" title="Reject this strategy">&times;</button>
+                <header class="strategy-head">
+                    <span class="edge-badge edge-{{ ((idea.bot_edge_score or 0) * 10) | int }}">
+                        {{ "%.2f"|format(idea.bot_edge_score or 0) }}
+                    </span>
+                    {% if spec %}
+                    <span class="venue-badge">{{ spec.venue }}</span>
+                    <span class="family-pill family-{{ spec.family.value }}">{{ spec.family.value }}</span>
+                    {% endif %}
+                </header>
+
+                <h3 class="strategy-name">{{ idea.name }}</h3>
+                <p class="strategy-tagline">{{ idea.tagline }}</p>
+
+                {% if spec %}
+                <dl class="strategy-facts">
+                    <div class="fact">
+                        <dt>Mechanism</dt>
+                        <dd>{{ spec.mechanism }}</dd>
                     </div>
-                    <div class="moneybot-card-body">
-                        <div class="moneybot-name">{{ idea.name }}</div>
-                        <div class="moneybot-tagline">{{ idea.tagline }}</div>
+                    <div class="fact">
+                        <dt>Capital</dt>
+                        <dd>${{ "{:,.0f}".format(spec.capital_floor_usd) }} floor
+                            &rarr; ${{ "{:,.0f}".format(spec.capital_target_usd) }} target</dd>
                     </div>
-                </div>
-                <div class="moneybot-card-foot">
+                    {% if spec.expected_return %}
+                    <div class="fact">
+                        <dt>Return</dt>
+                        <dd>{{ spec.expected_return }}</dd>
+                    </div>
+                    {% endif %}
+                    <div class="fact">
+                        <dt>Decays because</dt>
+                        <dd>{{ spec.edge_decay }}</dd>
+                    </div>
+                    {% if spec.api_primitives %}
+                    <div class="fact">
+                        <dt>API surface</dt>
+                        <dd>
+                            {% for prim in spec.api_primitives %}
+                            <code class="api-chip">{{ prim }}</code>
+                            {% endfor %}
+                        </dd>
+                    </div>
+                    {% endif %}
+                    {% if spec.kill_criteria %}
+                    <div class="fact">
+                        <dt>Switches off when</dt>
+                        <dd>
+                            <ul class="kill-list">
+                                {% for k in spec.kill_criteria %}<li>{{ k }}</li>{% endfor %}
+                            </ul>
+                        </dd>
+                    </div>
+                    {% endif %}
+                </dl>
+
+                {% if spec.surviving_objection %}
+                <p class="strategy-objection">
+                    <strong>Unanswered objection:</strong> {{ spec.surviving_objection }}
+                </p>
+                {% endif %}
+                {% endif %}
+
+                <footer class="strategy-foot">
                     <code class="cat-tag">{{ idea.category.value }}</code>
-                    {% if idea.generation_mode %}
-                        <span class="mode-pill mode-{{ idea.generation_mode }}">{{ idea.generation_mode }}</span>
-                    {% else %}
-                        <span class="mode-pill mode-template">template</span>
+                    {% if spec and spec.venue_url %}
+                    <a href="{{ spec.venue_url }}" target="_blank" rel="noopener" class="venue-link">venue docs &#8599;</a>
                     {% endif %}
-                    {% if idea.github_issue_url %}
-                        <a href="{{ idea.github_issue_url }}" target="_blank" rel="noopener" class="moneybot-issue">issue &#8599;</a>
+                    {% if idea.project_repo_url %}
+                    <a href="{{ idea.project_repo_url }}" target="_blank" rel="noopener" class="venue-link">repo &#8599;</a>
                     {% else %}
-                        <button class="promote-btn" data-idea-id="{{ idea.id }}" type="button" title="File a GitHub issue with the full MVP spec for this idea">Promote &#10142;</button>
+                    <button class="scaffold-bot-btn" data-idea-id="{{ idea.id }}" type="button"
+                            title="Generate a runnable bot scaffold from this spec">Scaffold bot &#10142;</button>
                     {% endif %}
-                </div>
-            </div>
+                    <a href="/ideas/{{ idea.id }}" class="venue-link">detail &rarr;</a>
+                </footer>
+            </article>
             {% endfor %}
         </div>
         {% else %}
-        <div class="empty-state">
-            <p>No scored money-bot ideas yet. The fundability scorer runs daily &mdash; or hit <strong>Churn Now</strong> above.</p>
+        <div class="board-empty">
+            <h3>Nothing admitted yet</h3>
+            <p>The probe runs every two hours, works <strong>one</strong> venue program, and
+            stores nothing unless the strategy clears the gate:</p>
+            <ul class="gate-list">
+                <li>a named venue with documentation to check it against</li>
+                <li>the exact API operations the bot calls</li>
+                <li>where the money comes from &mdash; a rebate, a reward budget, a funding payment</li>
+                <li>an honest decay story and conditions to switch itself off</li>
+                <li>survives a four-lens red team on arithmetic, competition, legality and operations</li>
+            </ul>
+            <p class="muted">An empty board is the design, not a fault. Hit
+            <strong>Churn Now</strong> to run a cycle on demand.</p>
         </div>
         {% endif %}
+
+        <div id="scaffold-status" class="churn-status"></div>
 
     </div>
 </section>
 
-<script src="/static/money_bots.js?v=1"></script>
+<section class="section">
+    <div class="container">
+
+        {% if probes %}
+        <details class="ref-block" id="probe-log" open>
+            <summary>
+                <span class="ref-title">Probe log</span>
+                <span class="ref-count">{{ probes|length }} recent</span>
+            </summary>
+            <table class="probe-table">
+                <tbody>
+                    {% for p in probes %}
+                    <tr>
+                        <td class="probe-when">{{ p.probed_at[5:16] | replace('T', ' ') }}</td>
+                        <td class="probe-venue">{{ p.venue if p.venue else '—' }}</td>
+                        <td class="probe-signal">
+                            {% if p.anchor %}
+                            <a href="{{ p.anchor }}" target="_blank" rel="noopener">{{ p.program_summary or p.anchor }}</a>
+                            {% else %}
+                            {{ p.program_summary or 'no program surfaced' }}
+                            {% endif %}
+                        </td>
+                        <td class="probe-outcome">
+                            {% if p.admitted %}
+                            <span class="status-pill status-promoted">&#10003; admitted</span>
+                            {% else %}
+                            <span class="probe-reason" title="{{ p.reason }}">{{ p.reason }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </details>
+        {% endif %}
+
+        <details class="ref-block" id="playbook">
+            <summary>
+                <span class="ref-title">Playbook</span>
+                <span class="ref-count">{{ playbook|length }} mechanisms known to pay</span>
+            </summary>
+            <p class="muted ref-intro">
+                The grounding corpus every generated strategy is composed against. No deep links
+                on purpose &mdash; venue terms move, so each entry says what to re-verify on the
+                live docs before any capital moves.
+            </p>
+            <table class="ref-table">
+                <thead>
+                    <tr><th>Mechanism</th><th>Where the money comes from</th><th class="num">Floor</th></tr>
+                </thead>
+                <tbody>
+                    {% for prim in playbook %}
+                    <tr>
+                        <td>
+                            <strong>{{ prim.name }}</strong><br>
+                            <span class="family-pill family-{{ prim.family.value }}">{{ prim.family.value }}</span>
+                        </td>
+                        <td>
+                            <span class="ref-mech">{{ prim.mechanism }}</span>
+                            <details class="ref-more">
+                                <summary>detail</summary>
+                                <p class="playbook-line"><span>Return</span> {{ prim.yield_shape }}</p>
+                                <p class="playbook-line"><span>Decays</span> {{ prim.decay }}</p>
+                                <p class="playbook-line"><span>Risks</span> {{ prim.known_risks | join('; ') }}</p>
+                                <p class="playbook-line"><span>Verify</span> {{ prim.verify_by }}</p>
+                            </details>
+                        </td>
+                        <td class="num">${{ "{:,.0f}".format(prim.capital_floor_usd) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </details>
+
+        <details class="ref-block" id="venue-universe">
+            <summary>
+                <span class="ref-title">Venue universe</span>
+                <span class="ref-count">{{ venues|length }} venues</span>
+            </summary>
+            <p class="muted ref-intro">Where capital can go, and what to confirm about eligibility first.</p>
+            <table class="ref-table">
+                <thead>
+                    <tr><th>Venue</th><th>Docs</th><th>Confirm before funding</th></tr>
+                </thead>
+                <tbody>
+                    {% for venue in venues %}
+                    <tr>
+                        <td>
+                            <strong>{{ venue.name }}</strong><br>
+                            <span class="family-pill family-{{ venue.family.value }}">{{ venue.family.value }}</span>
+                        </td>
+                        <td><a href="{{ venue.docs_url }}" target="_blank" rel="noopener">docs &#8599;</a></td>
+                        <td class="ref-note">{{ venue.eligibility_note }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </details>
+    </div>
+</section>
+
+<script src="/static/money_bots.js?v=2"></script>
 {% endblock %}

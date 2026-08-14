@@ -43,15 +43,17 @@ unparseable output — caller falls back to the template path.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import random
+import re
 from dataclasses import dataclass
 from typing import Any
 
 from project_forge.engine.llm_backend import LLMBackend, resolve_cheap_backend
 from project_forge.engine.saturation import density_prompt_block
-from project_forge.models import Idea, IdeaCategory
+from project_forge.models import BotSpec, BotVenueFamily, Idea, IdeaCategory
 from project_forge.storage.db import Database
 
 logger = logging.getLogger(__name__)
@@ -989,4 +991,201 @@ async def generate_snipe_llm(
         backend=backend.name,
         raw_response=raw,
         artifact_type=angle,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Money board — grounded capital-deployment generation                        #
+# --------------------------------------------------------------------------- #
+
+
+_BOT_JSON_SCHEMA_INSTRUCTION = """
+Respond with JSON only — no markdown wrapping, no commentary:
+{
+  "name": "Short name for the STRATEGY (3-6 words), not a product brand",
+  "tagline": "One line, max 100 chars, lowercase: what the bot does and what pays it",
+  "description": "2-3 sentences: the venue, the mechanism the income comes from, and why it decays.",
+  "market_analysis": "Who else is doing this, how much capital the edge absorbs before it dies.",
+  "mvp_scope": "Phase 1 = prove the edge small. Phase 2, Phase 3 = scale and harden.",
+  "tech_stack": ["language", "client-library", "key-lib"],
+  "feasibility_score": 0.70,
+  "bot_spec": {
+    "venue": "Exact venue name",
+    "venue_url": "Documentation URL for the mechanic being exploited",
+    "family": "prediction-markets | crypto-defi | sportsbook | brokerage | other",
+    "api_primitives": ["exact API operations the bot calls"],
+    "mechanism": "One sentence: where the money comes from",
+    "capital_floor_usd": 500,
+    "capital_target_usd": 10000,
+    "expected_return": "Honest return shape, net of fees — never a guarantee",
+    "edge_decay": "Why and when this stops working",
+    "kill_criteria": ["conditions under which the bot switches itself off"],
+    "validation_plan": ["how to prove the edge on small capital before scaling"],
+    "legality_note": "Why this is legitimate under the venue's published terms",
+    "human_touchpoints": "What still needs a human, and how often"
+  }
+}
+""".strip()
+
+# Capital written as "$2.5k" / "1,000" / "2 million" — models will not stick
+# to a bare number, and dropping the whole spec over formatting would throw
+# away a good strategy.
+_CAPITAL_SUFFIXES: tuple[tuple[str, float], ...] = (
+    ("million", 1_000_000.0),
+    ("mm", 1_000_000.0),
+    ("m", 1_000_000.0),
+    ("thousand", 1_000.0),
+    ("k", 1_000.0),
+)
+
+
+def _coerce_capital(value: Any) -> float:
+    """Best-effort dollars from whatever the model wrote. 0.0 when unusable."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return max(0.0, float(value))
+    if not isinstance(value, str):
+        return 0.0
+    text = value.strip().lower().replace("$", "").replace(",", "").replace("usd", "").strip()
+    multiplier = 1.0
+    for suffix, mult in _CAPITAL_SUFFIXES:
+        if text.endswith(suffix):
+            multiplier = mult
+            text = text[: -len(suffix)].strip()
+            break
+    match = re.search(r"\d+(?:\.\d+)?", text)
+    if match is None:
+        return 0.0
+    try:
+        return max(0.0, float(match.group(0)) * multiplier)
+    except ValueError:
+        return 0.0
+
+
+def _build_bot_spec(payload: dict[str, Any]) -> BotSpec | None:
+    """Build a BotSpec from the model's JSON, repairing what is safely
+    repairable and refusing what is not.
+
+    Repairable: capital written as prose, an inverted capital band, a family
+    the model invented. Not repairable: no venue, no API surface, no
+    mechanism, no decay story, no kill criteria — each of those IS the
+    contract this board exists to enforce, and inventing one on the model's
+    behalf would defeat the gate."""
+    raw = payload.get("bot_spec")
+    if not isinstance(raw, dict):
+        return None
+
+    try:
+        family = BotVenueFamily(str(raw.get("family", "")).strip().lower())
+    except ValueError:
+        family = BotVenueFamily.OTHER
+
+    floor = _coerce_capital(raw.get("capital_floor_usd"))
+    target = _coerce_capital(raw.get("capital_target_usd"))
+    # A model that swapped the two still described a real band.
+    if target < floor:
+        floor, target = min(floor, target), max(floor, target)
+
+    def _strings(key: str) -> list[str]:
+        value = raw.get(key)
+        if isinstance(value, str):
+            value = [value]
+        if not isinstance(value, list):
+            return []
+        return [str(v).strip()[:400] for v in value if str(v).strip()][:12]
+
+    try:
+        return BotSpec(
+            venue=str(raw.get("venue", "")).strip()[:120],
+            venue_url=(str(raw.get("venue_url")).strip()[:400] or None) if raw.get("venue_url") else None,
+            family=family,
+            api_primitives=_strings("api_primitives"),
+            mechanism=str(raw.get("mechanism", "")).strip()[:800],
+            capital_floor_usd=floor,
+            capital_target_usd=target,
+            expected_return=str(raw.get("expected_return", "")).strip()[:600],
+            edge_decay=str(raw.get("edge_decay", "")).strip()[:600],
+            kill_criteria=_strings("kill_criteria"),
+            validation_plan=_strings("validation_plan"),
+            legality_note=str(raw.get("legality_note", "")).strip()[:800],
+            human_touchpoints=str(raw.get("human_touchpoints", "")).strip()[:400],
+        )
+    except Exception as exc:  # noqa: BLE001 — validation failure means no spec
+        logger.info("bot generation: spec rejected (%s)", str(exc)[:160])
+        return None
+
+
+def _build_bot_prompt(
+    category: IdeaCategory,
+    persona: str,
+    seed: str,
+    avoid_list: list[str],
+) -> str:
+    avoid_block = "\n".join(avoid_list) if avoid_list else "(none yet)"
+    return (
+        f"{seed}\n\n"
+        f"## Persona\n{persona}\n\n"
+        f"## Category\nFile this strategy under: {category.value}\n\n"
+        f"## Do NOT produce anything resembling these recent strategies\n"
+        f"{avoid_block}\n\n"
+        f"## Output\n{_BOT_JSON_SCHEMA_INSTRUCTION}\n"
+    )
+
+
+async def generate_bot_llm(
+    db: Database,
+    category: IdeaCategory,
+    *,
+    program: dict[str, Any] | None = None,
+    primitive: Any = None,
+    backend: LLMBackend | None = None,
+) -> LLMGenerationResult | None:
+    """One grounded money-bot generation.
+
+    Composes a probed venue program with a known-working mechanism from the
+    strategy library and asks for a strategy plus its BotSpec. Returns None
+    when no backend reaches, the JSON fails to parse, or the spec is
+    unusable — an idea with no spec can never be admitted to the board, so
+    half-building one just produces landfill for the gate to reject later.
+    """
+    from project_forge.feeds.venue_probe import program_to_seed
+
+    backend = backend if backend is not None else resolve_cheap_backend()
+    if backend is None:
+        return None
+
+    if program is None:
+        return None
+
+    seed = program_to_seed(program, primitive=primitive)
+    persona = _pick_persona(category)
+    avoid = await _recent_idea_lines(db, category)
+    prompt = _build_bot_prompt(category, persona, seed, avoid)
+
+    # Off the event loop — see bot_edge for why.
+    raw = await asyncio.to_thread(backend.call, prompt) or ""
+    if not raw.strip():
+        logger.info("bot generation: backend returned empty (venue=%s)", program.get("venue"))
+        return None
+
+    payload = _parse_idea_payload(raw)
+    if payload is None:
+        logger.info("bot generation: payload parse failed (venue=%s)", program.get("venue"))
+        return None
+
+    spec = _build_bot_spec(payload)
+    if spec is None:
+        logger.info("bot generation: no usable BotSpec (venue=%s)", program.get("venue"))
+        return None
+
+    idea = _build_idea_from_payload(payload, category, "bot")
+    if idea is None:
+        return None
+    idea.bot_spec = spec
+
+    return LLMGenerationResult(
+        idea=idea,
+        mode="bot",
+        persona=persona,
+        backend=backend.name,
+        raw_response=raw,
     )

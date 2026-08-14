@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     expand_ideas_per_run: int = 2
     expand_cross_weight: float = 0.7
     api_token: str = ""
+    # v0.24 Money Bots — where the operator can actually deploy capital.
+    # Empty means "unspecified", and generation stays venue-agnostic. Set it
+    # (FORGE_OPERATOR_JURISDICTION="United States") and both the generation
+    # seed and the red team's legality lens judge against the real
+    # jurisdiction instead of assuming. Without it, the panel correctly but
+    # expensively kills strategies on eligibility grounds after the fact.
+    operator_jurisdiction: str = ""
 
     # Fix #73 — out-of-range floats / ports were silently accepted, causing
     # subtle misbehavior (nothing ever scaffolded, cross-pollination ran
