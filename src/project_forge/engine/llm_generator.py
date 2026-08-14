@@ -824,7 +824,7 @@ async def generate_idea_llm(
         density_block=density_block,
     )
 
-    raw = backend.call(prompt) or ""
+    raw = await asyncio.to_thread(backend.call, prompt) or ""
     if not raw.strip():
         logger.info("llm_generator: backend returned empty response (mode=%s)", mode)
         return None
@@ -971,7 +971,7 @@ async def generate_snipe_llm(
     avoid = await _recent_idea_lines(db, category)
     prompt = _build_snipe_prompt(category, angle, incumbent, persona, intel_block, avoid)
 
-    raw = backend.call(prompt) or ""
+    raw = await asyncio.to_thread(backend.call, prompt) or ""
     if not raw.strip():
         logger.info("snipe: backend returned empty (incumbent=%s)", incumbent)
         return None

@@ -25,6 +25,7 @@ generate_premortem returns a structured pre-mortem dict:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -164,7 +165,7 @@ async def _llm_refine(idea: Idea, heuristic: float) -> float:
         f"**MVP:** {idea.mvp_scope}\n\n"
         'Reply: {"survival_odds": 0.0-1.0}'
     )
-    raw = (backend.call(prompt) or "").strip()
+    raw = (await asyncio.to_thread(backend.call, prompt) or "").strip()
     raw = _strip_codefence(raw)
     try:
         data: dict[str, Any] = json.loads(raw)

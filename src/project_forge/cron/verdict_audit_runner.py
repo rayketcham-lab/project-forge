@@ -28,6 +28,7 @@ Schema (created on first run, idempotent):
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import random
@@ -148,7 +149,7 @@ async def _re_evaluate_challenge(
         '  "notes": "1-2 sentence explanation"\n'
         "}\n"
     )
-    raw = (backend.call(prompt) or "").strip()
+    raw = (await asyncio.to_thread(backend.call, prompt) or "").strip()
     if "```json" in raw:
         raw = raw.split("```json", 1)[1].split("```", 1)[0].strip()
     elif "```" in raw:

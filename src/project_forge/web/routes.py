@@ -2675,7 +2675,7 @@ async def _challenge_idea(
         f"value of the field (not a diff or a fragment), so the apply step can replace it directly."
     )
 
-    raw = backend.call(prompt) or ""
+    raw = await asyncio.to_thread(backend.call, prompt) or ""
 
     import json as _json
 

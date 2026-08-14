@@ -30,6 +30,7 @@ Two-stage scoring, same shape as fundability/cashflow:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -232,7 +233,7 @@ async def _llm_refine(idea: Idea, heuristic: float) -> float:
         f"**Tech:** {', '.join(idea.tech_stack)}\n\n"
         'Reply: {"score": 0.0-1.0}'
     )
-    raw = (backend.call(prompt) or "").strip()
+    raw = (await asyncio.to_thread(backend.call, prompt) or "").strip()
     if "```json" in raw:
         raw = raw.split("```json", 1)[1].split("```", 1)[0].strip()
     elif "```" in raw:
