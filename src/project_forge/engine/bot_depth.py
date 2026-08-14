@@ -459,9 +459,7 @@ async def stress(idea: Idea) -> StressResult:
                 passes=passes + 1,
             )
 
-        recheck = _parse_objection(
-            hardest.lens, await _safe_call(backend, lens_prompt(hardest.lens, revised))
-        )
+        recheck = _parse_objection(hardest.lens, await _safe_call(backend, lens_prompt(hardest.lens, revised)))
         passes += 2
         if recheck is not None and recheck.severity >= FATAL_SEVERITY:
             logger.info("bot depth: revision failed to answer %s (%s)", hardest.lens, recheck.text[:100])
