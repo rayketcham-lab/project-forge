@@ -178,6 +178,15 @@ _ILLEGAL = re.compile(
 # spoofing the book" carries a negation 40-odd characters upstream that
 # negates something else entirely. A disclaimer sits next to the word it
 # disclaims; an unrelated "never" does not.
+# Sentence-scoped variant: any negation cue, no proximity requirement. Used
+# only for the legality note (see `illegal_reason`).
+_NEGATION_ANY = re.compile(
+    r"\b(no|not|never|without|avoids?|avoiding|prohibits?|forbids?|excludes?|"
+    r"refuses?|rather than|instead of|would be|would constitute|explicitly not|"
+    r"rules? out|does not|do not|neither|nor)\b",
+    re.IGNORECASE,
+)
+
 _NEGATION = re.compile(
     r"\b(no|not|never|without|avoids?|avoiding|prohibits?|forbids?|excludes?|"
     r"refuses?|rather than|instead of|would be|would constitute|explicitly not|"
@@ -210,7 +219,7 @@ LLM_VERIFY_UPPER = 0.75
 BOT_ADMIT_THRESHOLD = 0.55
 
 
-def _blob(idea: Idea) -> str:
+def _blob(idea: Idea, *, include_legality: bool = True) -> str:
     """Everything the scorer reads — prose plus the spec, since a spec field
     is exactly where a venue or a kill criterion is most likely to live."""
     parts = [
@@ -228,7 +237,7 @@ def _blob(idea: Idea) -> str:
             spec.mechanism,
             spec.expected_return,
             spec.edge_decay,
-            spec.legality_note,
+            spec.legality_note if include_legality else "",
             spec.human_touchpoints,
             " ".join(spec.api_primitives),
             " ".join(spec.kill_criteria),
@@ -237,20 +246,53 @@ def _blob(idea: Idea) -> str:
     return " ".join(parts)
 
 
+def _disclaimed_in_sentence(text: str, match: re.Match[str]) -> bool:
+    """True when a negation cue governs this match anywhere earlier in its
+    sentence.
+
+    Used only for the legality note, where enumerated disclaimers are the
+    norm: "this is not market manipulation, wash trading, or front-running"
+    puts the cue 30+ characters from the third term, so the tight window
+    used elsewhere reports a false veto and throws away a clean strategy.
+    Whole-sentence scope is too permissive for prose — "places orders it
+    never intends to fill to move the price, i.e. spoofing" would slip
+    through — which is why it is scoped to this one field.
+    """
+    sentence_start = max(text.rfind(".", 0, match.start()), text.rfind(";", 0, match.start())) + 1
+    return _NEGATION_ANY.search(text[sentence_start : match.start()]) is not None
+
+
 def illegal_reason(idea: Idea) -> str | None:
     """The veto. Returns why this must never be stored, or None if clean.
 
-    Every match is checked for a negation cue in the 40 characters before
-    it: a spec that says "no spoofing, no orders intended not to trade" is
-    describing discipline, and refusing it would push generation toward
-    saying nothing about manipulation at all — the opposite of the goal.
+    Two passes, because the same words mean opposite things in different
+    fields:
+
+      * everywhere else, a match is disclaimed only by a negation cue in the
+        30 characters before it. "No spoofing" is discipline; "never intends
+        to fill, moving the price" is an admission with an unrelated
+        negation upstream.
+      * in `legality_note`, whose entire purpose is to say what the strategy
+        does NOT do, a cue anywhere earlier in the same sentence disclaims
+        the match — otherwise an honest enumerated disclaimer vetoes a clean
+        strategy, which is what happened on a live run.
     """
-    blob = _blob(idea)
-    for match in _ILLEGAL.finditer(blob):
-        run_up = blob[max(0, match.start() - 40) : match.start()]
+    spec = getattr(idea, "bot_spec", None)
+
+    core = _blob(idea, include_legality=False)
+    for match in _ILLEGAL.finditer(core):
+        run_up = core[max(0, match.start() - 40) : match.start()]
         if _NEGATION.search(run_up):
             continue
         return f"not legitimate: mechanism relies on {match.group(0).lower()}"
+
+    if spec is not None and spec.legality_note:
+        note = spec.legality_note
+        for match in _ILLEGAL.finditer(note):
+            if _disclaimed_in_sentence(note, match):
+                continue
+            return f"not legitimate: legality note admits {match.group(0).lower()}"
+
     return None
 
 

@@ -187,6 +187,38 @@ class TestHtmlPage:
         html = (await client.get("/money-bots")).text
         assert "playbook" in html.lower()
 
+    @pytest.mark.asyncio
+    async def test_mechanism_corpus_is_always_available(self, client):
+        """The board must always be able to answer "how does a bot make money",
+        with or without anything generated — as a collapsed reference block at
+        the bottom, below the generated strategies."""
+        html = (await client.get("/money-bots?category=basis-carry")).text
+
+        assert "Perpetual funding carry" in html
+        assert "How bots actually make money" in html
+        # It lives below the strategies, and it is collapsed (no `open`).
+        assert html.index("Generated strategies") < html.index("How bots actually make money")
+        block = html[html.index('<details class="ref-block" id="playbook"') :][:80]
+        assert "open" not in block
+
+    @pytest.mark.asyncio
+    async def test_flagged_strategies_are_shown_with_their_reason(self, client):
+        """A red-teamed strategy stays visible — the reason is the value."""
+        killed = _bot_idea(
+            "Doomed Quoter",
+            IdeaCategory.MARKET_MAKING,
+            0.62,
+            _spec("Polymarket", BotVenueFamily.PREDICTION_MARKETS),
+        )
+        killed.bot_spec.panel_verdict = "flagged"
+        killed.bot_spec.surviving_objection = "the reward is smaller than the minimum tick"
+        await db.save_idea(killed)
+
+        html = (await client.get("/money-bots")).text
+        assert "Doomed Quoter" in html
+        assert "smaller than the minimum tick" in html
+        assert "Flagged" in html
+
 
 class TestChurn:
     """Churn Now on this board must run the GROUNDED bot pipeline.

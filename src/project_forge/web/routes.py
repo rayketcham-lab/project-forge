@@ -658,6 +658,16 @@ async def money_bots(
         idea = await db.get_idea(r["id"])
         if idea is not None:
             ideas.append(idea)
+
+    # Split by what the red team concluded. A flagged strategy is not hidden:
+    # the specific reason a plausible-looking edge does not work is the most
+    # useful thing on this page, and burying it in a log wastes it.
+    def _verdict(idea) -> str:
+        return (idea.bot_spec.panel_verdict if idea.bot_spec else None) or "unknown"
+
+    vetted = [i for i in ideas if _verdict(i) in ("vetted", "objection-stands", "unknown")]
+    flagged = [i for i in ideas if _verdict(i) in ("flagged", "below-bar")]
+
     # Total in scope (no score filter — show the headline).
     cur = await db.db.execute(
         f"SELECT COUNT(*) FROM ideas WHERE category IN ({placeholders}) "  # noqa: S608
@@ -670,6 +680,8 @@ async def money_bots(
         "money_bots.html",
         {
             "ideas": ideas,
+            "vetted": vetted,
+            "flagged": flagged,
             "total": total,
             "categories": list(_MONEY_CATEGORIES),
             "category_filter": category if category in _MONEY_CATEGORIES else None,

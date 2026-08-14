@@ -1,30 +1,135 @@
 {% extends "base.html" %}
 {% block title %}Money Bots - Project Forge{% endblock %}
 
+{% macro strategy_card(idea, flagged=False) %}
+{% set spec = idea.bot_spec %}
+<article class="strategy-card {% if flagged %}strategy-card-flagged{% endif %}" data-idea-id="{{ idea.id }}">
+    <button class="idea-reject-btn" type="button" title="Reject this strategy">&times;</button>
+    <header class="strategy-head">
+        <span class="edge-badge edge-{{ ((idea.bot_edge_score or 0) * 10) | int }}">
+            {{ "%.2f"|format(idea.bot_edge_score or 0) }}
+        </span>
+        {% if spec %}
+        <span class="venue-badge">{{ spec.venue }}</span>
+        <span class="family-pill family-{{ spec.family.value }}">{{ spec.family.value }}</span>
+        {% if spec.panel_verdict == 'flagged' %}
+        <span class="verdict-pill verdict-flagged">red team says no</span>
+        {% elif spec.panel_verdict == 'below-bar' %}
+        <span class="verdict-pill verdict-below">below the bar</span>
+        {% elif spec.panel_verdict == 'vetted' %}
+        <span class="verdict-pill verdict-vetted">&#10003; survived the red team</span>
+        {% endif %}
+        {% endif %}
+    </header>
+
+    <h3 class="strategy-name">{{ idea.name }}</h3>
+    <p class="strategy-tagline">{{ idea.tagline }}</p>
+
+    {% if spec %}
+    <dl class="strategy-facts">
+        <div class="fact">
+            <dt>Mechanism</dt>
+            <dd>{{ spec.mechanism }}</dd>
+        </div>
+        <div class="fact">
+            <dt>Capital</dt>
+            <dd>${{ "{:,.0f}".format(spec.capital_floor_usd) }} floor
+                &rarr; ${{ "{:,.0f}".format(spec.capital_target_usd) }} target</dd>
+        </div>
+        {% if spec.expected_return %}
+        <div class="fact">
+            <dt>Return</dt>
+            <dd>{{ spec.expected_return }}</dd>
+        </div>
+        {% endif %}
+        <div class="fact">
+            <dt>Decays because</dt>
+            <dd>{{ spec.edge_decay }}</dd>
+        </div>
+        {% if spec.api_primitives %}
+        <div class="fact">
+            <dt>API surface</dt>
+            <dd>
+                {% for prim in spec.api_primitives %}
+                <code class="api-chip">{{ prim }}</code>
+                {% endfor %}
+            </dd>
+        </div>
+        {% endif %}
+        {% if spec.kill_criteria %}
+        <div class="fact">
+            <dt>Switches off when</dt>
+            <dd>
+                <ul class="kill-list">
+                    {% for k in spec.kill_criteria %}<li>{{ k }}</li>{% endfor %}
+                </ul>
+            </dd>
+        </div>
+        {% endif %}
+    </dl>
+
+    {% if spec.surviving_objection %}
+    <p class="strategy-objection">
+        <strong>{% if spec.panel_verdict == 'flagged' %}Why the red team killed it:{% else %}Unanswered objection:{% endif %}</strong>
+        {{ spec.surviving_objection }}
+    </p>
+    {% endif %}
+    {% endif %}
+
+    <footer class="strategy-foot">
+        <code class="cat-tag">{{ idea.category.value }}</code>
+        {% if spec and spec.venue_url %}
+        <a href="{{ spec.venue_url }}" target="_blank" rel="noopener" class="venue-link">venue docs &#8599;</a>
+        {% endif %}
+        {% if idea.project_repo_url %}
+        <a href="{{ idea.project_repo_url }}" target="_blank" rel="noopener" class="venue-link">repo &#8599;</a>
+        {% elif not flagged %}
+        <button class="scaffold-bot-btn" data-idea-id="{{ idea.id }}" type="button"
+                title="Generate a runnable bot scaffold from this spec">Scaffold bot &#10142;</button>
+        {% endif %}
+        <a href="/ideas/{{ idea.id }}" class="venue-link">detail &rarr;</a>
+    </footer>
+</article>
+{% endmacro %}
+
 {% block content %}
 <div id="money-bots-root" data-category-filter="{{ category_filter or '' }}"></div>
 <section class="page-header">
     <div class="container">
         <h1>&#129302; Money Bots</h1>
         <p class="page-subtitle">
-            Capital-deployment strategies &mdash; a venue, the API calls the bot makes, and the
-            mechanism that pays. Ranked by edge, not by how sellable it is.
-            {{ probe_stats.admitted }} admitted from {{ probe_stats.probes }} probes
-            ({{ (probe_stats.admit_rate * 100) | round(0) | int }}% admit rate);
-            most cycles store nothing on purpose.
+            Ways to make money with a bot and some capital. Every entry names a venue, the API
+            calls the bot makes, where the money actually comes from, and when to switch it off.
+            <strong>{{ vetted|length }} vetted</strong> and
+            <strong>{{ flagged|length }} flagged</strong> strategies here, built from
+            <strong>{{ playbook|length }} proven mechanisms</strong> (at the bottom of the page).
         </p>
-        <div class="churn-row">
-            <button id="churn-btn" class="btn btn-primary btn-churn" type="button">
-                <span class="churn-icon">&#9889;</span>
-                <span class="churn-label">Churn Now</span>
-            </button>
-            <div id="churn-status" class="churn-status"></div>
-        </div>
     </div>
 </section>
 
+<!-- 2. Generated strategies: the engine applying those mechanisms to a live
+     venue signal. Vetted first, then the ones the red team shot down — the
+     reason it shot them down is the useful part. -->
 <section class="section">
     <div class="container">
+        <div class="section-head">
+            <h2>Generated strategies</h2>
+            <p class="muted">
+                Every two hours the engine reads what venues have actually changed (fee
+                schedules, reward programs, new endpoints), builds one strategy against a
+                known mechanism, and puts it through a four-lens red team: does the
+                arithmetic survive fees, is there capacity left, is it legal and permitted,
+                can it run unattended. Both outcomes are shown.
+            </p>
+        </div>
+
+        <div class="churn-row">
+            <button id="churn-btn" class="btn btn-primary btn-churn" type="button">
+                <span class="churn-icon">&#9889;</span>
+                <span class="churn-label">Generate one now</span>
+            </button>
+            <div id="churn-status" class="churn-status"></div>
+        </div>
 
         <div class="filters-bar">
             <div class="filter-row">
@@ -41,158 +146,50 @@
             </div>
         </div>
 
-        {% if ideas %}
+        {% if vetted %}
+        <h3 class="subsection-head">Vetted &mdash; survived the red team</h3>
         <div class="strategy-grid">
-            {% for idea in ideas %}
-            {% set spec = idea.bot_spec %}
-            <article class="strategy-card" data-idea-id="{{ idea.id }}">
-                <button class="idea-reject-btn" type="button" title="Reject this strategy">&times;</button>
-                <header class="strategy-head">
-                    <span class="edge-badge edge-{{ ((idea.bot_edge_score or 0) * 10) | int }}">
-                        {{ "%.2f"|format(idea.bot_edge_score or 0) }}
-                    </span>
-                    {% if spec %}
-                    <span class="venue-badge">{{ spec.venue }}</span>
-                    <span class="family-pill family-{{ spec.family.value }}">{{ spec.family.value }}</span>
-                    {% endif %}
-                </header>
-
-                <h3 class="strategy-name">{{ idea.name }}</h3>
-                <p class="strategy-tagline">{{ idea.tagline }}</p>
-
-                {% if spec %}
-                <dl class="strategy-facts">
-                    <div class="fact">
-                        <dt>Mechanism</dt>
-                        <dd>{{ spec.mechanism }}</dd>
-                    </div>
-                    <div class="fact">
-                        <dt>Capital</dt>
-                        <dd>${{ "{:,.0f}".format(spec.capital_floor_usd) }} floor
-                            &rarr; ${{ "{:,.0f}".format(spec.capital_target_usd) }} target</dd>
-                    </div>
-                    {% if spec.expected_return %}
-                    <div class="fact">
-                        <dt>Return</dt>
-                        <dd>{{ spec.expected_return }}</dd>
-                    </div>
-                    {% endif %}
-                    <div class="fact">
-                        <dt>Decays because</dt>
-                        <dd>{{ spec.edge_decay }}</dd>
-                    </div>
-                    {% if spec.api_primitives %}
-                    <div class="fact">
-                        <dt>API surface</dt>
-                        <dd>
-                            {% for prim in spec.api_primitives %}
-                            <code class="api-chip">{{ prim }}</code>
-                            {% endfor %}
-                        </dd>
-                    </div>
-                    {% endif %}
-                    {% if spec.kill_criteria %}
-                    <div class="fact">
-                        <dt>Switches off when</dt>
-                        <dd>
-                            <ul class="kill-list">
-                                {% for k in spec.kill_criteria %}<li>{{ k }}</li>{% endfor %}
-                            </ul>
-                        </dd>
-                    </div>
-                    {% endif %}
-                </dl>
-
-                {% if spec.surviving_objection %}
-                <p class="strategy-objection">
-                    <strong>Unanswered objection:</strong> {{ spec.surviving_objection }}
-                </p>
-                {% endif %}
-                {% endif %}
-
-                <footer class="strategy-foot">
-                    <code class="cat-tag">{{ idea.category.value }}</code>
-                    {% if spec and spec.venue_url %}
-                    <a href="{{ spec.venue_url }}" target="_blank" rel="noopener" class="venue-link">venue docs &#8599;</a>
-                    {% endif %}
-                    {% if idea.project_repo_url %}
-                    <a href="{{ idea.project_repo_url }}" target="_blank" rel="noopener" class="venue-link">repo &#8599;</a>
-                    {% else %}
-                    <button class="scaffold-bot-btn" data-idea-id="{{ idea.id }}" type="button"
-                            title="Generate a runnable bot scaffold from this spec">Scaffold bot &#10142;</button>
-                    {% endif %}
-                    <a href="/ideas/{{ idea.id }}" class="venue-link">detail &rarr;</a>
-                </footer>
-            </article>
-            {% endfor %}
+            {% for idea in vetted %}{{ strategy_card(idea) }}{% endfor %}
         </div>
-        {% else %}
+        {% endif %}
+
+        {% if flagged %}
+        <h3 class="subsection-head">Flagged &mdash; and exactly why</h3>
+        <p class="muted subsection-note">
+            These name a real venue and a real mechanism, but the red team found a number that
+            does not hold. Kept because "this looks great and here is the arithmetic that kills
+            it" is worth more than a blank page.
+        </p>
+        <div class="strategy-grid">
+            {% for idea in flagged %}{{ strategy_card(idea, flagged=True) }}{% endfor %}
+        </div>
+        {% endif %}
+
+        {% if not vetted and not flagged %}
         <div class="board-empty">
-            <h3>Nothing admitted yet</h3>
-            <p>The probe runs every two hours, works <strong>one</strong> venue program, and
-            stores nothing unless the strategy clears the gate:</p>
-            <ul class="gate-list">
-                <li>a named venue with documentation to check it against</li>
-                <li>the exact API operations the bot calls</li>
-                <li>where the money comes from &mdash; a rebate, a reward budget, a funding payment</li>
-                <li>an honest decay story and conditions to switch itself off</li>
-                <li>survives a four-lens red team on arithmetic, competition, legality and operations</li>
-            </ul>
-            <p class="muted">An empty board is the design, not a fault. Hit
-            <strong>Churn Now</strong> to run a cycle on demand.</p>
+            <h3>No generated strategies yet</h3>
+            <p>Hit <strong>Generate one now</strong> &mdash; it reads live venue changes, builds a
+            strategy against a known mechanism, and red-teams it. Takes a couple of
+            minutes. Whatever comes out lands here, passed or failed.</p>
         </div>
         {% endif %}
 
         <div id="scaffold-status" class="churn-status"></div>
-
     </div>
 </section>
 
+<!-- 3. Reference material, collapsed. -->
 <section class="section">
     <div class="container">
-
-        {% if probes %}
-        <details class="ref-block" id="probe-log" open>
-            <summary>
-                <span class="ref-title">Probe log</span>
-                <span class="ref-count">{{ probes|length }} recent</span>
-            </summary>
-            <table class="probe-table">
-                <tbody>
-                    {% for p in probes %}
-                    <tr>
-                        <td class="probe-when">{{ p.probed_at[5:16] | replace('T', ' ') }}</td>
-                        <td class="probe-venue">{{ p.venue if p.venue else '—' }}</td>
-                        <td class="probe-signal">
-                            {% if p.anchor %}
-                            <a href="{{ p.anchor }}" target="_blank" rel="noopener">{{ p.program_summary or p.anchor }}</a>
-                            {% else %}
-                            {{ p.program_summary or 'no program surfaced' }}
-                            {% endif %}
-                        </td>
-                        <td class="probe-outcome">
-                            {% if p.admitted %}
-                            <span class="status-pill status-promoted">&#10003; admitted</span>
-                            {% else %}
-                            <span class="probe-reason" title="{{ p.reason }}">{{ p.reason }}</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </details>
-        {% endif %}
-
         <details class="ref-block" id="playbook">
             <summary>
-                <span class="ref-title">Playbook</span>
-                <span class="ref-count">{{ playbook|length }} mechanisms known to pay</span>
+                <span class="ref-title">How bots actually make money</span>
+                <span class="ref-count">{{ playbook|length }} proven mechanisms</span>
             </summary>
             <p class="muted ref-intro">
-                The grounding corpus every generated strategy is composed against. No deep links
-                on purpose &mdash; venue terms move, so each entry says what to re-verify on the
-                live docs before any capital moves.
+                Publicly documented mechanisms, each with the way it decays and what to
+                re-verify on the venue's live docs before any capital moves. This is the
+                corpus every generated strategy is built from.
             </p>
             <table class="ref-table">
                 <thead>
@@ -208,7 +205,7 @@
                         <td>
                             <span class="ref-mech">{{ prim.mechanism }}</span>
                             <details class="ref-more">
-                                <summary>detail</summary>
+                                <summary>return, decay, risks, what to verify</summary>
                                 <p class="playbook-line"><span>Return</span> {{ prim.yield_shape }}</p>
                                 <p class="playbook-line"><span>Decays</span> {{ prim.decay }}</p>
                                 <p class="playbook-line"><span>Risks</span> {{ prim.known_risks | join('; ') }}</p>
@@ -246,8 +243,45 @@
                 </tbody>
             </table>
         </details>
+
+        {% if probes %}
+        <details class="ref-block" id="probe-log">
+            <summary>
+                <span class="ref-title">Generation log</span>
+                <span class="ref-count">{{ probes|length }} recent runs</span>
+            </summary>
+            <p class="muted ref-intro">
+                What the engine read and what it did with it &mdash; including the runs that
+                produced nothing.
+            </p>
+            <table class="probe-table">
+                <tbody>
+                    {% for p in probes %}
+                    <tr>
+                        <td class="probe-when">{{ p.probed_at[5:16] | replace('T', ' ') }}</td>
+                        <td class="probe-venue">{{ p.venue if p.venue else '—' }}</td>
+                        <td class="probe-signal">
+                            {% if p.anchor %}
+                            <a href="{{ p.anchor }}" target="_blank" rel="noopener">{{ p.program_summary or p.anchor }}</a>
+                            {% else %}
+                            {{ p.program_summary or 'no venue change surfaced' }}
+                            {% endif %}
+                        </td>
+                        <td class="probe-outcome">
+                            {% if p.admitted %}
+                            <span class="status-pill status-promoted">&#10003; vetted</span>
+                            {% else %}
+                            <span class="probe-reason" title="{{ p.reason }}">{{ p.reason }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </details>
+        {% endif %}
     </div>
 </section>
 
-<script src="/static/money_bots.js?v=2"></script>
+<script src="/static/money_bots.js?v=3"></script>
 {% endblock %}
