@@ -51,7 +51,11 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from project_forge.engine.llm_backend import LLMBackend, resolve_cheap_backend
+from project_forge.engine.llm_backend import (
+    LLMBackend,
+    resolve_cheap_backend,
+    resolve_role_backend,
+)
 from project_forge.engine.saturation import density_prompt_block
 from project_forge.models import BotSpec, BotVenueFamily, Idea, IdeaCategory
 from project_forge.storage.db import Database
@@ -1149,7 +1153,9 @@ async def generate_bot_llm(
     """
     from project_forge.feeds.venue_probe import program_to_seed
 
-    backend = backend if backend is not None else resolve_cheap_backend()
+    # Drafting is the 'generate' role: Sonnet by default on the CLI path.
+    # The red team stays on the strongest model — see engine/bot_depth.
+    backend = backend if backend is not None else resolve_role_backend("generate")
     if backend is None:
         return None
 

@@ -904,7 +904,9 @@ async def _fire_bot_strategy(db: Database) -> None:
         depth = await _bot_stress(idea)
         idea = depth.idea
         if idea.bot_spec is not None:
-            idea.bot_spec.panel_verdict = "vetted" if depth.survived else "flagged"
+            idea.bot_spec.panel_verdict = (
+                "vetted" if depth.survived else ("review-incomplete" if depth.incomplete else "flagged")
+            )
             if depth.strongest:
                 idea.bot_spec.surviving_objection = depth.strongest
         if not depth.survived:

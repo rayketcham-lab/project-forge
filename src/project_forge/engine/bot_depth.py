@@ -51,7 +51,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from project_forge.engine.llm_backend import resolve_cheap_backend
+from project_forge.engine.llm_backend import resolve_role_backend
 from project_forge.models import Idea
 
 logger = logging.getLogger(__name__)
@@ -92,6 +92,10 @@ class StressResult:
     # True when the draft was killed by the panel, rewritten to answer the
     # objections, and the re-check accepted the rewrite.
     revised: bool = False
+    # True when the review could not be completed — a backend call failed or
+    # timed out. Distinct from `survived=False`, which means the panel
+    # actually judged it. A stopwatch is not an objection.
+    incomplete: bool = False
 
 
 _LENS_BRIEF: dict[str, str] = {
@@ -424,7 +428,7 @@ async def stress(idea: Idea) -> StressResult:
         # spec-less draft would just be spend.
         return StressResult(idea=idea, survived=True, passes=0)
 
-    backend = resolve_cheap_backend()
+    backend = resolve_role_backend("review")
     if backend is None:
         return StressResult(idea=idea, survived=True, passes=0)
 
@@ -448,15 +452,26 @@ async def stress(idea: Idea) -> StressResult:
         # accepting the rewrite unchecked would make the panel decorative.
         # So: rewrite, then re-run the lens that hit hardest.
         hardest = max(objections, key=lambda o: o.severity)
-        revised = _apply_revision(idea, await _safe_call(backend, revise_prompt(idea, objections)))
+        raw_revision = await _safe_call(backend, revise_prompt(idea, objections))
+        revised = _apply_revision(idea, raw_revision)
         if revised is None:
-            logger.info("bot depth: panel killed %r (no usable revision)", idea.name)
+            # No answer at all (timeout, dead backend) is not the same as the
+            # model saying "this cannot be fixed". Only the latter is a
+            # judgement, and only a judgement should read as a rejection.
+            incomplete = raw_revision is None
+            logger.info(
+                "bot depth: %s %r (%s)",
+                "could not complete review of" if incomplete else "panel killed",
+                idea.name,
+                "revision call failed" if incomplete else "no usable revision",
+            )
             return StressResult(
                 idea=idea,
                 objections=objections,
                 strongest=strongest or objections[0].text,
                 survived=False,
                 passes=passes + 1,
+                incomplete=incomplete,
             )
 
         recheck = _parse_objection(hardest.lens, await _safe_call(backend, lens_prompt(hardest.lens, revised)))

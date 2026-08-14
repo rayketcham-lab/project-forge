@@ -25,10 +25,33 @@ from typing import Protocol
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "sonnet"
-# 180s is generous — short prompts (super-idea cluster naming) finish in
-# ~5s, but the introspect prompt is heavy (file tree + commits + lint +
-# issues + recent rejections) and Sonnet sometimes takes 60-90s.
-DEFAULT_TIMEOUT = 180
+
+
+def _timeout_from_env(default_seconds: int = 420) -> int:
+    """How long to wait on one CLI generation, in seconds.
+
+    Raised from 180s after a live failure: the money-bot panel's revision
+    pass timed out, `stress` read that as "no usable revision", and a
+    strategy was flagged as failing review because the reviewer ran out of
+    clock. A verdict caused by a stopwatch is the least honest failure mode
+    this engine has, and on a subscription there is no per-call cost to
+    waiting longer.
+
+    Override with FORGE_LLM_TIMEOUT_SEC; a garbage value warns and falls
+    back rather than crashing the process at import (see #77).
+    """
+    raw = os.environ.get("FORGE_LLM_TIMEOUT_SEC")
+    if raw is None:
+        return default_seconds
+    try:
+        value = int(float(raw))
+    except ValueError:
+        logger.warning("Invalid FORGE_LLM_TIMEOUT_SEC=%r; using %ds", raw, default_seconds)
+        return default_seconds
+    return value if value > 0 else default_seconds
+
+
+DEFAULT_TIMEOUT = _timeout_from_env()
 
 
 class LLMBackend(Protocol):
@@ -246,10 +269,48 @@ def resolve_cheap_backend() -> LLMBackend | None:
     return resolve_backend()
 
 
+# Which model each role gets on the CLI path. Drafting a strategy is a
+# variety task — a faster model means more attempts per hour and more shots
+# on goal — while reviewing one is where rigor actually pays. Splitting them
+# keeps the red team on the strongest model without slowing generation to
+# its speed.
+_ROLE_DEFAULTS: dict[str, tuple[str, str]] = {
+    # role: (env var, default CLI model)
+    "generate": ("FORGE_BOT_GEN_MODEL", "sonnet"),
+    "review": ("FORGE_BOT_REVIEW_MODEL", "opus"),
+}
+
+
+def resolve_role_backend(role: str) -> LLMBackend | None:
+    """Backend for a named role ('generate' / 'review').
+
+    Falls back to `resolve_cheap_backend()` for any unknown role, and
+    honours the FORGE_LLM_BACKEND kill switch exactly like every other
+    resolver here — a role must never be a way around it.
+    """
+    env_var, default_model = _ROLE_DEFAULTS.get(role, ("FORGE_CLI_MODEL", "opus"))
+
+    forced = os.environ.get("FORGE_LLM_BACKEND", "")
+    if forced in ("static", "none"):
+        return None
+
+    # API path keeps its own cost discipline — role splitting is a CLI-path
+    # idea, where there is no per-call cost to spend on the review.
+    api_backend = resolve_backend()
+    if api_backend is not None and isinstance(api_backend, AnthropicAPIBackend):
+        return api_backend
+
+    if forced != "api" and _has_claude_cli():
+        return ClaudeCodeBackend(model=os.environ.get(env_var, default_model))
+
+    return resolve_cheap_backend()
+
+
 __all__ = [
     "AnthropicAPIBackend",
     "ClaudeCodeBackend",
     "LLMBackend",
     "resolve_backend",
     "resolve_cheap_backend",
+    "resolve_role_backend",
 ]
