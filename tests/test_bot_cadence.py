@@ -159,7 +159,13 @@ class TestCadence:
         assert "generat" in (probes[0]["reason"] or "")
         assert not await db.list_ideas(limit=10)
 
-    async def test_red_team_kill_stores_nothing(self, db, sched, monkeypatch):
+    async def test_red_team_kill_is_stored_and_flagged(self, db, sched, monkeypatch):
+        """v0.24.1: a knocked-down draft is FLAGGED, not deleted.
+
+        The first cut discarded these, so the board sat empty while the most
+        useful output — a specific, quantified reason a plausible strategy
+        does not work — went into a log nobody reads.
+        """
         from project_forge.engine.bot_depth import StressResult
 
         monkeypatch.setattr(sched, "_bot_fetch_programs", lambda: [_PROGRAM])
@@ -170,16 +176,24 @@ class TestCadence:
         async def _kill(idea):
             return StressResult(idea=idea, survived=False, strongest="fees eat it", passes=4)
 
+        async def _score(_i):
+            return 0.71
+
         monkeypatch.setattr(sched, "_bot_generate", _gen)
         monkeypatch.setattr(sched, "_bot_stress", _kill)
+        monkeypatch.setattr(sched, "_bot_score", _score)
         await sched._fire_bot_strategy(db)
 
+        ideas = await db.list_ideas(limit=10)
+        assert len(ideas) == 1
+        stored = ideas[0]
+        assert stored.bot_spec.panel_verdict == "flagged"
+        assert stored.bot_spec.surviving_objection == "fees eat it"
+        # Stored, but not counted as an admission.
         probes = await db.list_bot_probes()
         assert probes[0]["admitted"] is False
-        assert "fees eat it" in (probes[0]["reason"] or "")
-        assert not await db.list_ideas(limit=10)
 
-    async def test_below_threshold_stores_nothing(self, db, sched, monkeypatch):
+    async def test_below_threshold_is_stored_below_bar(self, db, sched, monkeypatch):
         from project_forge.engine.bot_depth import StressResult
 
         monkeypatch.setattr(sched, "_bot_fetch_programs", lambda: [_PROGRAM])
@@ -198,10 +212,38 @@ class TestCadence:
         monkeypatch.setattr(sched, "_bot_score", _low_score)
         await sched._fire_bot_strategy(db)
 
-        probes = await db.list_bot_probes()
-        assert probes[0]["admitted"] is False
-        assert "threshold" in (probes[0]["reason"] or "")
+        ideas = await db.list_ideas(limit=10)
+        assert len(ideas) == 1
+        assert ideas[0].bot_spec.panel_verdict == "below-bar"
+        assert (await db.list_bot_probes())[0]["admitted"] is False
+
+    async def test_illegitimate_strategy_is_still_refused_outright(self, db, sched, monkeypatch):
+        """The one thing that must never reach the board, verdict or not."""
+        from project_forge.engine.bot_depth import StressResult
+
+        monkeypatch.setattr(sched, "_bot_fetch_programs", lambda: [_PROGRAM])
+
+        dirty = _idea(
+            name="Volume Manufacturer",
+            description="It wash trades between two accounts to manufacture qualifying volume.",
+        )
+
+        async def _gen(*_a, **_k):
+            return _Result(dirty)
+
+        async def _survive(idea):
+            return StressResult(idea=idea, survived=True, passes=4)
+
+        async def _score(_i):
+            return 0.9
+
+        monkeypatch.setattr(sched, "_bot_generate", _gen)
+        monkeypatch.setattr(sched, "_bot_stress", _survive)
+        monkeypatch.setattr(sched, "_bot_score", _score)
+        await sched._fire_bot_strategy(db)
+
         assert not await db.list_ideas(limit=10)
+        assert "legitimate" in ((await db.list_bot_probes())[0]["reason"] or "")
 
     async def test_admitted_strategy_is_stored_with_score_and_spec(self, db, sched, monkeypatch):
         from project_forge.engine.bot_depth import StressResult

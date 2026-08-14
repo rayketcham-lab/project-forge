@@ -805,7 +805,7 @@ async def _fire_bot_strategy(db: Database) -> None:
     """
     import random as _rnd
 
-    from project_forge.engine.bot_edge import admits
+    from project_forge.engine.bot_edge import admits, illegal_reason
     from project_forge.engine.dedup import filter_and_save
     from project_forge.engine.strategy_library import pick_primitive
     from project_forge.feeds.venue_probe import pick_top_program
@@ -851,34 +851,49 @@ async def _fire_bot_strategy(db: Database) -> None:
 
         # 4. The red team: arithmetic, competition, legality, operations.
         #    Keyless this is a free no-op.
+        #
+        #    A knocked-down draft is FLAGGED, not deleted. The first cut threw
+        #    these away, and the board sat empty while the most useful thing
+        #    the engine produced — a specific, quantified reason a plausible
+        #    strategy does not work — went into a log nobody reads. The
+        #    verdict rides on the card instead.
         depth = await _bot_stress(idea)
-        if not depth.survived:
-            await _record_bot_drop(
-                db,
-                program,
-                reason=f"red-team panel killed it: {depth.strongest or 'no surviving rationale'}",
-            )
-            logger.info("bot probe: panel killed %r after %d passes", idea.name, depth.passes)
-            return
         idea = depth.idea
+        if idea.bot_spec is not None:
+            idea.bot_spec.panel_verdict = "vetted" if depth.survived else "flagged"
+            if depth.strongest:
+                idea.bot_spec.surviving_objection = depth.strongest
+        if not depth.survived:
+            logger.info("bot probe: panel flagged %r after %d passes", idea.name, depth.passes)
 
-        # 5. The gate: right board, legitimate, has a spec, clears threshold.
+        # 5. The gate. Two things still block storage outright, because
+        #    neither produces anything worth showing: a strategy that is not
+        #    legitimate, and one with no spec at all. Everything else is
+        #    stored with its verdict and ranked by score.
         score = await _bot_score(idea)
         idea.bot_edge_score = score
         ok, reason = admits(idea, score)
-        if not ok:
+        blocking = illegal_reason(idea) is not None or idea.bot_spec is None
+        if not ok and blocking:
             await _record_bot_drop(db, program, reason=reason, score=score)
-            logger.info("bot probe: rejected %r — %s", idea.name, reason)
+            logger.info("bot probe: refused %r — %s", idea.name, reason)
             return
+        if not ok and idea.bot_spec is not None and idea.bot_spec.panel_verdict != "flagged":
+            # Survived the panel but missed the bar — say so on the card.
+            idea.bot_spec.panel_verdict = "below-bar"
 
-        # 6. Survived everything; dedup still gets the last word.
+        # 6. Store it. Dedup still gets the last word.
+        verdict = idea.bot_spec.panel_verdict if idea.bot_spec else "unknown"
         _saved, stored, dedup_reason = await filter_and_save(idea, db)
         await db.record_bot_probe(
             program_summary=program.get("title"),
             venue=program.get("venue"),
             anchor=program.get("url"),
-            admitted=bool(stored),
-            reason="admitted" if stored else f"dedup rejected: {dedup_reason}",
+            # "Admitted" means vetted: the panel passed it AND it cleared the
+            # bar. A stored-but-flagged strategy is on the board, but it is
+            # not an admission and must not inflate the admit rate.
+            admitted=bool(stored and ok and verdict == "vetted"),
+            reason=f"stored ({verdict})" if stored else f"dedup rejected: {dedup_reason}",
             idea_id=idea.id if stored else None,
             edge_score=score,
         )

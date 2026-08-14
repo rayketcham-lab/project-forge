@@ -263,6 +263,16 @@ class BotSpec(BaseModel):
     # that admits where it breaks is worth more than one that pretends the
     # objection was never made.
     surviving_objection: str | None = None
+    # What the red team concluded. "vetted" survived the panel outright;
+    # "objection-stands" survived a rewrite but kept a live objection;
+    # "flagged" means the panel would not pass it.
+    #
+    # v0.24.1: this is a VERDICT, not a delete. The first cut discarded
+    # everything the panel knocked down, so the board sat empty and the
+    # operator could not see what the engine had tried or why it failed —
+    # which is the most useful thing on the page. Only the legality veto and
+    # a missing spec now block storage.
+    panel_verdict: str | None = None
 
     @field_validator("venue", "mechanism", "edge_decay")
     @classmethod
