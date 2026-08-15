@@ -7,6 +7,7 @@ vs "dashboard UX improvements — tailored for test engineering".
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os as _os
@@ -269,7 +270,12 @@ async def should_accept(idea: Idea, db: Database) -> tuple[bool, str | None]:
         heuristic_reject_name = n_score >= NAME_JACCARD_THRESHOLD
 
         if borderline_tag or borderline_name:
-            verdict = semantic_dedup_check(
+            # Off the event loop. `semantic_dedup_check` is sync and shells
+            # out to the CLI backend; called inline here it froze every
+            # request the web app was serving for the length of the call,
+            # once per borderline pair, on every save.
+            verdict = await asyncio.to_thread(
+                semantic_dedup_check,
                 idea.name,
                 idea.tagline,
                 existing_name,

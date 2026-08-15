@@ -964,7 +964,7 @@ async def generate_snipe_llm(
     angle = angle if angle in SNIPE_ANGLES else await pick_least_used_angle(db, category)
 
     if intel is None:
-        intel = fetch_incumbent_intel(incumbent, cache=_incumbent_cache(incumbent))
+        intel = await asyncio.to_thread(fetch_incumbent_intel, incumbent, cache=_incumbent_cache(incumbent))
     intel_block = format_intel_for_prompt(intel)
 
     persona = _pick_persona(category)

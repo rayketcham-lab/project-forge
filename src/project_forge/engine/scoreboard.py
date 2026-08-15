@@ -19,6 +19,7 @@ just skips that idea. The fetcher is injectable so tests need no network.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -99,7 +100,9 @@ async def capture_outcome_signals(
     for r in rows:
         incumbent = r["target_incumbent"]
         try:
-            stars = gh_stars(incumbent)
+            # `gh_stars` is a blocking HTTP callback; awaiting it off the
+            # loop keeps the dashboard responsive while the sweep runs.
+            stars = await asyncio.to_thread(gh_stars, incumbent)
         except Exception:  # noqa: BLE001 — capture is best-effort
             logger.warning("scoreboard: signal fetch failed for %s", incumbent)
             continue

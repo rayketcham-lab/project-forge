@@ -418,3 +418,140 @@ class TestSourceBreadth:
     def test_sources_span_several_venues(self):
         venues = {v for _repo, v in venue_probe.PROBE_REPOS}
         assert len(venues) >= 5
+
+
+class TestGitHubAuth:
+    """Unauthenticated GitHub allows 60 requests/hour. A single probe makes
+    26, so a few cycles exhaust it and every source starts returning 403 —
+    which the probe correctly degrades to "no candidates", leaving the
+    operator with a board that silently stops producing.
+
+    A token raises that to 5,000/hour. It is optional: no token still works,
+    just slower to exhaust.
+    """
+
+    def test_token_is_used_when_available(self, monkeypatch):
+        from project_forge.feeds import _http
+
+        monkeypatch.setenv("GH_TOKEN", "ghp_example")
+        seen = {}
+
+        class _Resp:
+            def read(self):
+                return b"{}"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def _fake_urlopen(req, timeout=15.0):
+            seen["auth"] = req.get_header("Authorization")
+            return _Resp()
+
+        monkeypatch.setattr(_http.urllib.request, "urlopen", _fake_urlopen)
+        _http.http_get_bytes("https://api.github.com/repos/x/y")
+        assert seen["auth"] == "Bearer ghp_example"
+
+    def test_no_token_is_fine(self, monkeypatch):
+        from project_forge.feeds import _http
+
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        seen = {}
+
+        class _Resp:
+            def read(self):
+                return b"{}"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def _fake_urlopen(req, timeout=15.0):
+            seen["auth"] = req.get_header("Authorization")
+            return _Resp()
+
+        monkeypatch.setattr(_http.urllib.request, "urlopen", _fake_urlopen)
+        _http.http_get_bytes("https://api.github.com/repos/x/y")
+        assert seen["auth"] is None
+
+    def test_token_is_only_sent_to_github(self, monkeypatch):
+        """Never leak a credential to an unrelated host."""
+        from project_forge.feeds import _http
+
+        monkeypatch.setenv("GH_TOKEN", "ghp_example")
+        seen = {}
+
+        class _Resp:
+            def read(self):
+                return b"{}"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def _fake_urlopen(req, timeout=15.0):
+            seen["auth"] = req.get_header("Authorization")
+            return _Resp()
+
+        monkeypatch.setattr(_http.urllib.request, "urlopen", _fake_urlopen)
+        _http.http_get_bytes("https://datatracker.ietf.org/feed/wg/lamps/")
+        assert seen["auth"] is None
+
+
+class TestOperatorChosenVenue:
+    """The operator can point the engine at a venue instead of taking
+    whatever the probe happened to surface.
+
+    Two cases have to work. When the probe HAS candidates for that venue,
+    prefer them — a live signal beats a synthetic one. When it does not —
+    Tradier and Polymarket US have no SDK repositories at all — fall back to
+    the registry entry so the choice still produces work rather than "no
+    program surfaced", which would read as the picker being broken.
+    """
+
+    def _candidates(self) -> list[dict]:
+        return [
+            {"url": "https://a", "program_score": 9, "venue": "Coinbase", "title": "coinbase thing"},
+            {"url": "https://b", "program_score": 4, "venue": "Kalshi", "title": "kalshi thing"},
+        ]
+
+    def test_a_chosen_venue_wins_over_a_higher_scoring_other(self):
+        got = venue_probe.pick_top_program(self._candidates(), prefer_venue="Kalshi")
+        assert got["venue"] == "Kalshi"
+
+    def test_without_a_choice_the_best_score_still_wins(self):
+        got = venue_probe.pick_top_program(self._candidates())
+        assert got["venue"] == "Coinbase"
+
+    def test_a_seen_candidate_for_the_chosen_venue_is_revisited(self):
+        got = venue_probe.pick_top_program(self._candidates(), seen_urls={"https://b"}, prefer_venue="Kalshi")
+        assert got["venue"] == "Kalshi"
+        assert got["revisit"] is True
+
+    def test_a_venue_with_no_candidates_falls_back_to_the_registry(self):
+        got = venue_probe.pick_top_program(self._candidates(), prefer_venue="Tradier")
+        assert got is not None, "choosing a venue must always produce work"
+        assert got["venue"] == "Tradier"
+        assert got["url"].startswith("https://")
+        assert got.get("from_registry") is True
+
+    def test_the_registry_fallback_carries_the_family_and_a_category(self):
+        got = venue_probe.program_for_venue("Polymarket US")
+        assert got["family"] == BotVenueFamily.PREDICTION_MARKETS.value
+        assert got["category"] in {c.value for c in MONEY_CATEGORIES}
+        assert "Polymarket US" in got["venue"]
+
+    def test_an_unknown_venue_yields_nothing_rather_than_a_guess(self):
+        assert venue_probe.program_for_venue("Definitely Not A Venue") is None
+
+    def test_a_restricted_venue_cannot_be_chosen(self):
+        """The gate would refuse it anyway; refusing here saves a cycle."""
+        assert venue_probe.program_for_venue("Hyperliquid") is None
+        assert venue_probe.program_for_venue("Polymarket") is None

@@ -47,6 +47,60 @@ def _backendish(node: ast.AST) -> bool:
     return False
 
 
+# Feed fetchers are blocking urllib. A rate-limited GitHub turns each one
+# into a full 15s timeout, and a probe makes dozens — the web app stops
+# answering for minutes while they drain.
+BLOCKING_FETCHERS = frozenset(
+    {
+        "fetch_pki_gaps",
+        "fetch_venue_programs",
+        "fetch_pulse_signals",
+        "fetch_incumbent_intel",
+        "http_get_bytes",
+    }
+)
+
+
+def _direct_body(fn: ast.AST):
+    """Walk an async function's own body, pruning nested function bodies.
+
+    A sync callback DEFINED inside an async function does not run on the
+    loop — whoever invokes it decides that. `_fire_scoreboard` builds a
+    `_gh_stars` closure that blocks, and hands it to a consumer that awaits
+    it off-thread; flagging the definition site would force the blocking
+    call to move somewhere it does not belong.
+    """
+    for node in ast.iter_child_nodes(fn):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            continue
+        yield node
+        for sub in ast.walk(node):
+            if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                continue
+            if sub is not node:
+                yield sub
+
+
+def _inline_fetch_calls(tree: ast.AST) -> list[tuple[str, int]]:
+    """(function name, lineno) for each blocking feed fetch called directly
+    inside an `async def`."""
+    found: list[tuple[str, int]] = []
+    for fn in ast.walk(tree):
+        if not isinstance(fn, ast.AsyncFunctionDef):
+            continue
+        for node in _direct_body(fn):
+            if not isinstance(node, ast.Call):
+                continue
+            name = None
+            if isinstance(node.func, ast.Name):
+                name = node.func.id
+            elif isinstance(node.func, ast.Attribute):
+                name = node.func.attr
+            if name in BLOCKING_FETCHERS:
+                found.append((fn.name, node.lineno))
+    return found
+
+
 def _inline_backend_calls(tree: ast.AST) -> list[tuple[str, int]]:
     """(function name, lineno) for each direct backend.call() inside an
     `async def`."""
@@ -81,4 +135,96 @@ def test_no_inline_backend_calls_in_async_functions(path: Path):
         f"{rel} calls the LLM backend inline inside an async function "
         f"{offenders} — wrap it in `await asyncio.to_thread(backend.call, prompt)` "
         f"or the whole web app stops answering while it runs."
+    )
+
+
+@pytest.mark.parametrize("path", _modules(), ids=lambda p: str(p.name))
+def test_no_inline_feed_fetches_in_async_functions(path: Path):
+    """Same rule, for the network. The dashboard died on this too: the PKI
+    probe's `fetch_pki_gaps()` makes ten HTTP calls inline, and once GitHub
+    started rate-limiting, each one burned its full timeout on the loop."""
+    rel = str(path.relative_to(SRC))
+    if rel in EXEMPT_FILES or rel.startswith("feeds/"):
+        pytest.skip(f"{rel} is the fetcher itself, or sync by design")
+
+    tree = ast.parse(path.read_text())
+    offenders = _inline_fetch_calls(tree)
+    assert not offenders, (
+        f"{rel} makes a blocking feed fetch inside an async function {offenders} — "
+        f"wrap it in `await asyncio.to_thread(...)`."
+    )
+
+
+def _sync_blocking_functions() -> set[str]:
+    """Names of SYNC functions anywhere in the package that call the LLM
+    backend directly.
+
+    These are the second-order blockers. `semantic_dedup_check` is sync and
+    shells out to `claude --print`; called inline from an async function it
+    froze every request the web app was serving, once per borderline pair,
+    on every save — and the first version of this test could not see it,
+    because the blocking call sits one frame down.
+    """
+    # First pass: sync functions that call the backend directly.
+    names: set[str] = set()
+    # name -> the sync function names it calls, for the transitive pass.
+    calls: dict[str, set[str]] = {}
+
+    for path in _modules():
+        tree = ast.parse(path.read_text())
+        for fn in ast.walk(tree):
+            if not isinstance(fn, ast.FunctionDef):  # sync only
+                continue
+            called: set[str] = set()
+            for node in ast.walk(fn):
+                if not isinstance(node, ast.Call):
+                    continue
+                if isinstance(node.func, ast.Attribute) and node.func.attr == "call" and _backendish(node.func.value):
+                    names.add(fn.name)
+                if isinstance(node.func, ast.Name):
+                    called.add(node.func.id)
+            calls[fn.name] = called
+
+    # Transitive closure: a sync wrapper around a blocker blocks too.
+    # `estimate_build` never touches the backend itself — it calls
+    # `_llm_estimate`, which does — and /api/recruiter awaited neither.
+    changed = True
+    while changed:
+        changed = False
+        for name, called in calls.items():
+            if name not in names and (called & names):
+                names.add(name)
+                changed = True
+    return names
+
+
+# `_reasoning_llm_call` builds and RETURNS a callable; invoking the factory
+# does not touch the network. What it returns does block, which is why its
+# consumer (synthesize_super_idea) is threaded instead.
+_FACTORY_FALSE_POSITIVES = frozenset({"_reasoning_llm_call"})
+
+SYNC_BLOCKERS = _sync_blocking_functions() - _FACTORY_FALSE_POSITIVES
+
+
+@pytest.mark.parametrize("path", _modules(), ids=lambda p: str(p.name))
+def test_no_async_function_calls_a_sync_blocker_inline(path: Path):
+    """An async function may reference a blocking sync helper (passing it to
+    to_thread), but must never invoke it directly."""
+    rel = str(path.relative_to(SRC))
+    if rel in EXEMPT_FILES:
+        pytest.skip(f"{rel} is sync by design")
+
+    tree = ast.parse(path.read_text())
+    offenders: list[tuple[str, str, int]] = []
+    for fn in ast.walk(tree):
+        if not isinstance(fn, ast.AsyncFunctionDef):
+            continue
+        for node in ast.walk(fn):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                if node.func.id in SYNC_BLOCKERS:
+                    offenders.append((fn.name, node.func.id, node.lineno))
+
+    assert not offenders, (
+        f"{rel} calls a blocking sync helper inline from async code {offenders} — "
+        f"these shell out to the LLM backend; wrap in `await asyncio.to_thread(fn, ...)`."
     )

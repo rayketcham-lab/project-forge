@@ -477,32 +477,88 @@ def fetch_venue_programs(
     return scored[:max_items]
 
 
-def pick_top_program(candidates: list[dict], *, seen_urls: set[str] | None = None) -> dict | None:
+# Which category a venue's own mechanics most naturally support, used when
+# the operator picks a venue the probe has no live signal for. A hint, not a
+# constraint — the cadence's own rotation still applies.
+_VENUE_DEFAULT_CATEGORY: dict[BotVenueFamily, IdeaCategory] = {
+    BotVenueFamily.PREDICTION_MARKETS: IdeaCategory.INCENTIVE_CAPTURE,
+    BotVenueFamily.CRYPTO_DEFI: IdeaCategory.BASIS_CARRY,
+    BotVenueFamily.BROKERAGE: IdeaCategory.CAPITAL_AUTOMATION,
+    BotVenueFamily.SPORTSBOOK: IdeaCategory.CROSS_VENUE_ARBITRAGE,
+    BotVenueFamily.OTHER: IdeaCategory.CAPITAL_AUTOMATION,
+}
+
+
+def program_for_venue(name: str) -> dict | None:
+    """A synthetic program grounded in the venue registry.
+
+    Tradier and Polymarket US have no SDK repositories, so the probe never
+    surfaces a candidate for them. Without this, choosing one of those in the
+    UI would answer "no venue program surfaced" and read as a broken picker.
+    The registry entry — the venue's own documentation — is the grounding
+    instead.
+
+    Returns None for anything not registered, and for anything a US operator
+    cannot trade: the gate would refuse it downstream anyway, and refusing
+    here saves a full generation.
+    """
+    venue = _VENUE_BY_NAME.get(name)
+    if venue is None or venue.us_status == "restricted":
+        return None
+    return {
+        "venue": venue.name,
+        "family": venue.family.value,
+        "category": _VENUE_DEFAULT_CATEGORY.get(venue.family, IdeaCategory.CAPITAL_AUTOMATION).value,
+        "title": f"operator-directed: {venue.name}",
+        "url": venue.docs_url,
+        "summary": venue.eligibility_note,
+        "source": "venue-registry",
+        "program_score": 1,
+        "from_registry": True,
+    }
+
+
+def pick_top_program(
+    candidates: list[dict],
+    *,
+    seen_urls: set[str] | None = None,
+    prefer_venue: str | None = None,
+) -> dict | None:
     """The SINGLE program to work this cycle.
 
-    Unseen candidates win. When every candidate has already been probed the
-    highest-scoring one is returned anyway, marked `revisit`.
+    When the operator has chosen a venue, only that venue's candidates are
+    considered, and if the probe has none the registry entry stands in — a
+    choice must always produce work.
 
-    That fallback exists because the alternative was worse: after the board
-    went US-only the pool shrank to a handful of items, every URL was
-    already in the seen set, and the cadence answered "no new venue program
-    surfaced" forever — a button that looked broken while the probe quietly
-    declared the world exhausted.
+    Otherwise: unseen candidates win, and when every candidate has already
+    been probed the highest-scoring one is returned marked `revisit`. That
+    fallback exists because the alternative was worse — after the board went
+    US-only the pool shrank to a handful, every URL was already seen, and the
+    cadence answered "no new venue program surfaced" forever while looking
+    broken.
 
     A previously worked program is not used up. What gets built from it
     depends on the category rotation, the mechanism drawn from the library,
-    and the accumulated rejection lessons, and all three have moved on since
-    the last visit. Only a genuinely empty pool returns None.
+    and the accumulated rejection lessons, and all three have moved on since.
+    Only a genuinely empty pool returns None.
     """
     seen = seen_urls or set()
-    ordered = sorted(candidates, key=lambda c: c.get("program_score", 0), reverse=True)
+    pool = list(candidates)
+
+    if prefer_venue:
+        chosen = [c for c in pool if (c.get("venue") or "").lower() == prefer_venue.lower()]
+        if not chosen:
+            return program_for_venue(prefer_venue)
+        pool = chosen
+
+    ordered = sorted(pool, key=lambda c: c.get("program_score", 0), reverse=True)
     for c in ordered:
         if c.get("url") and c["url"] in seen:
             continue
         return c
     if ordered:
         return {**ordered[0], "revisit": True}
-    return None
+    return program_for_venue(prefer_venue) if prefer_venue else None
 
 
 def program_to_seed(

@@ -456,3 +456,91 @@ class TestRunTail:
 
         js = (Path(__file__).resolve().parent.parent / "src/project_forge/web/static/money_bots.js").read_text()
         assert "clearInterval" in js
+
+
+class TestTailKeepsItselfCurrent:
+    """An open tab must not go stale.
+
+    The operator clicked Generate on a tab loaded before the tail shipped,
+    saw nothing, and reasonably concluded the feature was broken — the
+    backend was narrating the whole time. Beyond that first-load case, a
+    cadence fire starts a run nobody clicked, and a tab sitting open should
+    still show it rather than looking idle.
+    """
+
+    def _js(self) -> str:
+        from pathlib import Path
+
+        return (Path(__file__).resolve().parent.parent / "src/project_forge/web/static/money_bots.js").read_text()
+
+    def test_it_polls_even_without_a_click(self):
+        js = self._js()
+        assert "IDLE_POLL_MS" in js, "an idle tab must keep checking for runs it did not start"
+
+    def test_it_speeds_up_while_a_run_is_live(self):
+        js = self._js()
+        assert "LIVE_POLL_MS" in js
+
+    def test_the_asset_version_is_bumped_when_the_script_changes(self):
+        from pathlib import Path
+
+        html = (Path(__file__).resolve().parent.parent / "src/project_forge/web/templates/money_bots.html").read_text()
+        import re
+
+        m = re.search(r"money_bots\.js\?v=(\d+)", html)
+        assert m and int(m.group(1)) >= 5, "bump the cache-buster or open tabs keep running the old script"
+
+
+class TestVenuePicker:
+    """Operator-directed generation: point a cycle at one venue."""
+
+    @pytest.mark.asyncio
+    async def test_only_us_eligible_venues_are_offered(self, client):
+        from project_forge.feeds.venue_probe import VENUE_REGISTRY
+
+        html = (await client.get("/money-bots")).text
+        picker = html[html.index('id="venue-pick"') : html.index("</select>")]
+
+        for venue in VENUE_REGISTRY:
+            if venue.us_status == "eligible":
+                assert venue.name in picker, f"{venue.name} should be offerable"
+            if venue.us_status == "restricted":
+                assert f'value="{venue.name}"' not in picker, f"{venue.name} is not tradeable and must not be offered"
+
+    @pytest.mark.asyncio
+    async def test_any_venue_is_the_default(self, client):
+        html = (await client.get("/money-bots")).text
+        picker = html[html.index('id="venue-pick"') : html.index("</select>")]
+        assert 'value=""' in picker
+
+    @pytest.mark.asyncio
+    async def test_the_choice_reaches_the_cadence(self, client, monkeypatch):
+        from project_forge.web import lifespan_scheduler as ls
+
+        seen = {}
+
+        async def _fake_fire(_db, venue=None):
+            seen["venue"] = venue
+
+        monkeypatch.setattr(ls, "_fire_bot_strategy", _fake_fire)
+        await client.post("/api/churn", json={"lab": "money", "venue": "Kalshi"})
+        assert seen["venue"] == "Kalshi"
+
+    @pytest.mark.asyncio
+    async def test_no_choice_means_follow_the_signal(self, client, monkeypatch):
+        from project_forge.web import lifespan_scheduler as ls
+
+        seen = {}
+
+        async def _fake_fire(_db, venue=None):
+            seen["venue"] = venue
+
+        monkeypatch.setattr(ls, "_fire_bot_strategy", _fake_fire)
+        await client.post("/api/churn", json={"lab": "money", "venue": ""})
+        assert seen["venue"] is None
+
+    def test_js_sends_the_selected_venue(self):
+        from pathlib import Path
+
+        js = (Path(__file__).resolve().parent.parent / "src/project_forge/web/static/money_bots.js").read_text()
+        assert "venue-pick" in js

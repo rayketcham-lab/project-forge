@@ -117,6 +117,13 @@
         </div>
 
         <div class="churn-row">
+            <label class="venue-pick-label" for="venue-pick">Venue</label>
+            <select id="venue-pick" class="scaffold-select venue-pick">
+                <option value="">Any &mdash; follow the signal</option>
+                {% for venue in pickable_venues %}
+                <option value="{{ venue.name }}">{{ venue.name }} &middot; {{ venue.family.value }}</option>
+                {% endfor %}
+            </select>
             <button id="churn-btn" class="btn btn-primary btn-churn" type="button">
                 <span class="churn-icon">&#9889;</span>
                 <span class="churn-label">Generate one now</span>
@@ -314,5 +321,5 @@
     </div>
 </section>
 
-<script src="/static/money_bots.js?v=4"></script>
+<script src="/static/money_bots.js?v=6"></script>
 {% endblock %}

@@ -41,7 +41,10 @@
                 var resp = await fetch('/api/churn', {
                     method: 'POST',
                     headers: authHeaders(),
-                    body: JSON.stringify({ lab: 'money' })
+                    body: JSON.stringify({
+                        lab: 'money',
+                        venue: (document.getElementById('venue-pick') || {}).value || ''
+                    })
                 });
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 var data = await resp.json();
@@ -70,6 +73,13 @@
     var tailList = document.getElementById('run-events');
     var tailStatus = document.getElementById('run-tail-status');
     var pollTimer = null;
+    var pollEvery = null;
+
+    // A tab left open must not go stale. It checks quietly when idle and
+    // speeds up while a run is live — including runs it did not start, such
+    // as the two-hourly cadence firing on its own.
+    var IDLE_POLL_MS = 15000;
+    var LIVE_POLL_MS = 3000;
 
     function renderTail(data) {
         if (!tailList || !tailStatus) return;
@@ -92,7 +102,6 @@
             li.appendChild(detail);
             tailList.appendChild(li);
         });
-        // Newest work is at the bottom; keep it in view while open.
         if (tailBlock && tailBlock.open) {
             tailList.scrollTop = tailList.scrollHeight;
         }
@@ -104,27 +113,43 @@
             if (!resp.ok) return false;
             var data = await resp.json();
             renderTail(data);
-            return data.running;
+            return !!data.running;
         } catch (e) {
             return false;
         }
     }
 
-    function startPolling() {
-        if (pollTimer) return;
-        if (tailBlock) tailBlock.open = true;
-        pollProgress();
-        pollTimer = setInterval(async function () {
-            var stillRunning = await pollProgress();
-            if (!stillRunning) {
-                clearInterval(pollTimer);
-                pollTimer = null;
-            }
-        }, 3000);
+    function schedulePolling(intervalMs) {
+        if (pollEvery === intervalMs && pollTimer) return;
+        if (pollTimer) clearInterval(pollTimer);
+        pollEvery = intervalMs;
+        pollTimer = setInterval(tick, intervalMs);
     }
 
-    // Show the last run's tail on load, and resume polling if one is live.
-    pollProgress().then(function (running) { if (running) startPolling(); });
+    async function tick() {
+        var running = await pollProgress();
+        // Live runs get a fast cadence; an idle tab drops back to a quiet
+        // heartbeat rather than stopping, so it notices the next run.
+        schedulePolling(running ? LIVE_POLL_MS : IDLE_POLL_MS);
+        if (running && tailBlock && !tailBlock.dataset.opened) {
+            tailBlock.open = true;
+            tailBlock.dataset.opened = '1';
+        }
+    }
+
+    function startPolling() {
+        if (tailBlock) {
+            tailBlock.open = true;
+            tailBlock.dataset.opened = '1';
+        }
+        tick();
+        schedulePolling(LIVE_POLL_MS);
+    }
+
+    if (tailList) {
+        tick();
+        schedulePolling(IDLE_POLL_MS);
+    }
 
     // === Per-card Scaffold bot ===
     var scaffoldStatus = document.getElementById('scaffold-status');
