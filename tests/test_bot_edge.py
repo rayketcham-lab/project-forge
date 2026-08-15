@@ -28,7 +28,7 @@ from project_forge.models import BotSpec, BotVenueFamily, Idea, IdeaCategory
 
 def _spec(**over) -> BotSpec:
     base = dict(
-        venue="Polymarket",
+        venue="Polymarket US",
         venue_url="https://docs.polymarket.com/rewards",
         family=BotVenueFamily.PREDICTION_MARKETS,
         api_primitives=["CLOB REST order placement", "websocket book feed"],

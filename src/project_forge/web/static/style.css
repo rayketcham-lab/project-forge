@@ -2126,3 +2126,126 @@ p.muted, .muted { color: var(--text-muted, #5a6478); font-size: 0.88rem; }
 }
 .strategy-card-flagged .strategy-objection strong { color: var(--red); }
 .churn-row { margin-bottom: 1rem; }
+
+
+/* v0.24.2 money-bots: compact strategy cards.
+   Cards were rendering the entire spec inline — ~1.5KB of text each, so
+   four of them read as a wall rather than a board. The card now carries
+   only what you scan by; everything long lives behind one toggle. */
+.strategy-grid {
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    align-items: start;
+}
+.strategy-card { padding: 1rem 1.15rem 0.85rem; gap: 0; }
+.strategy-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: nowrap;
+    margin-bottom: 0.5rem;
+    padding-right: 1.5rem;
+}
+.venue-badge {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+.verdict-pill { margin-left: auto; white-space: nowrap; flex-shrink: 0; }
+.verdict-incomplete { color: var(--text-muted); border: 1px solid var(--border); }
+
+.strategy-name {
+    font-size: 0.98rem;
+    line-height: 1.35;
+    margin: 0 0 0.35rem;
+    color: var(--text);
+}
+/* Two lines of mechanism is the pitch; the rest is in the toggle. */
+.card-mech {
+    color: var(--text-dim);
+    font-size: 0.84rem;
+    line-height: 1.5;
+    margin: 0 0 0.7rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    line-clamp: 3;
+    overflow: hidden;
+}
+.card-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+    margin-bottom: 0.6rem;
+}
+.capital-chip {
+    font-size: 0.74rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--green);
+    background: rgba(34,197,94,0.1);
+    border: 1px solid rgba(34,197,94,0.28);
+    border-radius: 4px;
+    padding: 0.1rem 0.45rem;
+    white-space: nowrap;
+}
+.api-count {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.08rem 0.45rem;
+}
+.card-chips .cat-tag { font-size: 0.7rem; }
+/* The objection is the point of a flagged card — visible, but two lines. */
+.card-objection {
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+    border-left: 2px solid var(--orange);
+    padding-left: 0.6rem;
+    margin: 0 0 0.6rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-clamp: 2;
+    overflow: hidden;
+}
+.strategy-card-flagged .card-objection { border-left-color: var(--red); }
+
+.card-more > summary {
+    cursor: pointer;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent-light);
+    list-style: none;
+    padding: 0.15rem 0;
+}
+.card-more > summary::-webkit-details-marker { display: none; }
+.card-more > summary::before { content: '+ '; }
+.card-more[open] > summary::before { content: '\2212 '; }
+.spec-list { margin: 0.5rem 0 0; font-size: 0.8rem; }
+.spec-list dt {
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-top: 0.6rem;
+}
+.spec-list dt:first-child { margin-top: 0; }
+.spec-list dd { margin: 0.2rem 0 0; color: var(--text-dim); line-height: 1.5; }
+.spec-list .kill-list { padding-left: 1.05rem; margin: 0; }
+.spec-list .kill-list li { margin-bottom: 0.25rem; }
+
+.strategy-foot {
+    margin-top: 0.75rem;
+    padding-top: 0.6rem;
+    gap: 0.75rem;
+}
+.strategy-foot .scaffold-bot-btn { margin-left: auto; }

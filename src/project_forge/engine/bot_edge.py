@@ -487,6 +487,20 @@ def admits(idea: Idea, score: float) -> tuple[bool, str]:
     if not (spec.venue_url or spec.validation_plan):
         return False, "nothing to verify against: no venue URL and no validation plan"
 
+    # US-only board. A venue the operator cannot legally trade on is not a
+    # money-making idea, and this fails closed: an unrecognised venue is
+    # refused pending verification rather than assumed safe.
+    from project_forge.feeds.venue_probe import venue_us_status
+
+    status = venue_us_status(spec.venue)
+    if status == "restricted":
+        return False, f"venue is not available to a US operator: {spec.venue[:80]}"
+    if status == "verify":
+        return False, (
+            f"US eligibility unverified for {spec.venue[:80]} — name a venue the operator "
+            f"can trade on, or establish eligibility explicitly"
+        )
+
     if score < BOT_ADMIT_THRESHOLD:
         return False, f"edge {score:.2f} below admit threshold {BOT_ADMIT_THRESHOLD:.2f}"
 
@@ -527,3 +541,45 @@ async def score_pending_bot_edge(db: Database, limit: int = 50) -> dict[str, Any
         await db.save_idea(idea)
         scored += 1
     return {"scored": scored, "limit": limit}
+
+
+async def reverdict_us_eligibility(db: Database) -> dict[str, Any]:
+    """Re-judge stored strategies against the US-eligibility rule.
+
+    Run after the rule changed. Three strategies were sitting on the board
+    marked `vetted` while naming the offshore Polymarket CLOB, which the
+    operator cannot trade — adding the rule without re-running it over what
+    is already stored would leave the board advertising venues it should
+    refuse.
+
+    Marks them `us-ineligible` rather than deleting: the strategy may be
+    sound, it is the venue that is out of reach, and that distinction is
+    worth keeping. Idempotent.
+    """
+    from project_forge.feeds.venue_probe import venue_us_status
+
+    placeholders = ",".join("?" * len(MONEY_CATEGORIES))
+    cur = await db.db.execute(
+        f"SELECT id FROM ideas "  # noqa: S608
+        f"WHERE generation_mode = 'bot' "
+        f"AND category IN ({placeholders}) "
+        f"AND status NOT IN ('archived', 'rejected')",
+        tuple(c.value for c in MONEY_CATEGORIES),
+    )
+    rows = await cur.fetchall()
+
+    changed = 0
+    for row in rows:
+        idea = await db.get_idea(row["id"])
+        if idea is None or idea.bot_spec is None:
+            continue
+        if idea.bot_spec.panel_verdict == "us-ineligible":
+            continue
+        if venue_us_status(idea.bot_spec.venue) != "restricted":
+            continue
+        idea.bot_spec.panel_verdict = "us-ineligible"
+        await db.save_idea(idea)
+        changed += 1
+
+    logger.info("US eligibility re-verdict: %d strategies marked ineligible", changed)
+    return {"reverdicted": changed, "checked": len(rows)}

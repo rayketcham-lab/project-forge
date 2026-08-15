@@ -194,9 +194,13 @@ class TestPickAndSeed:
         got = venue_probe.pick_top_program(candidates, seen_urls={"https://a"})
         assert got["url"] == "https://b"
 
-    def test_returns_none_when_everything_is_seen(self):
+    def test_a_fully_seen_pool_yields_a_revisit_not_nothing(self):
+        """Superseded: returning None here starved the cadence permanently.
+        See TestNeverStarves for the reasoning."""
         candidates = [{"url": "https://a", "program_score": 5}]
-        assert venue_probe.pick_top_program(candidates, seen_urls={"https://a"}) is None
+        got = venue_probe.pick_top_program(candidates, seen_urls={"https://a"})
+        assert got is not None
+        assert got["revisit"] is True
 
     def test_returns_none_on_empty(self):
         assert venue_probe.pick_top_program([]) is None
@@ -282,3 +286,135 @@ class TestJurisdiction:
         monkeypatch.setattr(settings, "operator_jurisdiction", "")
         seed = venue_probe.program_to_seed(self._program(), primitive=None)
         assert "operator is based in" not in seed
+
+
+class TestFeeArithmetic:
+    """Every live kill so far was fee arithmetic, so the seed must demand it.
+
+    Observed: drafts quoted "0.035% round-trip" when that figure was one
+    fill on each venue — entry only. The true round trip is double. The
+    generator has to do that sum itself, because the panel doing it later
+    costs a whole cycle.
+    """
+
+    def _program(self) -> dict:
+        return {
+            "venue": "Hyperliquid",
+            "family": BotVenueFamily.CRYPTO_DEFI.value,
+            "category": IdeaCategory.BASIS_CARRY.value,
+            "title": "funding endpoint",
+            "url": "https://example.com/x",
+            "summary": "funding history",
+            "source": "github-release",
+            "program_score": 5,
+        }
+
+    def test_seed_demands_round_trip_costs(self):
+        seed = venue_probe.program_to_seed(self._program(), primitive=None).lower()
+        assert "round trip" in seed or "round-trip" in seed
+        assert "entry and exit" in seed or "both legs" in seed
+
+    def test_seed_demands_a_net_return(self):
+        seed = venue_probe.program_to_seed(self._program(), primitive=None).lower()
+        assert "net of" in seed
+
+    def test_seed_tells_it_to_walk_away(self):
+        """A strategy that cannot clear its costs should be abandoned in the
+        prompt, not defended and then killed by the panel."""
+        seed = venue_probe.program_to_seed(self._program(), primitive=None).lower()
+        assert "does not clear" in seed or "cannot clear" in seed
+
+
+class TestAvoidLessons:
+    """Rejections are the cheapest training signal this board has.
+
+    The panel kept killing the same two errors — a one-way fee quoted as a
+    round trip, and a capacity claim the reward pool cannot pay. Nothing
+    carried that back into the next generation, so it made them again.
+    """
+
+    def _program(self) -> dict:
+        return {
+            "venue": "Polymarket",
+            "family": BotVenueFamily.PREDICTION_MARKETS.value,
+            "category": IdeaCategory.INCENTIVE_CAPTURE.value,
+            "title": "rewards",
+            "url": "https://example.com/x",
+            "summary": "reward budget",
+            "source": "github-issue",
+            "program_score": 5,
+        }
+
+    def test_lessons_reach_the_seed(self):
+        seed = venue_probe.program_to_seed(
+            self._program(),
+            primitive=None,
+            avoid_lessons=[
+                "Reward Minute Maker: quoted a one-way fee as a round trip",
+                "Carry Bot: capacity claim exceeded what the reward pool pays",
+            ],
+        )
+        assert "one-way fee as a round trip" in seed
+        assert "capacity claim exceeded" in seed
+
+    def test_seed_tells_it_not_to_repeat_them(self):
+        seed = venue_probe.program_to_seed(
+            self._program(), primitive=None, avoid_lessons=["X: fees were wrong"]
+        ).lower()
+        assert "already rejected" in seed or "do not repeat" in seed
+
+    def test_no_lessons_is_fine(self):
+        seed = venue_probe.program_to_seed(self._program(), primitive=None, avoid_lessons=[])
+        assert "Polymarket" in seed
+
+
+class TestNeverStarves:
+    """The probe must never permanently run out of work.
+
+    Live failure: after the board went US-only the candidate pool shrank to
+    a single item, all 16 previously probed URLs were marked seen forever,
+    and every click of "Generate one now" answered "no new venue program
+    surfaced from any source". The button looked broken; the probe had
+    simply declared the world exhausted.
+
+    A previously worked program is not used up. The strategy built from it
+    depends on the category rotation, the mechanism drawn from the library,
+    and the accumulated rejection lessons — all of which have moved.
+    """
+
+    def _candidates(self) -> list[dict]:
+        return [
+            {"url": "https://a", "program_score": 5, "title": "a"},
+            {"url": "https://b", "program_score": 3, "title": "b"},
+        ]
+
+    def test_unseen_is_still_preferred(self):
+        got = venue_probe.pick_top_program(self._candidates(), seen_urls={"https://a"})
+        assert got["url"] == "https://b"
+
+    def test_falls_back_to_a_revisit_when_everything_is_seen(self):
+        got = venue_probe.pick_top_program(self._candidates(), seen_urls={"https://a", "https://b"})
+        assert got is not None, "an exhausted pool must still yield work"
+        assert got["url"] == "https://a"
+        assert got.get("revisit") is True
+
+    def test_a_revisit_is_marked_so_the_log_is_honest(self):
+        got = venue_probe.pick_top_program([{"url": "https://a", "program_score": 5}], seen_urls={"https://a"})
+        assert got["revisit"] is True
+
+    def test_an_actually_empty_pool_still_returns_none(self):
+        assert venue_probe.pick_top_program([], seen_urls={"https://a"}) is None
+
+    def test_fresh_candidates_are_not_marked_revisit(self):
+        got = venue_probe.pick_top_program(self._candidates(), seen_urls=set())
+        assert not got.get("revisit")
+
+
+class TestSourceBreadth:
+    def test_enough_sources_to_keep_the_pool_alive(self):
+        """One repo's issue tracker is not a pipeline."""
+        assert len(venue_probe.PROBE_REPOS) >= 10
+
+    def test_sources_span_several_venues(self):
+        venues = {v for _repo, v in venue_probe.PROBE_REPOS}
+        assert len(venues) >= 5

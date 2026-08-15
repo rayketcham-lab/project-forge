@@ -20,7 +20,7 @@ import pytest
 from project_forge.models import BotSpec, BotVenueFamily, Idea, IdeaCategory
 
 _PROGRAM = {
-    "venue": "Polymarket",
+    "venue": "Polymarket US",
     "family": BotVenueFamily.PREDICTION_MARKETS.value,
     "category": IdeaCategory.INCENTIVE_CAPTURE.value,
     "title": "Liquidity rewards: qualifying spread not documented",
@@ -33,7 +33,7 @@ _PROGRAM = {
 
 def _spec(**over) -> BotSpec:
     base = dict(
-        venue="Polymarket",
+        venue="Polymarket US",
         venue_url="https://docs.polymarket.com/rewards",
         family=BotVenueFamily.PREDICTION_MARKETS,
         api_primitives=["CLOB REST order placement", "websocket book feed"],
@@ -104,14 +104,14 @@ class TestProbeLog:
     async def test_records_and_lists(self, db):
         await db.record_bot_probe(
             program_summary="Polymarket rewards",
-            venue="Polymarket",
+            venue="Polymarket US",
             anchor="https://example.com/1",
             admitted=False,
             reason="panel killed it",
         )
         rows = await db.list_bot_probes(limit=5)
         assert len(rows) == 1
-        assert rows[0]["venue"] == "Polymarket"
+        assert rows[0]["venue"] == "Polymarket US"
         assert rows[0]["admitted"] is False
         assert rows[0]["reason"] == "panel killed it"
 
@@ -273,24 +273,136 @@ class TestCadence:
         assert stored.generation_mode == "bot"
         assert stored.bot_edge_score == 0.82
         assert stored.bot_spec is not None
-        assert stored.bot_spec.venue == "Polymarket"
+        assert stored.bot_spec.venue == "Polymarket US"
 
-    async def test_already_probed_programs_are_skipped(self, db, sched, monkeypatch):
-        """The same GitHub issue must not be worked twice."""
+    async def test_an_already_probed_program_is_revisited_not_skipped(self, db, sched, monkeypatch):
+        """Superseded contract. Skipping a seen program starved the cadence:
+        once every URL had been probed, every fire answered "no new venue
+        program" forever and the button looked broken. A revisit produces a
+        different strategy because the category rotation, the mechanism and
+        the accumulated lessons have all moved on."""
+        from project_forge.engine.bot_depth import StressResult
+
         await db.record_bot_probe(
             program_summary="seen",
-            venue="Polymarket",
+            venue="Polymarket US",
             anchor=_PROGRAM["url"],
             admitted=False,
             reason="already worked",
         )
         monkeypatch.setattr(sched, "_bot_fetch_programs", lambda: [_PROGRAM])
+
+        seen_program = {}
+
+        async def _gen(_db, _cat, program, _primitive, avoid_lessons=None):
+            seen_program.update(program)
+            return _Result(_idea())
+
+        async def _survive(idea):
+            return StressResult(idea=idea, survived=True, passes=4)
+
+        async def _score(_i):
+            return 0.8
+
+        monkeypatch.setattr(sched, "_bot_generate", _gen)
+        monkeypatch.setattr(sched, "_bot_stress", _survive)
+        monkeypatch.setattr(sched, "_bot_score", _score)
         await sched._fire_bot_strategy(db)
 
+        assert seen_program.get("revisit") is True, "the seen program should be revisited"
         probes = await db.list_bot_probes()
-        assert len(probes) == 2
-        assert "no new" in (probes[-0]["reason"] or "").lower() or "no new" in (probes[0]["reason"] or "").lower()
+        assert "revisit" in (probes[0]["reason"] or "")
 
     async def test_cadence_is_registered_on_a_schedule(self, sched):
         names = sched.cadence_names() if hasattr(sched, "cadence_names") else []
         assert "bot_strategy" in names or any("bot" in n for n in names)
+
+
+@pytest.mark.asyncio
+class TestCategoryRotation:
+    """The probe kept routing to whatever the SDK release notes talked about,
+    which is market-making and basis-carry — the two categories where fees
+    genuinely eat a retail-size edge. Three live cycles produced three
+    flagged strategies and never once tried capital-automation or
+    incentive-capture, where the venue PAYS you rather than you extracting
+    from other traders.
+    """
+
+    async def test_routed_category_is_used_when_it_is_under_represented(self, db, sched):
+        picked = await sched._pick_bot_category(db, IdeaCategory.MARKET_MAKING)
+        assert picked is IdeaCategory.MARKET_MAKING
+
+    async def test_rotates_away_from_a_saturated_category(self, db, sched):
+        for i in range(3):
+            idea = _idea(name=f"Maker {i}", category=IdeaCategory.MARKET_MAKING)
+            idea.content_hash = f"mm{i}"
+            idea.bot_edge_score = 0.8
+            await db.save_idea(idea)
+
+        picked = await sched._pick_bot_category(db, IdeaCategory.MARKET_MAKING)
+        assert picked is not IdeaCategory.MARKET_MAKING
+        from project_forge.models import MONEY_CATEGORIES
+
+        assert picked in MONEY_CATEGORIES
+
+    async def test_prefers_the_least_used_category(self, db, sched):
+        for cat, n in (
+            (IdeaCategory.MARKET_MAKING, 3),
+            (IdeaCategory.BASIS_CARRY, 2),
+            (IdeaCategory.CROSS_VENUE_ARBITRAGE, 2),
+            (IdeaCategory.INCENTIVE_CAPTURE, 1),
+        ):
+            for i in range(n):
+                idea = _idea(name=f"{cat.value} {i}", category=cat)
+                idea.content_hash = f"{cat.value}{i}"
+                idea.bot_edge_score = 0.8
+                await db.save_idea(idea)
+
+        # capital-automation has none at all — it should win.
+        picked = await sched._pick_bot_category(db, IdeaCategory.MARKET_MAKING)
+        assert picked is IdeaCategory.CAPITAL_AUTOMATION
+
+
+@pytest.mark.asyncio
+class TestLessonsFeedBack:
+    """What the red team rejected must reach the next generation."""
+
+    async def test_flagged_objections_become_lessons(self, db, sched):
+        killed = _idea(name="Bad Carry")
+        killed.content_hash = "bc1"
+        killed.bot_spec.panel_verdict = "flagged"
+        killed.bot_spec.surviving_objection = "quoted a one-way fee as a round trip"
+        await db.save_idea(killed)
+
+        lessons = await sched._bot_avoid_lessons(db)
+        assert any("one-way fee" in lesson for lesson in lessons)
+        assert any("Bad Carry" in lesson for lesson in lessons)
+
+    async def test_vetted_strategies_are_not_lessons(self, db, sched):
+        good = _idea(name="Good Carry")
+        good.content_hash = "gc1"
+        good.bot_spec.panel_verdict = "vetted"
+        good.bot_spec.surviving_objection = "minor capacity note"
+        await db.save_idea(good)
+
+        assert await sched._bot_avoid_lessons(db) == []
+
+    async def test_lessons_are_passed_to_the_generator(self, db, sched, monkeypatch):
+        killed = _idea(name="Bad Carry")
+        killed.content_hash = "bc2"
+        killed.bot_spec.panel_verdict = "flagged"
+        killed.bot_spec.surviving_objection = "capacity claim exceeded the reward pool"
+        await db.save_idea(killed)
+
+        seen = {}
+
+        async def _gen(_db, _cat, _program, _primitive, avoid_lessons=None):
+            seen["lessons"] = avoid_lessons
+            return None
+
+        monkeypatch.setattr(sched, "_bot_fetch_programs", lambda: [_PROGRAM])
+        monkeypatch.setattr(sched, "_bot_generate", _gen)
+        await sched._fire_bot_strategy(db)
+
+        assert seen["lessons"]
+        assert any("capacity claim" in lesson for lesson in seen["lessons"])

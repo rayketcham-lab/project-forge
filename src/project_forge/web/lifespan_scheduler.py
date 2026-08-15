@@ -28,6 +28,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
+from project_forge.models import IdeaCategory
 from project_forge.storage.db import Database
 
 logger = logging.getLogger(__name__)
@@ -748,10 +749,41 @@ def _bot_fetch_programs() -> list[dict]:
     return fetch_venue_programs()
 
 
-async def _bot_generate(db: Database, category, program: dict, primitive):
+async def _bot_generate(db: Database, category, program: dict, primitive, avoid_lessons=None):
     from project_forge.engine.llm_generator import generate_bot_llm
 
-    return await generate_bot_llm(db, category, program=program, primitive=primitive)
+    return await generate_bot_llm(
+        db,
+        category,
+        program=program,
+        primitive=primitive,
+        avoid_lessons=avoid_lessons,
+    )
+
+
+async def _bot_avoid_lessons(db: Database, limit: int = 6) -> list[str]:
+    """What the red team already rejected, and why.
+
+    Fed back into the next generation. The panel kept killing the same two
+    errors — a one-way fee quoted as a round trip, and a capacity claim the
+    reward pool cannot pay — and nothing carried that forward, so the
+    generator made them again on the next cycle.
+    """
+    cur = await db.db.execute(
+        "SELECT name, json_extract(bot_spec, '$.surviving_objection') AS objection "
+        "FROM ideas WHERE generation_mode = 'bot' "
+        "AND json_extract(bot_spec, '$.panel_verdict') IN ('flagged', 'below-bar') "
+        "AND status NOT IN ('archived', 'rejected') "
+        "ORDER BY generated_at DESC LIMIT ?",
+        (limit,),
+    )
+    lessons = []
+    for row in await cur.fetchall():
+        objection = (row["objection"] or "").strip()
+        if not objection:
+            continue
+        lessons.append(f"{row['name']}: {objection[:280]}")
+    return lessons
 
 
 async def _bot_stress(idea):
@@ -764,6 +796,46 @@ async def _bot_score(idea) -> float:
     from project_forge.engine.bot_edge import score_bot_edge
 
     return await score_bot_edge(idea)
+
+
+async def _pick_bot_category(db: Database, routed):
+    """Which bot category to work, given where the signal routed.
+
+    The signal's own routing is used when that category is not already
+    over-represented. It usually is: SDK release notes talk about order
+    books and funding rates, so the probe kept landing on market-making and
+    basis-carry — the two categories where fees genuinely eat a retail-size
+    edge. Three live cycles produced three flagged strategies and never once
+    tried capital-automation or incentive-capture, where the venue PAYS you
+    rather than you extracting from other traders.
+
+    So a saturated route yields to the least-explored category. The signal
+    still grounds the strategy; it just gets applied somewhere the operator
+    has a chance of clearing costs.
+    """
+    from project_forge.models import MONEY_CATEGORIES
+
+    counts = {c: 0 for c in MONEY_CATEGORIES}
+    cur = await db.db.execute(
+        "SELECT category, COUNT(*) AS n FROM ideas "
+        "WHERE generation_mode = 'bot' AND status NOT IN ('archived', 'rejected') "
+        "GROUP BY category"
+    )
+    for row in await cur.fetchall():
+        try:
+            cat = IdeaCategory(row["category"])
+        except ValueError:
+            continue
+        if cat in counts:
+            counts[cat] = row["n"]
+
+    least = min(counts.values())
+    routed_count = counts.get(routed, 0)
+    # Within one of the least-explored category is close enough to keep the
+    # signal's own routing, which is better grounded.
+    if routed in counts and routed_count <= least + 1:
+        return routed
+    return min(counts, key=lambda c: (counts[c], c.value))
 
 
 async def _record_bot_drop(
@@ -834,13 +906,17 @@ async def _fire_bot_strategy(db: Database) -> None:
             return
 
         try:
-            category = IdeaCategory(program.get("category") or "capital-automation")
+            routed = IdeaCategory(program.get("category") or "capital-automation")
         except ValueError:
-            category = IdeaCategory.CAPITAL_AUTOMATION
+            routed = IdeaCategory.CAPITAL_AUTOMATION
+        # Rotate off a saturated route so the board explores the categories
+        # where small capital actually clears its costs.
+        category = await _pick_bot_category(db, routed)
 
         # 3. Compose the live program with a mechanism already known to pay.
         primitive = pick_primitive(rng=_rnd.Random(), category=category)
-        result = await _bot_generate(db, category, program, primitive)
+        lessons = await _bot_avoid_lessons(db)
+        result = await _bot_generate(db, category, program, primitive, lessons)
         if result is None:
             await _record_bot_drop(db, program, reason="generator returned no usable strategy")
             logger.info("bot probe: generator produced nothing for %r", program.get("title"))
@@ -860,7 +936,9 @@ async def _fire_bot_strategy(db: Database) -> None:
         depth = await _bot_stress(idea)
         idea = depth.idea
         if idea.bot_spec is not None:
-            idea.bot_spec.panel_verdict = "vetted" if depth.survived else "flagged"
+            idea.bot_spec.panel_verdict = (
+                "vetted" if depth.survived else ("review-incomplete" if depth.incomplete else "flagged")
+            )
             if depth.strongest:
                 idea.bot_spec.surviving_objection = depth.strongest
         if not depth.survived:
@@ -893,16 +971,21 @@ async def _fire_bot_strategy(db: Database) -> None:
             # bar. A stored-but-flagged strategy is on the board, but it is
             # not an admission and must not inflate the admit rate.
             admitted=bool(stored and ok and verdict == "vetted"),
-            reason=f"stored ({verdict})" if stored else f"dedup rejected: {dedup_reason}",
+            reason=(
+                f"stored ({verdict})" + (" [revisit]" if program.get("revisit") else "")
+                if stored
+                else f"dedup rejected: {dedup_reason}"
+            ),
             idea_id=idea.id if stored else None,
             edge_score=score,
         )
         logger.info(
-            "bot probe: %s %r (edge=%.2f, venue=%s)",
+            "bot probe: %s %r (edge=%.2f, venue=%s%s)",
             "ADMITTED" if stored else "dedup-rejected",
             idea.name,
             score,
             program.get("venue"),
+            ", revisit" if program.get("revisit") else "",
         )
     except Exception as exc:
         logger.exception("bot probe cycle failed")

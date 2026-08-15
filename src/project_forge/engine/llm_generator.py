@@ -51,7 +51,11 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from project_forge.engine.llm_backend import LLMBackend, resolve_cheap_backend
+from project_forge.engine.llm_backend import (
+    LLMBackend,
+    resolve_cheap_backend,
+    resolve_role_backend,
+)
 from project_forge.engine.saturation import density_prompt_block
 from project_forge.models import BotSpec, BotVenueFamily, Idea, IdeaCategory
 from project_forge.storage.db import Database
@@ -820,7 +824,7 @@ async def generate_idea_llm(
         density_block=density_block,
     )
 
-    raw = backend.call(prompt) or ""
+    raw = await asyncio.to_thread(backend.call, prompt) or ""
     if not raw.strip():
         logger.info("llm_generator: backend returned empty response (mode=%s)", mode)
         return None
@@ -967,7 +971,7 @@ async def generate_snipe_llm(
     avoid = await _recent_idea_lines(db, category)
     prompt = _build_snipe_prompt(category, angle, incumbent, persona, intel_block, avoid)
 
-    raw = backend.call(prompt) or ""
+    raw = await asyncio.to_thread(backend.call, prompt) or ""
     if not raw.strip():
         logger.info("snipe: backend returned empty (incumbent=%s)", incumbent)
         return None
@@ -1137,6 +1141,7 @@ async def generate_bot_llm(
     *,
     program: dict[str, Any] | None = None,
     primitive: Any = None,
+    avoid_lessons: list[str] | None = None,
     backend: LLMBackend | None = None,
 ) -> LLMGenerationResult | None:
     """One grounded money-bot generation.
@@ -1149,14 +1154,16 @@ async def generate_bot_llm(
     """
     from project_forge.feeds.venue_probe import program_to_seed
 
-    backend = backend if backend is not None else resolve_cheap_backend()
+    # Drafting is the 'generate' role: Sonnet by default on the CLI path.
+    # The red team stays on the strongest model — see engine/bot_depth.
+    backend = backend if backend is not None else resolve_role_backend("generate")
     if backend is None:
         return None
 
     if program is None:
         return None
 
-    seed = program_to_seed(program, primitive=primitive)
+    seed = program_to_seed(program, primitive=primitive, avoid_lessons=avoid_lessons)
     persona = _pick_persona(category)
     avoid = await _recent_idea_lines(db, category)
     prompt = _build_bot_prompt(category, persona, seed, avoid)

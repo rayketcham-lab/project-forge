@@ -27,7 +27,7 @@ from project_forge.engine.strategy_library import STRATEGY_LIBRARY
 from project_forge.models import BotSpec, BotVenueFamily, Idea, IdeaCategory
 
 _PROGRAM = {
-    "venue": "Polymarket",
+    "venue": "Polymarket US",
     "family": BotVenueFamily.PREDICTION_MARKETS.value,
     "category": IdeaCategory.INCENTIVE_CAPTURE.value,
     "title": "Liquidity rewards: qualifying spread not documented",
@@ -50,7 +50,7 @@ _GOOD_PAYLOAD = {
     "tech_stack": ["python", "websockets"],
     "feasibility_score": 0.72,
     "bot_spec": {
-        "venue": "Polymarket",
+        "venue": "Polymarket US",
         "venue_url": "https://docs.polymarket.com/rewards",
         "family": "prediction-markets",
         "api_primitives": ["CLOB REST order placement", "websocket book feed", "rewards endpoint"],
@@ -127,14 +127,14 @@ class TestGenerateBotLlm:
         assert result.idea.category is IdeaCategory.INCENTIVE_CAPTURE
         spec = result.idea.bot_spec
         assert spec is not None
-        assert spec.venue == "Polymarket"
+        assert spec.venue == "Polymarket US"
         assert spec.capital_floor_usd == 500.0
         assert "rewards endpoint" in spec.api_primitives
 
     async def test_no_backend_returns_none(self, db, monkeypatch):
         import project_forge.engine.llm_generator as gen
 
-        monkeypatch.setattr(gen, "resolve_cheap_backend", lambda: None)
+        monkeypatch.setattr(gen, "resolve_role_backend", lambda *_a, **_k: None)
         assert await generate_bot_llm(db, IdeaCategory.MARKET_MAKING, program=_PROGRAM) is None
 
     async def test_unparseable_json_returns_none(self, db):
@@ -226,7 +226,7 @@ class _PanelBackend:
 @pytest.mark.asyncio
 class TestEdgePanel:
     async def test_keyless_is_a_no_op_that_survives(self, monkeypatch):
-        monkeypatch.setattr(bot_depth, "resolve_cheap_backend", lambda: None)
+        monkeypatch.setattr(bot_depth, "resolve_role_backend", lambda *_a, **_k: None)
         result = await bot_depth.stress(_idea())
         assert result.survived
         assert result.passes == 0
@@ -240,10 +240,24 @@ class TestEdgePanel:
             + [json.dumps({"description": "revised text that does not fix the fee"})]
             + [_objection(0.9, "the fee is still positive")]
         )
-        monkeypatch.setattr(bot_depth, "resolve_cheap_backend", lambda: _PanelBackend(replies))
+        monkeypatch.setattr(bot_depth, "resolve_role_backend", lambda *_a, **_k: _PanelBackend(replies))
         result = await bot_depth.stress(_idea())
         assert not result.survived
         assert "still positive" in (result.strongest or "")
+
+    async def test_revise_prompt_carries_both_the_strategy_and_the_output_contract(self):
+        """A conditional expression once swallowed the whole output block.
+
+        `... f"**Capital:** ..." if spec else "" "\\n## Output\\n" ...` parses as
+        one ternary, so a strategy WITH a spec — every real one — was asked to
+        revise with no JSON contract and no field list, and a spec-less one got
+        the contract with no strategy. Both halves must always be present."""
+        prompt = bot_depth.revise_prompt(_idea(), [bot_depth.Objection("arithmetic", 0.8, "fees")])
+        assert "Reward Minute Maker" in prompt
+        assert "**Capital:** $500 / $10,000" in prompt
+        assert "## Output" in prompt
+        assert "capital_floor_usd" in prompt
+        assert "kill_criteria" in prompt
 
     async def test_a_revision_that_answers_the_objection_survives(self, monkeypatch):
         replies = (
@@ -259,7 +273,7 @@ class TestEdgePanel:
             ]
             + [_objection(0.4, "still thin, but the arithmetic now holds")]
         )
-        monkeypatch.setattr(bot_depth, "resolve_cheap_backend", lambda: _PanelBackend(replies))
+        monkeypatch.setattr(bot_depth, "resolve_role_backend", lambda *_a, **_k: _PanelBackend(replies))
         result = await bot_depth.stress(_idea())
         assert result.survived
         assert result.revised
@@ -284,11 +298,11 @@ class TestEdgePanel:
             ]
             + [_objection(0.3, "acceptable now")]
         )
-        monkeypatch.setattr(bot_depth, "resolve_cheap_backend", lambda: _PanelBackend(replies))
+        monkeypatch.setattr(bot_depth, "resolve_role_backend", lambda *_a, **_k: _PanelBackend(replies))
         result = await bot_depth.stress(_idea())
         assert result.survived
         assert result.idea.name == "Reward Minute Maker"
-        assert result.idea.bot_spec.venue == "Polymarket"
+        assert result.idea.bot_spec.venue == "Polymarket US"
         assert "published per-minute liquidity reward" in result.idea.bot_spec.mechanism
 
     async def test_unparseable_revision_leaves_it_dead(self, monkeypatch):
@@ -297,7 +311,7 @@ class TestEdgePanel:
             + [_objection(0.1) for _ in range(len(bot_depth.LENSES) - 1)]
             + ["I'm not sure how to fix this"]
         )
-        monkeypatch.setattr(bot_depth, "resolve_cheap_backend", lambda: _PanelBackend(replies))
+        monkeypatch.setattr(bot_depth, "resolve_role_backend", lambda *_a, **_k: _PanelBackend(replies))
         result = await bot_depth.stress(_idea())
         assert not result.survived
 
@@ -307,7 +321,7 @@ class TestEdgePanel:
             + [_objection(0.1) for _ in range(len(bot_depth.LENSES) - 2)]
             + ["not parseable"]
         )
-        monkeypatch.setattr(bot_depth, "resolve_cheap_backend", lambda: _PanelBackend(replies))
+        monkeypatch.setattr(bot_depth, "resolve_role_backend", lambda *_a, **_k: _PanelBackend(replies))
         result = await bot_depth.stress(_idea())
         assert not result.survived
 
@@ -315,7 +329,7 @@ class TestEdgePanel:
         replies = [_objection(0.65, "capacity caps this near $20k")] + [
             _objection(0.1) for _ in range(len(bot_depth.LENSES) - 1)
         ]
-        monkeypatch.setattr(bot_depth, "resolve_cheap_backend", lambda: _PanelBackend(replies))
+        monkeypatch.setattr(bot_depth, "resolve_role_backend", lambda *_a, **_k: _PanelBackend(replies))
         idea = _idea()
         result = await bot_depth.stress(idea)
         assert result.survived
@@ -325,14 +339,14 @@ class TestEdgePanel:
 
     async def test_unparseable_lens_replies_are_ignored(self, monkeypatch):
         replies = ["not json at all" for _ in bot_depth.LENSES]
-        monkeypatch.setattr(bot_depth, "resolve_cheap_backend", lambda: _PanelBackend(replies))
+        monkeypatch.setattr(bot_depth, "resolve_role_backend", lambda *_a, **_k: _PanelBackend(replies))
         result = await bot_depth.stress(_idea())
         assert result.survived
         assert result.strongest is None
 
     async def test_every_lens_is_asked_something_specific(self, monkeypatch):
         backend = _PanelBackend([_objection(0.1) for _ in bot_depth.LENSES])
-        monkeypatch.setattr(bot_depth, "resolve_cheap_backend", lambda: backend)
+        monkeypatch.setattr(bot_depth, "resolve_role_backend", lambda *_a, **_k: backend)
         await bot_depth.stress(_idea())
         joined = " ".join(backend.prompts).lower()
         assert "fee" in joined and "slippage" in joined
@@ -342,14 +356,50 @@ class TestEdgePanel:
 
     async def test_lens_prompt_includes_the_spec(self, monkeypatch):
         backend = _PanelBackend([_objection(0.1) for _ in bot_depth.LENSES])
-        monkeypatch.setattr(bot_depth, "resolve_cheap_backend", lambda: backend)
+        monkeypatch.setattr(bot_depth, "resolve_role_backend", lambda *_a, **_k: backend)
         await bot_depth.stress(_idea())
         assert "Polymarket" in backend.prompts[0]
 
     async def test_specless_idea_is_not_panelled(self, monkeypatch):
         """Nothing to attack — the gate rejects it for a better reason."""
         backend = _PanelBackend([_objection(0.9) for _ in bot_depth.LENSES])
-        monkeypatch.setattr(bot_depth, "resolve_cheap_backend", lambda: backend)
+        monkeypatch.setattr(bot_depth, "resolve_role_backend", lambda *_a, **_k: backend)
         result = await bot_depth.stress(_idea(bot_spec=None))
         assert result.passes == 0
         assert not backend.prompts
+
+
+@pytest.mark.asyncio
+class TestReviewIncomplete:
+    """A dead or slow backend is not a verdict.
+
+    Live failure: the revision call timed out at 180s, `stress` read the
+    absent answer as "no usable revision", and the strategy was recorded as
+    having failed review. It had not — the reviewer ran out of clock.
+    """
+
+    async def test_failed_revision_call_marks_the_review_incomplete(self, monkeypatch):
+        class _Backend:
+            name = "fake"
+
+            def __init__(self):
+                self.calls = 0
+
+            def call(self, prompt: str):
+                self.calls += 1
+                if self.calls <= len(bot_depth.LENSES):
+                    return _objection(0.9, "numbers are wrong")
+                raise TimeoutError("claude --print timed out")
+
+        monkeypatch.setattr(bot_depth, "resolve_role_backend", lambda *_a, **_k: _Backend())
+        result = await bot_depth.stress(_idea())
+        assert not result.survived
+        assert result.incomplete is True
+
+    async def test_a_model_that_says_unfixable_is_a_real_rejection(self, monkeypatch):
+        replies = [_objection(0.9, "numbers are wrong")] + [_objection(0.1) for _ in range(len(bot_depth.LENSES) - 1)]
+        replies.append(json.dumps({"unfixable": True}))
+        monkeypatch.setattr(bot_depth, "resolve_role_backend", lambda *_a, **_k: _PanelBackend(replies))
+        result = await bot_depth.stress(_idea())
+        assert not result.survived
+        assert result.incomplete is False

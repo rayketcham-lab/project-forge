@@ -182,6 +182,9 @@ class TestResolveBackend:
         from project_forge.engine.llm_backend import resolve_backend
 
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        # This test is ABOUT resolution, so it opts out of the suite-wide
+        # kill switch that stops every other test reaching a live model.
+        monkeypatch.delenv("FORGE_LLM_BACKEND", raising=False)
         from project_forge.config import settings as _settings
 
         monkeypatch.setattr(_settings, "anthropic_api_key", "")

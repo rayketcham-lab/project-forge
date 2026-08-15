@@ -666,7 +666,7 @@ async def money_bots(
         return (idea.bot_spec.panel_verdict if idea.bot_spec else None) or "unknown"
 
     vetted = [i for i in ideas if _verdict(i) in ("vetted", "objection-stands", "unknown")]
-    flagged = [i for i in ideas if _verdict(i) in ("flagged", "below-bar")]
+    flagged = [i for i in ideas if _verdict(i) in ("flagged", "below-bar", "us-ineligible", "review-incomplete")]
 
     # Total in scope (no score filter — show the headline).
     cur = await db.db.execute(
@@ -2675,7 +2675,7 @@ async def _challenge_idea(
         f"value of the field (not a diff or a fragment), so the apply step can replace it directly."
     )
 
-    raw = backend.call(prompt) or ""
+    raw = await asyncio.to_thread(backend.call, prompt) or ""
 
     import json as _json
 

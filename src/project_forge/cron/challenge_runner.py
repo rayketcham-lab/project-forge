@@ -18,6 +18,7 @@ Why a separate module instead of importing the dashboard handler:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -111,7 +112,7 @@ async def _challenge_idea(
         "}\n"
     )
 
-    raw = (backend.call(prompt) or "").strip()
+    raw = (await asyncio.to_thread(backend.call, prompt) or "").strip()
     if "```json" in raw:
         raw = raw.split("```json", 1)[1].split("```", 1)[0].strip()
     elif "```" in raw:
