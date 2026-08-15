@@ -51,6 +51,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from project_forge.engine import bot_progress
 from project_forge.engine.llm_backend import resolve_role_backend
 from project_forge.models import Idea
 
@@ -434,11 +435,15 @@ async def stress(idea: Idea) -> StressResult:
     objections: list[Objection] = []
     passes = 0
     for lens in LENSES:
+        bot_progress.emit("lens", f"{lens}: reviewing")
         raw = await _safe_call(backend, lens_prompt(lens, idea))
         passes += 1
         parsed = _parse_objection(lens, raw)
         if parsed is not None:
             objections.append(parsed)
+            bot_progress.emit("lens", f"{lens}: landed {parsed.severity:.2f} — {parsed.text[:140]}")
+        else:
+            bot_progress.emit("lens", f"{lens}: no objection")
 
     strongest = _strongest(objections)
 
@@ -451,6 +456,7 @@ async def stress(idea: Idea) -> StressResult:
         # accepting the rewrite unchecked would make the panel decorative.
         # So: rewrite, then re-run the lens that hit hardest.
         hardest = max(objections, key=lambda o: o.severity)
+        bot_progress.emit("revise", f"rewriting to answer {len(objections)} objections")
         raw_revision = await _safe_call(backend, revise_prompt(idea, objections))
         revised = _apply_revision(idea, raw_revision)
         if revised is None:

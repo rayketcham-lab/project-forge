@@ -877,6 +877,7 @@ async def _fire_bot_strategy(db: Database) -> None:
     """
     import random as _rnd
 
+    from project_forge.engine import bot_progress
     from project_forge.engine.bot_edge import admits, illegal_reason
     from project_forge.engine.dedup import filter_and_save
     from project_forge.engine.strategy_library import pick_primitive
@@ -884,13 +885,16 @@ async def _fire_bot_strategy(db: Database) -> None:
     from project_forge.models import IdeaCategory
 
     program: dict | None = None
+    bot_progress.start_run()
     try:
         # 1. Probe the venues. Never raises; [] is a normal outcome.
+        bot_progress.emit("probe", "sweeping venue release notes and issue trackers")
         recent = await db.list_bot_probes(limit=200)
         seen_urls = {p["anchor"] for p in recent if p.get("anchor")}
         # Sixteen blocking HTTP calls — off the event loop, or the web app
         # stops answering for as long as GitHub takes.
         programs = await asyncio.to_thread(_bot_fetch_programs)
+        bot_progress.emit("probe", f"{len(programs)} candidate programs found")
 
         # 2. Exactly one program gets worked this cycle.
         program = pick_top_program(programs, seen_urls=seen_urls)
@@ -903,6 +907,7 @@ async def _fire_bot_strategy(db: Database) -> None:
                 reason="no new venue program surfaced from any source",
             )
             logger.info("bot probe: no new program surfaced — storing nothing")
+            bot_progress.finish_run("no venue program surfaced — nothing to work")
             return
 
         try:
@@ -912,6 +917,12 @@ async def _fire_bot_strategy(db: Database) -> None:
         # Rotate off a saturated route so the board explores the categories
         # where small capital actually clears its costs.
         category = await _pick_bot_category(db, routed)
+        bot_progress.emit(
+            "pick",
+            f"{program.get('venue')} — {(program.get('title') or '')[:80]}"
+            + (" (revisit)" if program.get("revisit") else ""),
+        )
+        bot_progress.emit("category", f"working it as {category.value}")
 
         # 3. Compose the live program with a mechanism already known to pay.
         primitive = pick_primitive(rng=_rnd.Random(), category=category)
@@ -920,10 +931,13 @@ async def _fire_bot_strategy(db: Database) -> None:
         if result is None:
             await _record_bot_drop(db, program, reason="generator returned no usable strategy")
             logger.info("bot probe: generator produced nothing for %r", program.get("title"))
+            bot_progress.finish_run("generator returned no usable strategy")
             return
 
         idea = result.idea
         idea.generation_mode = "bot"
+        bot_progress.emit("generate", f"drafted: {idea.name}")
+        bot_progress.emit("review", "four-lens red team: arithmetic, competition, legality, operations")
 
         # 4. The red team: arithmetic, competition, legality, operations.
         #    Keyless this is a free no-op.
@@ -941,6 +955,12 @@ async def _fire_bot_strategy(db: Database) -> None:
             )
             if depth.strongest:
                 idea.bot_spec.surviving_objection = depth.strongest
+        bot_progress.emit(
+            "review",
+            ("survived the panel" if depth.survived else "panel would not pass it") + f" after {depth.passes} passes",
+        )
+        if depth.strongest:
+            bot_progress.emit("objection", depth.strongest[:200])
         if not depth.survived:
             logger.info("bot probe: panel flagged %r after %d passes", idea.name, depth.passes)
 
@@ -948,13 +968,16 @@ async def _fire_bot_strategy(db: Database) -> None:
         #    neither produces anything worth showing: a strategy that is not
         #    legitimate, and one with no spec at all. Everything else is
         #    stored with its verdict and ranked by score.
+        bot_progress.emit("scoring", "measuring the edge")
         score = await _bot_score(idea)
         idea.bot_edge_score = score
         ok, reason = admits(idea, score)
+        bot_progress.emit("gate", f"edge {score:.2f} — {reason}")
         blocking = illegal_reason(idea) is not None or idea.bot_spec is None
         if not ok and blocking:
             await _record_bot_drop(db, program, reason=reason, score=score)
             logger.info("bot probe: refused %r — %s", idea.name, reason)
+            bot_progress.finish_run(f"refused: {reason}")
             return
         if not ok and idea.bot_spec is not None and idea.bot_spec.panel_verdict != "flagged":
             # Survived the panel but missed the bar — say so on the card.
@@ -979,6 +1002,11 @@ async def _fire_bot_strategy(db: Database) -> None:
             idea_id=idea.id if stored else None,
             edge_score=score,
         )
+        bot_progress.emit(
+            "store",
+            f"{idea.name} — {verdict}" if stored else f"dedup rejected: {dedup_reason}",
+        )
+        bot_progress.finish_run(f"stored {idea.name} ({verdict})" if stored else f"dedup rejected: {dedup_reason}")
         logger.info(
             "bot probe: %s %r (edge=%.2f, venue=%s%s)",
             "ADMITTED" if stored else "dedup-rejected",
@@ -989,6 +1017,7 @@ async def _fire_bot_strategy(db: Database) -> None:
         )
     except Exception as exc:
         logger.exception("bot probe cycle failed")
+        bot_progress.finish_run(f"cycle crashed: {type(exc).__name__}")
         # Same reasoning as the PKI probe: the watermark is
         # MAX(bot_probes.probed_at), so a crash that records nothing leaves
         # the cadence permanently overdue AND re-picking the same program

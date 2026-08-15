@@ -942,6 +942,19 @@ async def api_churn(request: Request):
     }
 
 
+@router.get("/api/money-bots/progress")
+async def api_money_bots_progress():
+    """Live narration of the money-bot cycle in flight.
+
+    A cycle runs five to twelve minutes and the page was showing a spinner
+    for all of it, which is indistinguishable from a hang. Read-only,
+    unauthenticated like the other GETs, and cheap — it reads an in-memory
+    ring buffer, not the database."""
+    from project_forge.engine import bot_progress
+
+    return bot_progress.status()
+
+
 @router.get("/api/money-bots/top")
 async def api_money_bots_top(limit: int = Query(default=10, ge=1, le=100)):
     """JSON: top-N capital-deployment strategies by bot_edge_score.
