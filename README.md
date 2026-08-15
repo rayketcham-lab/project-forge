@@ -1,6 +1,6 @@
 # Project Forge
 
-![Version](https://img.shields.io/badge/version-0.24-blue) ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/rayketcham-lab/project-forge/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-2100+-passing?color=brightgreen) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+![Version](https://img.shields.io/badge/version-0.24-blue) ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/rayketcham-lab/project-forge/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-2250+-passing?color=brightgreen) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 **[Quickstart](#quick-start) · [Boards](#the-six-boards) · [Dashboard](#dashboard) · [Labs](#labs--autonomous-avenues-v017) · [Architecture](#architecture) · [Config](#configuration) · [Roadmap](#roadmap)**
 
@@ -76,39 +76,68 @@ different object entirely — a **strategy** that deploys capital through a
 venue's API and earns from a named mechanism, with little or no human
 intervention.
 
-Every admitted item carries a `BotSpec`: the venue and its documentation, the
-exact API operations the bot calls, where the money comes from, the capital
-floor and target, how the edge decays, the conditions under which the bot
-switches itself off, and how to prove the edge small before scaling.
+Every item carries a `BotSpec`: the venue and its documentation, the exact API
+operations the bot calls, where the money comes from, the capital floor and
+target, how the edge decays, the conditions under which the bot switches itself
+off, and how to prove the edge small before scaling.
 
 ```
 probe venues → pick ONE program → compose with a known-working mechanism →
-generate strategy + spec → red team → gate → store or DROP
+generate strategy + spec → red team → gate → publish with a verdict
 ```
 
-The probe sweeps SDK release notes and open issues on the clients traders
-actually use, so every strategy is anchored to a live signal about a venue's
-mechanics. Generation composes that signal with a **playbook** of ~20 mechanisms
-that are publicly documented and demonstrably real (maker rebates, per-minute
-liquidity rewards, funding carry, cash-and-carry basis, cross-book middling,
-idle-cash sweeps) — each carrying its decay story and its honest risks, because
-an idea generated from a mechanism alone comes back claiming a permanent edge.
+The probe sweeps SDK release notes and open issues across 13 repositories
+belonging to venues the operator can actually trade on, so every strategy is
+anchored to a live signal about a venue's mechanics. Generation composes that
+signal with a **playbook** of 21 mechanisms that are publicly documented and
+demonstrably real (maker rebates, per-minute liquidity rewards, funding carry,
+cash-and-carry basis, cross-book middling, idle-cash sweeps) — each carrying its
+decay story and its honest risks, because an idea generated from a mechanism
+alone comes back claiming a permanent edge. Categories rotate away from
+whatever the signal keeps routing to, since release notes talk about order books
+and funding rates and would otherwise never reach the categories where the venue
+pays you rather than you extracting from other traders.
 
-A four-lens red team then attacks the draft where these actually die:
-**arithmetic** (recompute the P&L net of fees and slippage), **competition**
-(who is already doing this, and what capacity does it have), **legality** (does
-the venue permit it, is the operator eligible), and **operations** (can it
-really run unattended). A knocked-down draft gets one rewrite and then the
-hardest lens is re-asked against the rewrite — a rewrite has to survive the
-same attack. Whatever objection still stands is published on the card.
+**Generation and review run on different models.** Drafting is a variety task
+where a faster model means more attempts and more shots on goal; reviewing is
+where rigor pays. Generation defaults to Sonnet, the red team to Opus
+(`FORGE_BOT_GEN_MODEL` / `FORGE_BOT_REVIEW_MODEL`).
 
-The gate refuses anything with no spec, nothing to verify against, or a
+A four-lens red team attacks the draft where these actually die: **arithmetic**
+(recompute the P&L net of fees and slippage), **competition** (who is already
+doing this, and what capacity does it have), **legality** (does the venue permit
+it, is the operator eligible), and **operations** (can it really run
+unattended). A knocked-down draft gets one rewrite and then the hardest lens is
+re-asked against the rewrite — a rewrite has to survive the same attack.
+Severity is calibrated on *fixability*, so an overstated return is answerable
+and an absent mechanism is not, and a backend timeout yields `review-incomplete`
+rather than masquerading as a rejection.
+
+**The board shows only what passed.** Everything else is counted and listed
+compactly with the reason it failed — visible and auditable, not competing for
+attention — and those rejections are fed back into the next generation as
+"already rejected on this board, and why". The panel kept killing the same two
+errors (a one-way fee quoted as a round trip; a capacity claim the reward pool
+cannot pay) until the objections started carrying forward.
+
+**US-only.** Every venue carries an eligibility status, and the gate refuses a
+restricted one outright — the offshore Polymarket CLOB and Hyperliquid produced
+"vetted" strategies before this rule existed, which is the board asserting the
+opposite of the truth. It fails closed: an unrecognised venue is refused pending
+verification rather than assumed safe, and a strategy naming both an eligible
+and a restricted venue resolves to restricted, because a two-legged strategy is
+only as tradeable as its worst leg. The registry records a status and a note,
+never a legal conclusion — "confirm before funding" stays on every entry,
+because venue terms and state-level availability move and this engine does not
+track them.
+
+The gate also refuses anything with no spec, nothing to verify against, or a
 mechanism that only works through manipulation, non-public information, bug
-exploitation, or evading a venue's terms — regardless of score. In early live
-runs the panel killed every draft on quantitative grounds (a reward smaller
-than the venue's minimum tick; a funding gate demanding 48–78 bp when funding
-pays a fraction of that; an offshore venue barring the operator's
-jurisdiction). That is the board working, not failing.
+exploitation, or evading a venue's terms — regardless of score. Live runs bear
+that out: of 33 probes the panel has admitted 5, and the kills are quantitative
+rather than stylistic (a reward smaller than the venue's minimum tick; a funding
+gate demanding 48–78 bp when funding pays a fraction of that; a draft quoting a
+one-way fee as a round trip).
 
 Admitted strategies can be scaffolded into a runnable repo — venue client,
 strategy loop, risk guards, ledger, validation checklist. The venue client is
@@ -235,6 +264,10 @@ Non-read methods require a Bearer token when `FORGE_API_TOKEN` is set. The dashb
 | `FORGE_LLM_BACKEND` | auto | `api` \| `claude_code` \| `static` \| `none` |
 | `FORGE_LLM_MODEL` | `sonnet` | `sonnet` \| `opus` \| `haiku` |
 | `FORGE_CLI_MODEL` | `opus` | Cheap-path model on the CLI backend |
+| `FORGE_BOT_GEN_MODEL` | `sonnet` | Money-bot strategy generation |
+| `FORGE_BOT_REVIEW_MODEL` | `opus` | Money-bot red team |
+| `FORGE_LLM_TIMEOUT_SEC` | 420 | CLI call timeout; a timeout is not a verdict |
+| `FORGE_OPERATOR_JURISDICTION` | (unset) | Stated in the generation seed and judged by the legality lens |
 | `FORGE_SUPER_REASONING` | unset | `1` to use the LLM for super-idea cluster naming |
 | `FORGE_API_TOKEN` | (unset) | If set, non-read methods require Bearer auth |
 | `FORGE_GITHUB_OWNER` | `rayketcham-lab` | Default org for scaffolded repos |
@@ -248,6 +281,7 @@ All in hours, all overridable. The in-process scheduler owns these — no system
 | `FORGE_EXPAND_INTERVAL_HOURS` | 1 | Cross-category + super idea generation |
 | `FORGE_ISSUE_SYNC_INTERVAL_HOURS` | 1 | Sync promoted ideas with live GH issue state |
 | `FORGE_PKI_INTERVAL_HOURS` | 1 | Grounded PKI probe — one gated target per fire |
+| `FORGE_BOT_INTERVAL_HOURS` | 2 | Money-bot venue probe — one program worked per fire |
 | `FORGE_PULSE_INTERVAL_HOURS` | 3 | Event-driven generation from live HN/GitHub signal |
 | `FORGE_MISSION_INTERVAL_HOURS` | 4 | Operator-directed generation, round-robin |
 | `FORGE_SNIPE_INTERVAL_HOURS` | 6 | Grounded competitive-displacement snipes |
