@@ -185,6 +185,25 @@ class TestCadenceEmits:
         monkeypatch.setattr(ls, "_bot_score", _score)
         await ls._fire_bot_strategy(db)
 
-        stages = [e["stage"] for e in bot_progress.recent()]
-        for expected in ("probe", "pick", "generate", "review", "gate", "store"):
+        events = bot_progress.recent()
+        stages = [e["stage"] for e in events]
+        for expected in ("probe", "pick", "mechanism", "generate", "review", "gate", "store"):
             assert expected in stages, f"{expected} never narrated (got {stages})"
+
+    async def test_the_slowest_step_is_announced_before_it_starts(self, db, monkeypatch):
+        """The bug this caught: generation was only narrated AFTER it
+        returned, so the tail sat frozen on "category" for the entire
+        minutes-long model call — exactly the stretch the operator watches.
+
+        A stage that takes time must announce itself on the way in."""
+        await self.test_a_full_cycle_narrates_each_step(db, monkeypatch)
+
+        events = bot_progress.recent()
+        generate_events = [e for e in events if e["stage"] == "generate"]
+        assert len(generate_events) >= 2, "generation must be announced before and after"
+        assert "drafting" in generate_events[0]["detail"]
+
+        # Nothing between picking the target and starting generation should
+        # be a silent stretch: mechanism then generate, back to back.
+        stages = [e["stage"] for e in events]
+        assert stages.index("mechanism") < stages.index("generate")

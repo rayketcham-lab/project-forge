@@ -2276,3 +2276,23 @@ p.muted, .muted { color: var(--text-muted, #5a6478); font-size: 0.88rem; }
 .run-event-gate .run-stage { color: var(--accent-light); }
 .run-event-store .run-stage { color: var(--green); }
 .run-detail { color: var(--text-dim); }
+
+/* v0.24.4 — operator-chosen venue */
+.churn-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.venue-pick-label {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+.venue-pick {
+    background: var(--bg-alt);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.3rem 0.6rem;
+    font-size: 0.82rem;
+    min-width: 15rem;
+}
+.venue-pick:focus { border-color: var(--accent); outline: none; }

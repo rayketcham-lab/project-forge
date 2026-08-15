@@ -5,6 +5,7 @@ Takes all existing ideas, finds natural clusters/themes, and generates
 real-world platforms.
 """
 
+import asyncio
 import hashlib
 import logging
 import os
@@ -780,7 +781,11 @@ class SuperIdeaGenerator:
                         sig,
                     )
                     continue
-            candidate = synthesize_super_idea(
+            # `llm_call` is a blocking CLI shell-out when reasoning is on, and
+            # synthesize_super_idea invokes it — off the loop, or the web app
+            # stops answering for the length of every cluster naming.
+            candidate = await asyncio.to_thread(
+                synthesize_super_idea,
                 cluster,
                 use_reasoning=use_reasoning,
                 llm_call=llm_call,

@@ -406,3 +406,79 @@ class TestLessonsFeedBack:
 
         assert seen["lessons"]
         assert any("capacity claim" in lesson for lesson in seen["lessons"])
+
+
+@pytest.mark.asyncio
+class TestOperatorChosenVenue:
+    """The operator can point a cycle at one venue."""
+
+    async def test_the_chosen_venue_is_worked(self, db, sched, monkeypatch):
+        from project_forge.engine.bot_depth import StressResult
+
+        monkeypatch.setattr(
+            sched,
+            "_bot_fetch_programs",
+            lambda: [
+                {**_PROGRAM, "venue": "Coinbase", "url": "https://c", "program_score": 9},
+                {**_PROGRAM, "venue": "Kalshi", "url": "https://k", "program_score": 2},
+            ],
+        )
+        worked = {}
+
+        async def _gen(_db, _cat, program, _prim, avoid_lessons=None):
+            worked.update(program)
+            return _Result(_idea())
+
+        async def _survive(idea):
+            return StressResult(idea=idea, survived=True, passes=4)
+
+        async def _score(_i):
+            return 0.8
+
+        monkeypatch.setattr(sched, "_bot_generate", _gen)
+        monkeypatch.setattr(sched, "_bot_stress", _survive)
+        monkeypatch.setattr(sched, "_bot_score", _score)
+
+        await sched._fire_bot_strategy(db, venue="Kalshi")
+        assert worked["venue"] == "Kalshi", "the operator's choice must win over the higher score"
+
+    async def test_a_venue_with_no_signal_still_works(self, db, sched, monkeypatch):
+        """Tradier has no SDK repo; choosing it must not answer 'nothing surfaced'."""
+        from project_forge.engine.bot_depth import StressResult
+
+        monkeypatch.setattr(sched, "_bot_fetch_programs", lambda: [])
+        worked = {}
+
+        async def _gen(_db, _cat, program, _prim, avoid_lessons=None):
+            worked.update(program)
+            return _Result(_idea())
+
+        async def _survive(idea):
+            return StressResult(idea=idea, survived=True, passes=4)
+
+        async def _score(_i):
+            return 0.8
+
+        monkeypatch.setattr(sched, "_bot_generate", _gen)
+        monkeypatch.setattr(sched, "_bot_stress", _survive)
+        monkeypatch.setattr(sched, "_bot_score", _score)
+
+        await sched._fire_bot_strategy(db, venue="Tradier")
+        assert worked.get("venue") == "Tradier"
+        assert worked.get("from_registry") is True
+
+    async def test_a_restricted_venue_choice_is_refused(self, db, sched, monkeypatch):
+        monkeypatch.setattr(sched, "_bot_fetch_programs", lambda: [])
+        await sched._fire_bot_strategy(db, venue="Hyperliquid")
+
+        probes = await db.list_bot_probes()
+        assert probes[0]["admitted"] is False
+        assert not await db.list_ideas(limit=5)
+
+    async def test_the_choice_is_narrated(self, db, sched, monkeypatch):
+        from project_forge.engine import bot_progress
+
+        monkeypatch.setattr(sched, "_bot_fetch_programs", lambda: [])
+        await sched._fire_bot_strategy(db, venue="Kalshi")
+        details = " ".join(e["detail"] for e in bot_progress.recent())
+        assert "Kalshi" in details

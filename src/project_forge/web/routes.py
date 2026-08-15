@@ -502,7 +502,7 @@ async def pulse_page(request: Request):
     """The Pulse — what just changed in the world, so generation can react."""
     from project_forge.feeds.pulse import fetch_pulse_signals, pick_hot_signal
 
-    signals = fetch_pulse_signals()
+    signals = await asyncio.to_thread(fetch_pulse_signals)
     return templates.TemplateResponse(
         request,
         "pulse.html",
@@ -524,7 +524,7 @@ async def api_pulse_churn():
         signal_to_seed,
     )
 
-    signals = fetch_pulse_signals()
+    signals = await asyncio.to_thread(fetch_pulse_signals)
     hot = pick_hot_signal(signals)
     seed = signal_to_seed(hot) if hot else None
     category = IdeaCategory(_random.choice(_PRODUCT_MONEY_CATEGORIES))
@@ -615,7 +615,9 @@ async def api_launchpad(idea_id: str):
     idea = await db.get_idea(idea_id)
     if not idea:
         raise HTTPException(status_code=404, detail="Idea not found")
-    return generate_gtm_brief(idea)
+    # Off the loop: the brief shells out to the CLI backend, and inline
+    # it froze every other request for the length of the call.
+    return await asyncio.to_thread(generate_gtm_brief, idea)
 
 
 @router.post("/api/recruiter/{idea_id}")
@@ -625,7 +627,7 @@ async def api_recruiter(idea_id: str):
     idea = await db.get_idea(idea_id)
     if not idea:
         raise HTTPException(status_code=404, detail="Idea not found")
-    return estimate_build(idea)
+    return await asyncio.to_thread(estimate_build, idea)
 
 
 @router.get("/money-bots", response_class=HTMLResponse)
@@ -640,7 +642,7 @@ async def money_bots(
     admission gate stamps, so filtering on it is the same thing as showing
     only what passed the gate. Optionally filter by a specific category."""
     from project_forge.engine.strategy_library import STRATEGY_LIBRARY
-    from project_forge.feeds.venue_probe import VENUE_REGISTRY
+    from project_forge.feeds.venue_probe import VENUE_REGISTRY, us_eligible_venues
 
     cats = (category,) if category in _MONEY_CATEGORIES else _MONEY_CATEGORIES
     placeholders = ",".join("?" * len(cats))
@@ -688,6 +690,9 @@ async def money_bots(
             # The mechanism inventory, readable without generating anything.
             "playbook": STRATEGY_LIBRARY,
             "venues": VENUE_REGISTRY,
+            # Only what a US operator can actually trade — offering the rest
+            # would be offering a cycle the gate is going to refuse.
+            "pickable_venues": us_eligible_venues(),
             "probe_stats": await db.bot_probe_stats(),
             "probes": await db.list_bot_probes(limit=8),
         },
@@ -847,7 +852,10 @@ async def api_churn(request: Request):
     if lab == "money":
         from project_forge.web.lifespan_scheduler import _fire_bot_strategy
 
-        await _fire_bot_strategy(db)
+        # Operator-directed: point the cycle at one venue instead of taking
+        # whatever the probe surfaced. Only US-eligible venues are offered.
+        chosen_venue = (payload.get("venue") or "").strip() or None
+        await _fire_bot_strategy(db, venue=chosen_venue)
         probes = await db.list_bot_probes(limit=1)
         latest = probes[0] if probes else None
         if latest is None or not latest["admitted"] or not latest["idea_id"]:
@@ -2321,7 +2329,8 @@ async def builder_step(request_body: _BuilderStepRequest):
     """
     from project_forge.engine.idea_builder import run_wizard_step
 
-    result = run_wizard_step(
+    result = await asyncio.to_thread(
+        run_wizard_step,
         step=request_body.step,
         fragment=request_body.fragment,
         answers=request_body.answers,

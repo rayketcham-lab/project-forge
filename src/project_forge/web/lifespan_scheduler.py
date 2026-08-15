@@ -609,7 +609,9 @@ async def _fire_pki(db: Database) -> None:
         # 1. Probe the real sources. Never raises; [] is a normal outcome.
         recent = await db.list_pki_probes(limit=200)
         seen_urls = {p["anchor"] for p in recent if p.get("anchor")}
-        gaps = fetch_pki_gaps()
+        # Ten blocking HTTP calls — a rate-limited GitHub turns each into a
+        # full timeout, and the web app stops answering while they drain.
+        gaps = await asyncio.to_thread(fetch_pki_gaps)
 
         # 2. Exactly one gap gets worked this hour.
         gap = pick_top_gap(gaps, seen_urls=seen_urls)
@@ -857,7 +859,7 @@ async def _record_bot_drop(
     )
 
 
-async def _fire_bot_strategy(db: Database) -> None:
+async def _fire_bot_strategy(db: Database, venue: str | None = None) -> None:
     """The money board's probe: ONE venue program, and it may come back empty.
 
       probe venues -> pick ONE program -> compose with a known-working
@@ -888,6 +890,8 @@ async def _fire_bot_strategy(db: Database) -> None:
     bot_progress.start_run()
     try:
         # 1. Probe the venues. Never raises; [] is a normal outcome.
+        if venue:
+            bot_progress.emit("venue", f"operator chose {venue}")
         bot_progress.emit("probe", "sweeping venue release notes and issue trackers")
         recent = await db.list_bot_probes(limit=200)
         seen_urls = {p["anchor"] for p in recent if p.get("anchor")}
@@ -897,14 +901,18 @@ async def _fire_bot_strategy(db: Database) -> None:
         bot_progress.emit("probe", f"{len(programs)} candidate programs found")
 
         # 2. Exactly one program gets worked this cycle.
-        program = pick_top_program(programs, seen_urls=seen_urls)
+        program = pick_top_program(programs, seen_urls=seen_urls, prefer_venue=venue)
         if program is None:
             await db.record_bot_probe(
                 program_summary=None,
                 venue=None,
                 anchor=None,
                 admitted=False,
-                reason="no new venue program surfaced from any source",
+                reason=(
+                    f"{venue} is not a venue this operator can trade"
+                    if venue
+                    else "no new venue program surfaced from any source"
+                ),
             )
             logger.info("bot probe: no new program surfaced — storing nothing")
             bot_progress.finish_run("no venue program surfaced — nothing to work")
@@ -926,7 +934,14 @@ async def _fire_bot_strategy(db: Database) -> None:
 
         # 3. Compose the live program with a mechanism already known to pay.
         primitive = pick_primitive(rng=_rnd.Random(), category=category)
+        bot_progress.emit("mechanism", primitive.name)
         lessons = await _bot_avoid_lessons(db)
+        if lessons:
+            bot_progress.emit("lessons", f"avoiding {len(lessons)} past rejections")
+        # Announced BEFORE the call, not after: generation is a minutes-long
+        # model call, and a tail that only speaks once it returns is silent
+        # for exactly the stretch the operator is watching.
+        bot_progress.emit("generate", "drafting the strategy and its spec")
         result = await _bot_generate(db, category, program, primitive, lessons)
         if result is None:
             await _record_bot_drop(db, program, reason="generator returned no usable strategy")
@@ -1161,7 +1176,7 @@ async def _fire_pulse(db: Database) -> None:
     from project_forge.models import PRODUCT_MONEY_CATEGORIES
 
     try:
-        hot = pick_hot_signal(fetch_pulse_signals())
+        hot = pick_hot_signal(await asyncio.to_thread(fetch_pulse_signals))
         seed = signal_to_seed(hot) if hot else None
         category = _random.choice(PRODUCT_MONEY_CATEGORIES)
         result = await generate_idea_llm(db, category, mode="novel", seed=seed)
