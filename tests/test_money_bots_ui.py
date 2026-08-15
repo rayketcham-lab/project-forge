@@ -422,3 +422,37 @@ class TestFlaggedAreCountedNotDisplayed:
         html = (await client.get("/money-bots")).text
         assert "vetted" in html.lower()
         assert "flagged" in html.lower()
+
+
+class TestRunTail:
+    """The page must narrate a run, not just spin."""
+
+    @pytest.mark.asyncio
+    async def test_tail_block_is_present_and_collapsed(self, client):
+        html = (await client.get("/money-bots")).text
+        assert 'id="run-tail"' in html
+        block = html[html.index('id="run-tail"') :][:120]
+        assert "open" not in block
+
+    @pytest.mark.asyncio
+    async def test_progress_endpoint_is_reachable_from_the_page(self, client):
+        resp = await client.get("/api/money-bots/progress")
+        assert resp.status_code == 200
+        for key in ("running", "elapsed_seconds", "outcome", "events"):
+            assert key in resp.json()
+
+    def test_js_polls_progress_and_is_csp_safe(self):
+        from pathlib import Path
+
+        js = (Path(__file__).resolve().parent.parent / "src/project_forge/web/static/money_bots.js").read_text()
+        assert "/api/money-bots/progress" in js
+        assert "setInterval" in js
+        assert "startPolling" in js
+        # CSP: DOM APIs only.
+        assert "innerHTML" not in js
+
+    def test_js_stops_polling_when_the_run_ends(self):
+        from pathlib import Path
+
+        js = (Path(__file__).resolve().parent.parent / "src/project_forge/web/static/money_bots.js").read_text()
+        assert "clearInterval" in js

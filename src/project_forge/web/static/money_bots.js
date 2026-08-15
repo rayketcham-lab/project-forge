@@ -63,6 +63,69 @@
         });
     }
 
+    // === Live run tail ===
+    // A cycle takes 5-12 minutes. Without this the page shows a spinner and
+    // the operator cannot tell a working engine from a hung one.
+    var tailBlock = document.getElementById('run-tail');
+    var tailList = document.getElementById('run-events');
+    var tailStatus = document.getElementById('run-tail-status');
+    var pollTimer = null;
+
+    function renderTail(data) {
+        if (!tailList || !tailStatus) return;
+
+        tailStatus.textContent = data.running
+            ? 'running · ' + Math.round(data.elapsed_seconds) + 's'
+            : (data.outcome || 'idle');
+
+        tailList.textContent = '';
+        (data.events || []).forEach(function (ev) {
+            var li = document.createElement('li');
+            li.className = 'run-event run-event-' + (ev.stage || 'step');
+            var stage = document.createElement('span');
+            stage.className = 'run-stage';
+            stage.textContent = ev.stage;
+            li.appendChild(stage);
+            var detail = document.createElement('span');
+            detail.className = 'run-detail';
+            detail.textContent = ev.detail || '';
+            li.appendChild(detail);
+            tailList.appendChild(li);
+        });
+        // Newest work is at the bottom; keep it in view while open.
+        if (tailBlock && tailBlock.open) {
+            tailList.scrollTop = tailList.scrollHeight;
+        }
+    }
+
+    async function pollProgress() {
+        try {
+            var resp = await fetch('/api/money-bots/progress');
+            if (!resp.ok) return false;
+            var data = await resp.json();
+            renderTail(data);
+            return data.running;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function startPolling() {
+        if (pollTimer) return;
+        if (tailBlock) tailBlock.open = true;
+        pollProgress();
+        pollTimer = setInterval(async function () {
+            var stillRunning = await pollProgress();
+            if (!stillRunning) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+            }
+        }, 3000);
+    }
+
+    // Show the last run's tail on load, and resume polling if one is live.
+    pollProgress().then(function (running) { if (running) startPolling(); });
+
     // === Per-card Scaffold bot ===
     var scaffoldStatus = document.getElementById('scaffold-status');
 

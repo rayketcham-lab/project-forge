@@ -124,6 +124,16 @@
             <div id="churn-status" class="churn-status"></div>
         </div>
 
+        <!-- Live narration. A cycle runs 5-12 minutes; a silent spinner is
+             indistinguishable from a hang. -->
+        <details class="ref-block run-tail" id="run-tail">
+            <summary>
+                <span class="ref-title">What it is doing</span>
+                <span class="ref-count" id="run-tail-status">idle</span>
+            </summary>
+            <ol class="run-events" id="run-events"></ol>
+        </details>
+
         <div class="filters-bar">
             <div class="filter-row">
                 <span class="filter-row-label">Category</span>
@@ -304,5 +314,5 @@
     </div>
 </section>
 
-<script src="/static/money_bots.js?v=3"></script>
+<script src="/static/money_bots.js?v=4"></script>
 {% endblock %}
