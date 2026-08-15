@@ -971,16 +971,21 @@ async def _fire_bot_strategy(db: Database) -> None:
             # bar. A stored-but-flagged strategy is on the board, but it is
             # not an admission and must not inflate the admit rate.
             admitted=bool(stored and ok and verdict == "vetted"),
-            reason=f"stored ({verdict})" if stored else f"dedup rejected: {dedup_reason}",
+            reason=(
+                f"stored ({verdict})" + (" [revisit]" if program.get("revisit") else "")
+                if stored
+                else f"dedup rejected: {dedup_reason}"
+            ),
             idea_id=idea.id if stored else None,
             edge_score=score,
         )
         logger.info(
-            "bot probe: %s %r (edge=%.2f, venue=%s)",
+            "bot probe: %s %r (edge=%.2f, venue=%s%s)",
             "ADMITTED" if stored else "dedup-rejected",
             idea.name,
             score,
             program.get("venue"),
+            ", revisit" if program.get("revisit") else "",
         )
     except Exception as exc:
         logger.exception("bot probe cycle failed")

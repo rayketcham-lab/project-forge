@@ -275,8 +275,14 @@ class TestCadence:
         assert stored.bot_spec is not None
         assert stored.bot_spec.venue == "Polymarket US"
 
-    async def test_already_probed_programs_are_skipped(self, db, sched, monkeypatch):
-        """The same GitHub issue must not be worked twice."""
+    async def test_an_already_probed_program_is_revisited_not_skipped(self, db, sched, monkeypatch):
+        """Superseded contract. Skipping a seen program starved the cadence:
+        once every URL had been probed, every fire answered "no new venue
+        program" forever and the button looked broken. A revisit produces a
+        different strategy because the category rotation, the mechanism and
+        the accumulated lessons have all moved on."""
+        from project_forge.engine.bot_depth import StressResult
+
         await db.record_bot_probe(
             program_summary="seen",
             venue="Polymarket US",
@@ -285,11 +291,27 @@ class TestCadence:
             reason="already worked",
         )
         monkeypatch.setattr(sched, "_bot_fetch_programs", lambda: [_PROGRAM])
+
+        seen_program = {}
+
+        async def _gen(_db, _cat, program, _primitive, avoid_lessons=None):
+            seen_program.update(program)
+            return _Result(_idea())
+
+        async def _survive(idea):
+            return StressResult(idea=idea, survived=True, passes=4)
+
+        async def _score(_i):
+            return 0.8
+
+        monkeypatch.setattr(sched, "_bot_generate", _gen)
+        monkeypatch.setattr(sched, "_bot_stress", _survive)
+        monkeypatch.setattr(sched, "_bot_score", _score)
         await sched._fire_bot_strategy(db)
 
+        assert seen_program.get("revisit") is True, "the seen program should be revisited"
         probes = await db.list_bot_probes()
-        assert len(probes) == 2
-        assert "no new" in (probes[-0]["reason"] or "").lower() or "no new" in (probes[0]["reason"] or "").lower()
+        assert "revisit" in (probes[0]["reason"] or "")
 
     async def test_cadence_is_registered_on_a_schedule(self, sched):
         names = sched.cadence_names() if hasattr(sched, "cadence_names") else []

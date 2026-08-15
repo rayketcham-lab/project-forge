@@ -104,6 +104,24 @@ def _disable_semantic_dedup(monkeypatch):
     monkeypatch.setattr(dedup, "SEMANTIC_DEDUP_ENABLED", False)
 
 
+@pytest.fixture(autouse=True)
+def _no_live_llm_in_tests(monkeypatch):
+    """No test may shell out to the real `claude` CLI.
+
+    One cadence test stopped being a no-op after a behaviour change and
+    started running the actual pipeline: the suite went from 85 seconds to
+    ten minutes and burned real generations, and it only surfaced because
+    the wall-clock was absurd. A test that reaches a live model is also
+    nondeterministic by construction.
+
+    FORGE_LLM_BACKEND=none is the engine's own kill switch, honoured by
+    every resolver, so this closes the door globally. A test that genuinely
+    wants a backend monkeypatches the resolver (or deletes this env var
+    itself), which is explicit and local.
+    """
+    monkeypatch.setenv("FORGE_LLM_BACKEND", "none")
+
+
 @pytest.fixture(scope="session")
 def event_loop():
     loop = asyncio.new_event_loop()

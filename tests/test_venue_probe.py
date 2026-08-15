@@ -194,9 +194,13 @@ class TestPickAndSeed:
         got = venue_probe.pick_top_program(candidates, seen_urls={"https://a"})
         assert got["url"] == "https://b"
 
-    def test_returns_none_when_everything_is_seen(self):
+    def test_a_fully_seen_pool_yields_a_revisit_not_nothing(self):
+        """Superseded: returning None here starved the cadence permanently.
+        See TestNeverStarves for the reasoning."""
         candidates = [{"url": "https://a", "program_score": 5}]
-        assert venue_probe.pick_top_program(candidates, seen_urls={"https://a"}) is None
+        got = venue_probe.pick_top_program(candidates, seen_urls={"https://a"})
+        assert got is not None
+        assert got["revisit"] is True
 
     def test_returns_none_on_empty(self):
         assert venue_probe.pick_top_program([]) is None
@@ -362,3 +366,55 @@ class TestAvoidLessons:
     def test_no_lessons_is_fine(self):
         seed = venue_probe.program_to_seed(self._program(), primitive=None, avoid_lessons=[])
         assert "Polymarket" in seed
+
+
+class TestNeverStarves:
+    """The probe must never permanently run out of work.
+
+    Live failure: after the board went US-only the candidate pool shrank to
+    a single item, all 16 previously probed URLs were marked seen forever,
+    and every click of "Generate one now" answered "no new venue program
+    surfaced from any source". The button looked broken; the probe had
+    simply declared the world exhausted.
+
+    A previously worked program is not used up. The strategy built from it
+    depends on the category rotation, the mechanism drawn from the library,
+    and the accumulated rejection lessons — all of which have moved.
+    """
+
+    def _candidates(self) -> list[dict]:
+        return [
+            {"url": "https://a", "program_score": 5, "title": "a"},
+            {"url": "https://b", "program_score": 3, "title": "b"},
+        ]
+
+    def test_unseen_is_still_preferred(self):
+        got = venue_probe.pick_top_program(self._candidates(), seen_urls={"https://a"})
+        assert got["url"] == "https://b"
+
+    def test_falls_back_to_a_revisit_when_everything_is_seen(self):
+        got = venue_probe.pick_top_program(self._candidates(), seen_urls={"https://a", "https://b"})
+        assert got is not None, "an exhausted pool must still yield work"
+        assert got["url"] == "https://a"
+        assert got.get("revisit") is True
+
+    def test_a_revisit_is_marked_so_the_log_is_honest(self):
+        got = venue_probe.pick_top_program([{"url": "https://a", "program_score": 5}], seen_urls={"https://a"})
+        assert got["revisit"] is True
+
+    def test_an_actually_empty_pool_still_returns_none(self):
+        assert venue_probe.pick_top_program([], seen_urls={"https://a"}) is None
+
+    def test_fresh_candidates_are_not_marked_revisit(self):
+        got = venue_probe.pick_top_program(self._candidates(), seen_urls=set())
+        assert not got.get("revisit")
+
+
+class TestSourceBreadth:
+    def test_enough_sources_to_keep_the_pool_alive(self):
+        """One repo's issue tracker is not a pipeline."""
+        assert len(venue_probe.PROBE_REPOS) >= 10
+
+    def test_sources_span_several_venues(self):
+        venues = {v for _repo, v in venue_probe.PROBE_REPOS}
+        assert len(venues) >= 5

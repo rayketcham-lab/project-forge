@@ -290,7 +290,17 @@ PROBE_REPOS: tuple[tuple[str, str], ...] = (
     ("Kalshi/kalshi-starter-code-python", "Kalshi"),
     ("Kalshi/tools-and-analysis", "Kalshi"),
     ("alpacahq/alpaca-py", "Alpaca"),
+    ("alpacahq/alpaca-trade-api-python", "Alpaca"),
     ("coinbase/coinbase-advanced-py", "Coinbase"),
+    ("coinbase/cdp-sdk", "Coinbase"),
+    ("krakenfx/kraken-wsclient-py", "Kraken"),
+    ("ib-api-reloaded/ib_async", "Interactive Brokers"),
+    ("Voyz/ibeam", "Interactive Brokers"),
+    # CCXT is a unified client over many venues, most offshore — its venue
+    # entry is "verify", so a signal from here still has to be built into a
+    # strategy on an eligible venue. Included because its release notes are
+    # the densest published record of fee and funding mechanics changing.
+    ("ccxt/ccxt", "CCXT-covered exchanges"),
     ("aave/aave-v3-core", "Aave"),
     ("morpho-org/morpho-blue", "Morpho"),
     ("Uniswap/v3-core", "Uniswap"),
@@ -468,14 +478,30 @@ def fetch_venue_programs(
 
 
 def pick_top_program(candidates: list[dict], *, seen_urls: set[str] | None = None) -> dict | None:
-    """The SINGLE program to work this cycle, skipping anything already
-    probed. None means a normal quiet hour, not an error."""
+    """The SINGLE program to work this cycle.
+
+    Unseen candidates win. When every candidate has already been probed the
+    highest-scoring one is returned anyway, marked `revisit`.
+
+    That fallback exists because the alternative was worse: after the board
+    went US-only the pool shrank to a handful of items, every URL was
+    already in the seen set, and the cadence answered "no new venue program
+    surfaced" forever — a button that looked broken while the probe quietly
+    declared the world exhausted.
+
+    A previously worked program is not used up. What gets built from it
+    depends on the category rotation, the mechanism drawn from the library,
+    and the accumulated rejection lessons, and all three have moved on since
+    the last visit. Only a genuinely empty pool returns None.
+    """
     seen = seen_urls or set()
     ordered = sorted(candidates, key=lambda c: c.get("program_score", 0), reverse=True)
     for c in ordered:
         if c.get("url") and c["url"] in seen:
             continue
         return c
+    if ordered:
+        return {**ordered[0], "revisit": True}
     return None
 
 
