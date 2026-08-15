@@ -1260,7 +1260,11 @@ async def _fire_feed_refresh(db: Database) -> None:
     ]
     for label, run in fetchers:
         try:
-            items = run()
+            # Each fetcher is blocking urllib — NVD in particular is slow and
+            # often unavailable. Inline, this froze every request the app was
+            # serving for the length of the sweep. (A static guard cannot see
+            # this one: `run` is a lambda dispatched through a variable.)
+            items = await asyncio.to_thread(run)
             # Some fetchers may be async-aware; await if so.
             if hasattr(items, "__await__"):
                 items = await items
