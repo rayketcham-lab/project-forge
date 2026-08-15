@@ -156,8 +156,8 @@ def test_no_inline_feed_fetches_in_async_functions(path: Path):
 
 
 def _sync_blocking_functions() -> set[str]:
-    """Names of SYNC functions anywhere in the package that call the LLM
-    backend directly.
+    """Names of SYNC functions anywhere in the package that block: they call
+    the LLM backend, or they shell out to a subprocess.
 
     These are the second-order blockers. `semantic_dedup_check` is sync and
     shells out to `claude --print`; called inline from an async function it
@@ -180,6 +180,16 @@ def _sync_blocking_functions() -> set[str]:
                 if not isinstance(node, ast.Call):
                     continue
                 if isinstance(node.func, ast.Attribute) and node.func.attr == "call" and _backendish(node.func.value):
+                    names.add(fn.name)
+                # Shelling out blocks exactly like an LLM call does. The `gh`
+                # CLI in the hourly issue-sync froze the whole dashboard for
+                # minutes — one subprocess per promoted idea, on the loop.
+                if (
+                    isinstance(node.func, ast.Attribute)
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "subprocess"
+                    and node.func.attr in {"run", "check_output", "call", "check_call", "Popen"}
+                ):
                     names.add(fn.name)
                 if isinstance(node.func, ast.Name):
                     called.add(node.func.id)
@@ -205,6 +215,47 @@ _FACTORY_FALSE_POSITIVES = frozenset({"_reasoning_llm_call"})
 
 SYNC_BLOCKERS = _sync_blocking_functions() - _FACTORY_FALSE_POSITIVES
 
+# Blocking calls that predate this test, on paths that are human-initiated
+# (a click, a promote) or disarmed by default (Mechanic), rather than
+# cadences and page loads that fire on their own. They still block and they
+# should still be fixed.
+#
+# This is a RATCHET, not an exemption: the assertion below allows exactly
+# these and fails on anything new, so the list can only shrink. Every entry
+# is a `gh` CLI shell-out inherited from when this engine ran as one-shot
+# cron scripts, where blocking the process cost nothing.
+KNOWN_BLOCKING_DEBT: dict[str, set[str]] = {
+    "cron/auto_promote_runner.py": {"_create_promotion_issue"},
+    "cron/introspect_runner.py": {"gather_self_context"},
+    "cron/scheduler.py": {
+        "_create_enhancement_issue",
+        "create_label",
+        "create_issue",
+        "scaffold_project",
+    },
+    "engine/audit.py": {"audit_promoted_idea", "close_github_issue"},
+    "engine/mechanic.py": {
+        "_create_workspace",
+        "run_agent",
+        "_changed_paths",
+        "_quality_gate",
+        "_open_pr",
+        "list_open_prs",
+    },
+    "web/lifespan_scheduler.py": {"spawn_mechanic_run"},
+    "web/routes.py": {
+        "create_repo",
+        "push_initial_commit",
+        "create_issue",
+        "create_label",
+        "_create_promotion_issue",
+        "_promote_to_ci_queue",
+        "spawn_mechanic_run",
+        "merge_pr",
+        "close_pr",
+    },
+}
+
 
 @pytest.mark.parametrize("path", _modules(), ids=lambda p: str(p.name))
 def test_no_async_function_calls_a_sync_blocker_inline(path: Path):
@@ -224,7 +275,11 @@ def test_no_async_function_calls_a_sync_blocker_inline(path: Path):
                 if node.func.id in SYNC_BLOCKERS:
                     offenders.append((fn.name, node.func.id, node.lineno))
 
-    assert not offenders, (
-        f"{rel} calls a blocking sync helper inline from async code {offenders} — "
-        f"these shell out to the LLM backend; wrap in `await asyncio.to_thread(fn, ...)`."
+    allowed = KNOWN_BLOCKING_DEBT.get(rel, set())
+    unexpected = [o for o in offenders if o[1] not in allowed]
+
+    assert not unexpected, (
+        f"{rel} calls a blocking sync helper inline from async code {unexpected} — "
+        f"these shell out to the LLM backend or a subprocess and freeze every "
+        f"request the app is serving; wrap in `await asyncio.to_thread(fn, ...)`."
     )

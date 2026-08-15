@@ -20,6 +20,7 @@ historical record of the promotion attempt.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -109,7 +110,9 @@ async def run_issue_sync_cycle(db: Database) -> dict[str, Any]:
             logger.info("skip idea=%s: unparseable issue url", row["id"])
             continue
         repo, num = ref
-        state = fetch_issue_state(repo, num)
+        # `gh` shells out per issue; inline this froze every route for
+        # as long as GitHub took, once per promoted idea.
+        state = await asyncio.to_thread(fetch_issue_state, repo, num)
         if state is None:
             results.append({"id": row["id"], "skipped": "gh_failure"})
             continue

@@ -1598,7 +1598,9 @@ async def thinktank_page(request: Request):
 
     # Roadmap: GitHub issues
     try:
-        all_issues = list_self_issues()
+        # `gh` shells out — inline, loading this page froze every other
+        # request for as long as GitHub took.
+        all_issues = await asyncio.to_thread(list_self_issues)
         open_issues = [i for i in all_issues if i.get("state") == "OPEN"]
         closed_issues = [i for i in all_issues if i.get("state") == "CLOSED"]
         error = None
@@ -1861,7 +1863,9 @@ async def api_thinktank():
     from project_forge.scaffold.github import list_self_issues
 
     try:
-        all_issues = list_self_issues()
+        # `gh` shells out — inline, loading this page froze every other
+        # request for as long as GitHub took.
+        all_issues = await asyncio.to_thread(list_self_issues)
     except RuntimeError as e:
         logger.error("Failed to list self-issues: %s", e)
         raise HTTPException(status_code=502, detail="Failed to list issues. Check server logs.") from e
@@ -1923,7 +1927,7 @@ async def mechanic_page(request: Request):
     Nothing ships without a click here."""
     from project_forge.engine.mechanic_review import list_open_prs
 
-    prs = list_open_prs()
+    prs = await asyncio.to_thread(list_open_prs)
     return templates.TemplateResponse(request, "mechanic.html", {"prs": prs, "total": len(prs)})
 
 
@@ -1932,7 +1936,7 @@ async def api_mechanic_prs():
     """JSON: open Mechanic PRs awaiting review."""
     from project_forge.engine.mechanic_review import list_open_prs
 
-    return {"prs": list_open_prs()}
+    return {"prs": await asyncio.to_thread(list_open_prs)}
 
 
 @router.get("/api/mechanic/status")
@@ -2047,7 +2051,7 @@ async def api_repos(org: str | None = None):
     from project_forge.scaffold.github import list_org_repos
 
     try:
-        repos = list_org_repos(org)
+        repos = await asyncio.to_thread(list_org_repos, org)
         return {"repos": repos}
     except RuntimeError as e:
         logger.error("Failed to list repos for %s: %s", org, e)
@@ -2070,7 +2074,7 @@ async def compare_idea(
 
     owner = owner or "rayketcham-lab"
     try:
-        repo_details = get_repo_details(owner, repo)
+        repo_details = await asyncio.to_thread(get_repo_details, owner, repo)
     except RuntimeError as e:
         logger.error("Failed to fetch repo %s/%s: %s", owner, repo, e)
         raise HTTPException(status_code=502, detail="Failed to fetch repo details. Check server logs.") from e
