@@ -118,19 +118,72 @@ async def test_scaffold_requires_auth(authed_client):
 
 
 # ---------------------------------------------------------------------------
-# Tests — no token configured (backward compat)
+# Tests — no FORGE_API_TOKEN configured
+#
+# The default used to be "no token set → skip auth for everyone". Since the
+# server also defaults to binding 0.0.0.0, a fresh clone published every write
+# route to the whole network. An empty token now exempts loopback only.
 # ---------------------------------------------------------------------------
 
 
+@pytest_asyncio.fixture
+async def remote_client(tmp_path):
+    """Client that arrives from off-host, as a network attacker would."""
+    db.db_path = tmp_path / "test_auth_remote.db"
+    await db.connect()
+    transport = ASGITransport(app=app, client=("203.0.113.7", 44321))
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
+    await db.close()
+
+
 @pytest.mark.asyncio
-async def test_no_auth_required_when_token_not_set(client):
-    """When FORGE_API_TOKEN is empty, POST endpoints work without any auth header."""
+async def test_remote_write_rejected_when_no_token_configured(remote_client):
+    """The default install must not accept blind writes off the network."""
+    idea = _make_idea(status="new")
+    await db.save_idea(idea)
+
+    resp = await remote_client.post(f"/ideas/{idea.id}/approve")
+    assert resp.status_code == 401
+
+    fresh = await db.get_idea(idea.id)
+    assert fresh.status == "new", "unauthenticated remote POST mutated state"
+
+
+@pytest.mark.asyncio
+async def test_remote_write_allowed_with_dashboard_token(remote_client):
+    """A remote browser still works: base.html hands app.js the dashboard
+    token and it rides along on every mutating fetch."""
+    from project_forge.web.app import _dashboard_token
+
+    idea = _make_idea(status="new")
+    await db.save_idea(idea)
+
+    resp = await remote_client.post(
+        f"/ideas/{idea.id}/approve",
+        headers={"Authorization": f"Bearer {_dashboard_token}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "approved"
+
+
+@pytest.mark.asyncio
+async def test_loopback_write_still_unauthenticated_when_no_token_set(client):
+    """Local callers — scripts, cron one-shots, the test suite — are unchanged."""
     idea = _make_idea(status="new")
     await db.save_idea(idea)
 
     resp = await client.post(f"/ideas/{idea.id}/approve")
     assert resp.status_code == 200
     assert resp.json()["status"] == "approved"
+
+
+@pytest.mark.asyncio
+async def test_remote_reads_stay_open(remote_client):
+    """GET must not start 401-ing — the dashboard is read-open by design."""
+    for path in ("/", "/health", "/api/stats"):
+        resp = await remote_client.get(path)
+        assert resp.status_code != 401, f"GET {path} regressed to 401"
 
 
 # ---------------------------------------------------------------------------

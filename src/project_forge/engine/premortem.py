@@ -195,7 +195,7 @@ async def generate_premortem(
         return _heuristic_fallback(idea)
 
     prompt = _build_premortem_prompt(idea)
-    raw = (resolved.call(prompt) or "").strip()
+    raw = (await asyncio.to_thread(resolved.call, prompt) or "").strip()
     raw = _strip_codefence(raw)
     try:
         data: dict[str, Any] = json.loads(raw)

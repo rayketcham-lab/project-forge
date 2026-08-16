@@ -1,6 +1,6 @@
 # Project Forge
 
-![Version](https://img.shields.io/badge/version-0.24-blue) ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/rayketcham-lab/project-forge/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-2250+-passing?color=brightgreen) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+![Version](https://img.shields.io/badge/version-0.24-blue) ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/rayketcham-lab/project-forge/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-2630+-passing?color=brightgreen) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 **[Quickstart](#quick-start) · [Boards](#the-six-boards) · [Dashboard](#dashboard) · [Labs](#labs--autonomous-avenues-v017) · [Architecture](#architecture) · [Config](#configuration) · [Roadmap](#roadmap)**
 
@@ -181,7 +181,7 @@ git clone https://github.com/rayketcham-lab/project-forge.git
 cd project-forge
 pip install -e ".[dev,test]"
 
-# Run tests (~1860 tests across 145 files)
+# Run tests (~2,630 tests across 163 files)
 pytest tests/ -q
 
 # Start dashboard — the in-process scheduler boots with it
@@ -269,8 +269,27 @@ Non-read methods require a Bearer token when `FORGE_API_TOKEN` is set. The dashb
 | `FORGE_LLM_TIMEOUT_SEC` | 420 | CLI call timeout; a timeout is not a verdict |
 | `FORGE_OPERATOR_JURISDICTION` | (unset) | Stated in the generation seed and judged by the legality lens |
 | `FORGE_SUPER_REASONING` | unset | `1` to use the LLM for super-idea cluster naming |
-| `FORGE_API_TOKEN` | (unset) | If set, non-read methods require Bearer auth |
+| `FORGE_API_TOKEN` | (unset) | Bearer token for non-read methods. See [Access control](#access-control) — unset does **not** mean "open to the network" |
+| `FORGE_ALLOWED_HOSTS` | `*` | Comma-separated Host-header allowlist. Narrow it (`localhost,127.0.0.1,forge.lan`) to block DNS rebinding |
 | `FORGE_GITHUB_OWNER` | `rayketcham-lab` | Default org for scaffolded repos |
+
+### Access control
+
+Reads are open by design — the dashboard is meant to be looked at. Writes are not:
+
+| Caller | `FORGE_API_TOKEN` unset | `FORGE_API_TOKEN` set |
+|--------|------------------------|----------------------|
+| Loopback (CLI, scripts, cron) | allowed | needs a token |
+| Over the network | needs the dashboard token | needs a token |
+
+The **dashboard token** is ephemeral, regenerated per machine boot, and injected into each page as `<meta name="forge-token">`; `static/app.js` sends it on every mutating `fetch`. That is what keeps the browser working without a configured token.
+
+Two limits are worth stating plainly, because neither is fixed by the table above:
+
+- Any client that can `GET` a page can read that meta tag and reuse it as a write credential. If the port is reachable by anyone you don't trust, set `FORGE_API_TOKEN` **and** put the dashboard behind something that authenticates.
+- Behind a same-host reverse proxy every request looks like loopback, which collapses the first row back to "open". Pass a real token through the proxy in that setup.
+
+> Earlier versions skipped auth entirely whenever `FORGE_API_TOKEN` was empty. Combined with the default `0.0.0.0` bind, a fresh clone published every write route — delete, promote, mechanic-run, admin reload — to the whole network.
 
 ### Scheduler cadences
 
@@ -524,7 +543,7 @@ Every avenue degrades gracefully without an LLM (heuristic fallback) and without
 ## Testing
 
 ```bash
-pytest tests/ -q                                   # ~1860 tests, 145 files
+pytest tests/ -q                                   # ~2,630 tests, 163 files
 pytest tests/ -k "pki" -v                          # subset — v0.23 PKI board
 pytest tests/ -k "sniper or snipe or market_intel" # subset — Sniper board
 pytest tests/ -k "mechanic" -v                     # subset — self-improvement

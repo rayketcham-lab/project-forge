@@ -13,6 +13,55 @@ import pytest_asyncio
 
 from project_forge.models import Idea, IdeaCategory
 
+# DNS answer standing in for a public host (93.184.216.34 was example.com's A record).
+# validate_url()/fetch_url_content() resolve the hostname through socket.getaddrinfo as
+# an SSRF guard, so tests must patch it or they depend on live DNS.
+PUBLIC_ADDRINFO = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 0))]
+
+
+def _streaming_client(
+    *,
+    body: bytes = b"",
+    status_code: int = 200,
+    content_type: str = "text/html",
+    extra_headers: dict | None = None,
+    chunk_size: int | None = None,
+):
+    """Mock httpx.AsyncClient whose .stream() yields ``body``.
+
+    fetch_url_content reads the body incrementally so a hostile endpoint
+    cannot stream the process to death, so the mock has to be a real async
+    context manager over an async byte iterator rather than a buffered
+    response object.
+    """
+    headers = {"content-type": content_type}
+    if extra_headers:
+        headers.update(extra_headers)
+
+    response = MagicMock()
+    response.status_code = status_code
+    response.headers = headers
+    response.encoding = "utf-8"
+
+    step = chunk_size or max(len(body), 1)
+
+    async def _aiter_bytes():
+        for i in range(0, len(body), step):
+            yield body[i : i + step]
+
+    response.aiter_bytes = _aiter_bytes
+
+    stream_cm = AsyncMock()
+    stream_cm.__aenter__ = AsyncMock(return_value=response)
+    stream_cm.__aexit__ = AsyncMock(return_value=False)
+
+    client = AsyncMock()
+    client.stream = MagicMock(return_value=stream_cm)
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+    return client
+
+
 # === MODEL TESTS ===
 
 
@@ -104,16 +153,11 @@ class TestUrlFetcher:
         <p>Google proposes replacing X.509 with Merkle tree certificates.</p>
         </article></body></html>
         """
-        with patch("project_forge.engine.url_ingest.httpx.AsyncClient") as mock_client:
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_response.text = mock_html
-            mock_response.headers = {"content-type": "text/html"}
-            mock_instance = AsyncMock()
-            mock_instance.get = AsyncMock(return_value=mock_response)
-            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
-            mock_instance.__aexit__ = AsyncMock(return_value=False)
-            mock_client.return_value = mock_instance
+        with (
+            patch("project_forge.engine.url_ingest.httpx.AsyncClient") as mock_client,
+            patch("socket.getaddrinfo", return_value=PUBLIC_ADDRINFO),
+        ):
+            mock_client.return_value = _streaming_client(body=mock_html.encode())
 
             result = await fetch_url_content("https://example.com/article")
             assert result.title == "Merkle Tree Certificates"
@@ -125,16 +169,11 @@ class TestUrlFetcher:
         from project_forge.engine.url_ingest import fetch_url_content
 
         mock_html = "<html><head><title>Test</title></head><body><p>Content</p></body></html>"
-        with patch("project_forge.engine.url_ingest.httpx.AsyncClient") as mock_client:
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_response.text = mock_html
-            mock_response.headers = {"content-type": "text/html"}
-            mock_instance = AsyncMock()
-            mock_instance.get = AsyncMock(return_value=mock_response)
-            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
-            mock_instance.__aexit__ = AsyncMock(return_value=False)
-            mock_client.return_value = mock_instance
+        with (
+            patch("project_forge.engine.url_ingest.httpx.AsyncClient") as mock_client,
+            patch("socket.getaddrinfo", return_value=PUBLIC_ADDRINFO),
+        ):
+            mock_client.return_value = _streaming_client(body=mock_html.encode())
 
             result = await fetch_url_content("https://www.feistyduck.com/newsletter/issue_135")
             assert result.domain == "feistyduck.com"
@@ -143,16 +182,11 @@ class TestUrlFetcher:
     async def test_fetch_url_handles_non_html(self):
         from project_forge.engine.url_ingest import fetch_url_content
 
-        with patch("project_forge.engine.url_ingest.httpx.AsyncClient") as mock_client:
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_response.text = '{"key": "value"}'
-            mock_response.headers = {"content-type": "application/json"}
-            mock_instance = AsyncMock()
-            mock_instance.get = AsyncMock(return_value=mock_response)
-            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
-            mock_instance.__aexit__ = AsyncMock(return_value=False)
-            mock_client.return_value = mock_instance
+        with (
+            patch("project_forge.engine.url_ingest.httpx.AsyncClient") as mock_client,
+            patch("socket.getaddrinfo", return_value=PUBLIC_ADDRINFO),
+        ):
+            mock_client.return_value = _streaming_client(body=b'{"key": "value"}', content_type="application/json")
 
             # Should still return content (extract what we can)
             result = await fetch_url_content("https://example.com/api")
@@ -162,18 +196,49 @@ class TestUrlFetcher:
     async def test_fetch_url_raises_on_http_error(self):
         from project_forge.engine.url_ingest import UrlFetchError, fetch_url_content
 
-        with patch("project_forge.engine.url_ingest.httpx.AsyncClient") as mock_client:
-            mock_response = MagicMock()
-            mock_response.status_code = 404
-            mock_response.text = "Not Found"
-            mock_instance = AsyncMock()
-            mock_instance.get = AsyncMock(return_value=mock_response)
-            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
-            mock_instance.__aexit__ = AsyncMock(return_value=False)
-            mock_client.return_value = mock_instance
+        with (
+            patch("project_forge.engine.url_ingest.httpx.AsyncClient") as mock_client,
+            patch("socket.getaddrinfo", return_value=PUBLIC_ADDRINFO),
+        ):
+            mock_client.return_value = _streaming_client(body=b"Not Found", status_code=404)
 
             with pytest.raises(UrlFetchError, match="404"):
                 await fetch_url_content("https://example.com/missing")
+
+    @pytest.mark.asyncio
+    async def test_oversized_body_is_truncated_not_buffered(self):
+        """A hostile endpoint must not be able to stream the process to death.
+        Only 5000 chars ever reach an idea, so the read stops at the ceiling."""
+        from project_forge.engine.url_ingest import MAX_RESPONSE_BYTES, fetch_url_content
+
+        huge = b"<html><head><title>Big</title></head><body>" + (b"A" * (MAX_RESPONSE_BYTES * 3))
+        with (
+            patch("project_forge.engine.url_ingest.httpx.AsyncClient") as mock_client,
+            patch("socket.getaddrinfo", return_value=PUBLIC_ADDRINFO),
+        ):
+            mock_client.return_value = _streaming_client(body=huge, chunk_size=64 * 1024)
+            result = await fetch_url_content("https://example.com/huge")
+
+        assert len(result.text) <= 5000
+
+    @pytest.mark.asyncio
+    async def test_oversized_content_length_is_rejected_before_reading(self):
+        from project_forge.engine.url_ingest import (
+            MAX_RESPONSE_BYTES,
+            UrlFetchError,
+            fetch_url_content,
+        )
+
+        with (
+            patch("project_forge.engine.url_ingest.httpx.AsyncClient") as mock_client,
+            patch("socket.getaddrinfo", return_value=PUBLIC_ADDRINFO),
+        ):
+            mock_client.return_value = _streaming_client(
+                body=b"<html></html>",
+                extra_headers={"content-length": str(MAX_RESPONSE_BYTES * 10)},
+            )
+            with pytest.raises(UrlFetchError, match="too large"):
+                await fetch_url_content("https://example.com/huge")
 
     @pytest.mark.asyncio
     async def test_fetch_strips_utm_params(self):
@@ -626,8 +691,9 @@ class TestUrlUtilities:
     def test_validate_url_accepts_https(self):
         from project_forge.engine.url_ingest import validate_url
 
-        assert validate_url("https://feistyduck.com/article") is True
-        assert validate_url("http://feistyduck.com/article") is True
+        with patch("socket.getaddrinfo", return_value=PUBLIC_ADDRINFO):
+            assert validate_url("https://feistyduck.com/article") is True
+            assert validate_url("http://feistyduck.com/article") is True
 
     def test_validate_url_rejects_garbage(self):
         from project_forge.engine.url_ingest import validate_url
@@ -748,9 +814,7 @@ class TestSSRFProtection:
         """Public IPs must pass validation without raising."""
         from project_forge.engine.url_ingest import validate_url
 
-        # Mock DNS resolution to return a known public IP (93.184.216.34 = example.com)
-        public_addrinfo = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 0))]
-        with patch("socket.getaddrinfo", return_value=public_addrinfo):
+        with patch("socket.getaddrinfo", return_value=PUBLIC_ADDRINFO):
             result = validate_url("https://example.com")
         assert result is True
 

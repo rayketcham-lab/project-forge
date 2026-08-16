@@ -166,7 +166,6 @@ def _claude_cli_path() -> str | None:
         return found
     candidates = [
         os.path.expanduser("~/.local/bin/claude"),
-        "/home/claude/.local/bin/claude",
         os.path.expanduser("~/.npm-global/bin/claude"),
         "/usr/local/bin/claude",
     ]

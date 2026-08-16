@@ -16,7 +16,14 @@ from project_forge.models import Idea, IdeaCategory
 from project_forge.storage.db import Database
 
 
-def _idea(name: str, tagline: str, *, category: IdeaCategory = IdeaCategory.SECURITY_TOOL, score: float = 0.7) -> Idea:
+def _idea(
+    name: str,
+    tagline: str,
+    *,
+    category: IdeaCategory = IdeaCategory.SECURITY_TOOL,
+    score: float = 0.7,
+    status: str = "new",
+) -> Idea:
     return Idea(
         name=name,
         tagline=tagline,
@@ -26,6 +33,7 @@ def _idea(name: str, tagline: str, *, category: IdeaCategory = IdeaCategory.SECU
         feasibility_score=score,
         mvp_scope="mvp",
         tech_stack=["python"],
+        status=status,
     )
 
 
@@ -238,3 +246,57 @@ class TestGoingForwardThreshold:
         candidate = _idea("Candidate", "container image provenance verification engine")
         ok, reason = await should_accept(candidate, db)
         assert ok is False, f"Tighter threshold did not catch a near-paraphrase. reason={reason}"
+
+
+# ── Terminal-status protection (siphon_duplicates) ───────────────────
+
+
+class TestDuplicateSiphonProtectsTerminalStatuses:
+    """siphon_verticals already refuses to archive human-blessed ideas.
+    siphon_duplicates must honour the same contract: the daily cadence
+    must never silently archive something the operator approved,
+    scaffolded, implemented or contributed."""
+
+    @pytest.mark.asyncio
+    async def test_approved_idea_is_never_archived_as_a_duplicate(self, db):
+        from project_forge.engine.siphon import siphon_duplicates
+
+        # The approved idea deliberately scores LOWER, so the plain
+        # "keep highest feasibility" rule would archive it.
+        await db.save_idea(_idea("Cert Pin Detector", "certificate pinning misconfiguration scanner", score=0.9))
+        await db.save_idea(
+            _idea(
+                "Pinning Misconfig Scanner",
+                "certificate pinning misconfiguration detector",
+                score=0.5,
+                status="approved",
+            )
+        )
+
+        await siphon_duplicates(db, dry_run=False)
+
+        cursor = await db.db.execute("SELECT name, status FROM ideas")
+        statuses = {r["name"]: r["status"] for r in await cursor.fetchall()}
+        assert statuses["Pinning Misconfig Scanner"] == "approved", (
+            "operator-approved idea was archived by the duplicate siphon"
+        )
+
+    @pytest.mark.asyncio
+    async def test_dry_run_report_excludes_terminal_members_from_archive_plan(self, db):
+        from project_forge.engine.siphon import siphon_duplicates
+
+        await db.save_idea(_idea("Cert Pin Detector", "certificate pinning misconfiguration scanner", score=0.9))
+        await db.save_idea(
+            _idea(
+                "Pinning Misconfig Scanner",
+                "certificate pinning misconfiguration detector",
+                score=0.5,
+                status="scaffolded",
+            )
+        )
+
+        report = await siphon_duplicates(db, dry_run=True)
+        planned = [i for c in report["clusters"] for i in c["archive"]]
+        cursor = await db.db.execute("SELECT id FROM ideas WHERE status = 'scaffolded'")
+        protected_id = (await cursor.fetchone())["id"]
+        assert protected_id not in planned

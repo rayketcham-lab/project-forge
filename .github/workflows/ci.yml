@@ -11,6 +11,24 @@ on:
 permissions:
   contents: read
 
+# Every job below carries the same guard:
+#
+#   if: github.event_name != 'pull_request'
+#       || github.event.pull_request.head.repo.full_name == github.repository
+#
+# Every job runs on a SELF-HOSTED runner — the same host that serves the
+# dashboard and holds a logged-in `gh`. A pull_request from a fork checks out
+# attacker-controlled code and then runs `pytest tests/` over it: arbitrary
+# code execution on that host. A read-only GITHUB_TOKEN does nothing to stop
+# it, because the prize is the machine, not the token. So fork PRs never
+# reach the runner — review them by pulling the branch locally, or re-push
+# the branch to this repo to get a full CI run.
+#
+# GitHub's "require approval for outside contributors" setting is the second
+# layer; this guard lives in the repo so it survives a settings change.
+# (The comparison is evaluated by the Actions expression engine and never
+# interpolated into a shell command, so it is not an injection sink.)
+
 env:
   # Each job detects Python locally to handle multi-runner setups
   FIND_PY: |
@@ -35,6 +53,9 @@ env:
 jobs:
   lint:
     runs-on: [self-hosted, Linux]
+    if: >-
+      github.event_name != 'pull_request'
+      || github.event.pull_request.head.repo.full_name == github.repository
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -47,6 +68,9 @@ jobs:
 
   test:
     runs-on: [self-hosted, Linux]
+    if: >-
+      github.event_name != 'pull_request'
+      || github.event.pull_request.head.repo.full_name == github.repository
     needs: lint
     timeout-minutes: 20
     steps:
@@ -62,6 +86,9 @@ jobs:
 
   build:
     runs-on: [self-hosted, Linux]
+    if: >-
+      github.event_name != 'pull_request'
+      || github.event.pull_request.head.repo.full_name == github.repository
     needs: test
     timeout-minutes: 15
     steps:
@@ -100,6 +127,9 @@ jobs:
 
   security:
     runs-on: [self-hosted, Linux]
+    if: >-
+      github.event_name != 'pull_request'
+      || github.event.pull_request.head.repo.full_name == github.repository
     needs: lint
     timeout-minutes: 15
     steps:
@@ -118,6 +148,9 @@ jobs:
 
   issue-test-ratio:
     runs-on: [self-hosted, Linux]
+    if: >-
+      github.event_name != 'pull_request'
+      || github.event.pull_request.head.repo.full_name == github.repository
     needs: test
     timeout-minutes: 10
     steps:
@@ -153,6 +186,9 @@ jobs:
 
   self-improvement-queue:
     runs-on: [self-hosted, Linux]
+    if: >-
+      github.event_name != 'pull_request'
+      || github.event.pull_request.head.repo.full_name == github.repository
     needs: [test]
     timeout-minutes: 10
     steps:

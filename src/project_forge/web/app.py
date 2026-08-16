@@ -151,7 +151,7 @@ app = FastAPI(
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(CSPMiddleware)
 app.add_middleware(BearerTokenMiddleware)
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts_list)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # Import and include routes

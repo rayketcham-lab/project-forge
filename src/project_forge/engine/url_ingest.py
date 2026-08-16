@@ -118,6 +118,40 @@ def clean_url(url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
 
 
+# Only the first 5000 characters ever reach an idea, so there is no reason to
+# pull a whole response into memory. Without a ceiling a hostile (or merely
+# broken) endpoint can stream until the single-process app dies.
+MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+
+
+async def _get_bounded(client: httpx.AsyncClient, url: str) -> tuple[httpx.Response, str]:
+    """GET ``url``, reading at most ``MAX_RESPONSE_BYTES`` of the body.
+
+    Returns the response (headers/status only — the body is not buffered on it)
+    alongside the decoded text. Oversized bodies are truncated, not rejected:
+    the useful part of an article is at the top, and the caller keeps 5000
+    characters regardless.
+    """
+    async with client.stream("GET", url) as response:
+        if response.status_code >= 400:
+            return response, ""
+
+        declared = response.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > MAX_RESPONSE_BYTES:
+            raise UrlFetchError(f"Response too large ({declared} bytes) fetching {url}")
+
+        chunks: list[bytes] = []
+        total = 0
+        async for chunk in response.aiter_bytes():
+            chunks.append(chunk)
+            total += len(chunk)
+            if total >= MAX_RESPONSE_BYTES:
+                break
+
+    raw = b"".join(chunks)[:MAX_RESPONSE_BYTES]
+    return response, raw.decode(response.encoding or "utf-8", errors="replace")
+
+
 async def fetch_url_content(url: str) -> UrlContent:
     """Fetch URL and extract content.
 
@@ -132,12 +166,12 @@ async def fetch_url_content(url: str) -> UrlContent:
     validate_url(url)
 
     async with httpx.AsyncClient(follow_redirects=False, timeout=30.0) as client:
-        response = await client.get(url)
+        response, body = await _get_bounded(client, url)
 
     if response.status_code >= 400:
         raise UrlFetchError(f"HTTP {response.status_code} fetching {url}")
 
-    text = response.text
+    text = body
     domain = extract_domain(url)
 
     # Extract title from HTML and strip tags for text content

@@ -48,7 +48,7 @@ def _name_token_jaccard(a: str, b: str) -> float:
 async def _active_ideas_by_category(db: Database) -> dict[str, list]:
     """Bucket active ideas by category (drops O(N²) → O(N²/K))."""
     cur = await db.db.execute(
-        "SELECT id, name, tagline, category, feasibility_score "
+        "SELECT id, name, tagline, category, feasibility_score, status "
         "FROM ideas "
         "WHERE status NOT IN ('archived', 'rejected') "
         "AND name NOT LIKE '[SUPER]%'",
@@ -62,6 +62,9 @@ async def _active_ideas_by_category(db: Database) -> dict[str, list]:
                 "name": r["name"],
                 "tagline": r["tagline"],
                 "score": float(r["feasibility_score"] or 0.0),
+                # Carried so siphon_duplicates can refuse to archive
+                # human-blessed ideas (mirrors siphon_verticals).
+                "status": r["status"],
             }
         )
     return buckets
@@ -162,7 +165,12 @@ async def siphon_duplicates(
         # Keep highest feasibility score; tiebreak on shorter id (stable).
         cluster.sort(key=lambda x: (-x["score"], x["id"]))
         keep = cluster[0]
-        archive = cluster[1:]
+        # Human-blessed ideas are never archived as duplicates, even when a
+        # higher-scoring twin exists — the operator's approval outranks the
+        # feasibility score. Same contract siphon_verticals enforces.
+        archive = [c for c in cluster[1:] if c.get("status") not in _TERMINAL_STATUSES]
+        if not archive:
+            continue
         archive_ids = [c["id"] for c in archive]
         planned_archive.extend(archive_ids)
 

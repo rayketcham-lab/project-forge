@@ -38,10 +38,49 @@ EXEMPT_FILES: frozenset[str] = frozenset(
 )
 
 
-def _backendish(node: ast.AST) -> bool:
+def _resolves_backend(node: ast.AST) -> bool:
+    """True when an expression produces a backend by calling a resolver.
+
+    Covers the `b = backend if backend is not None else resolve_cheap_backend()`
+    shape used throughout the engine, hence the walk rather than a direct
+    isinstance check on the value itself.
+    """
+    for sub in ast.walk(node):
+        if not isinstance(sub, ast.Call):
+            continue
+        func = sub.func
+        name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
+        if "resolve" in name and "backend" in name:
+            return True
+    return False
+
+
+def _backend_aliases(fn: ast.AST) -> set[str]:
+    """Local names bound to a resolved backend inside this function.
+
+    Naming the variable `backend` is a convention, not a guarantee: two live
+    blockers hid behind `b` (foundry.build_scaffold_plan) and `resolved`
+    (premortem.generate_premortem) for exactly as long as this detector
+    keyed off the identifier alone.
+    """
+    aliases: set[str] = set()
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Assign) and _resolves_backend(node.value):
+            aliases.update(t.id for t in node.targets if isinstance(t, ast.Name))
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and node.value is not None
+            and _resolves_backend(node.value)
+            and isinstance(node.target, ast.Name)
+        ):
+            aliases.add(node.target.id)
+    return aliases
+
+
+def _backendish(node: ast.AST, aliases: frozenset[str] = frozenset()) -> bool:
     """True when this expression looks like a resolved LLM backend."""
     if isinstance(node, ast.Name):
-        return "backend" in node.id.lower()
+        return "backend" in node.id.lower() or node.id in aliases
     if isinstance(node, ast.Attribute):
         return "backend" in node.attr.lower()
     return False
@@ -108,13 +147,14 @@ def _inline_backend_calls(tree: ast.AST) -> list[tuple[str, int]]:
     for fn in ast.walk(tree):
         if not isinstance(fn, ast.AsyncFunctionDef):
             continue
+        aliases = frozenset(_backend_aliases(fn))
         for node in ast.walk(fn):
             if not isinstance(node, ast.Call):
                 continue
             func = node.func
             if not isinstance(func, ast.Attribute) or func.attr != "call":
                 continue
-            if _backendish(func.value):
+            if _backendish(func.value, aliases):
                 found.append((fn.name, node.lineno))
     return found
 
@@ -176,10 +216,15 @@ def _sync_blocking_functions() -> set[str]:
             if not isinstance(fn, ast.FunctionDef):  # sync only
                 continue
             called: set[str] = set()
+            aliases = frozenset(_backend_aliases(fn))
             for node in ast.walk(fn):
                 if not isinstance(node, ast.Call):
                     continue
-                if isinstance(node.func, ast.Attribute) and node.func.attr == "call" and _backendish(node.func.value):
+                if (
+                    isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "call"
+                    and _backendish(node.func.value, aliases)
+                ):
                     names.add(fn.name)
                 # Shelling out blocks exactly like an LLM call does. The `gh`
                 # CLI in the hourly issue-sync froze the whole dashboard for

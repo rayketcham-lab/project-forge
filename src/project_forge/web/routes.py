@@ -43,6 +43,11 @@ from project_forge.web.app import db, templates
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Repo root, derived rather than hardcoded: `gh` must run inside the checkout
+# to pick up the right remote. A literal path worked only on the author's
+# host and made the in-app issue reporter fail silently everywhere else.
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
 
 # === PAGE ROUTES ===
 
@@ -442,7 +447,8 @@ async def api_foundry_plan(idea_id: str):
     idea = await db.get_idea(idea_id)
     if not idea:
         raise HTTPException(status_code=404, detail="Idea not found")
-    return {"plan": build_scaffold_plan(idea), "idea_id": idea_id}
+    plan = await asyncio.to_thread(build_scaffold_plan, idea)
+    return {"plan": plan, "idea_id": idea_id}
 
 
 @router.post("/api/foundry/create/{idea_id}")
@@ -472,7 +478,7 @@ async def api_foundry_create(idea_id: str, request: Request):
 
     owner = settings.github_owner
     try:
-        plan = build_scaffold_plan(idea)
+        plan = await asyncio.to_thread(build_scaffold_plan, idea)
         spec = build_scaffold_spec(idea)
         with tempfile.TemporaryDirectory() as tmpdir:
             project_dir = render_scaffold(spec, idea, Path(tmpdir), owner=owner)
@@ -2498,7 +2504,7 @@ async def create_gh_issue(title: str, body: str, labels: list[str]) -> str | Non
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd="/opt/vmdata/project-forge",
+            cwd=str(_PROJECT_ROOT),
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15)
         if proc.returncode == 0:
@@ -2513,7 +2519,7 @@ async def create_gh_issue(title: str, body: str, labels: list[str]) -> str | Non
                 *cmd_no_labels,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd="/opt/vmdata/project-forge",
+                cwd=str(_PROJECT_ROOT),
             )
             stdout2, _ = await asyncio.wait_for(proc2.communicate(), timeout=15)
             if proc2.returncode == 0:

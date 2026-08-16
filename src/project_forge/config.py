@@ -23,6 +23,20 @@ class Settings(BaseSettings):
     expand_ideas_per_run: int = 2
     expand_cross_weight: float = 0.7
     api_token: str = ""
+    # Host header allowlist. "*" accepts any Host, which is what makes DNS
+    # rebinding work: a page on attacker.com re-points its own hostname at
+    # this LAN address, and the browser then treats it as same-origin and can
+    # read the dashboard token out of the HTML. Narrowing this to the names
+    # you actually serve on breaks that. It defaults open because the right
+    # value is deployment-specific and a wrong guess locks the operator out.
+    # Comma-separated: FORGE_ALLOWED_HOSTS="localhost,127.0.0.1,forge.lan"
+    allowed_hosts: str = "*"
+
+    @property
+    def allowed_hosts_list(self) -> list[str]:
+        hosts = [h.strip() for h in self.allowed_hosts.split(",") if h.strip()]
+        return hosts or ["*"]
+
     # v0.24 Money Bots — where the operator can actually deploy capital.
     # Empty means "unspecified", and generation stays venue-agnostic. Set it
     # (FORGE_OPERATOR_JURISDICTION="United States") and both the generation
