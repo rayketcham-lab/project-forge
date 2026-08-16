@@ -28,7 +28,8 @@ Category description: {category_description}
 {diversity_section}
 
 {portfolio_section}{saturation_section}{external_signals_section}IMPORTANT CONSTRAINTS:
-- The idea must be DIFFERENT from these recently generated ideas: {recent_ideas}
+- The idea must be DIFFERENT from these recently generated ideas (name: tagline pairs — \
+avoid reusing their phrasing/hook, not just their name): {recent_ideas}
 - Think about what's MISSING in the market, not what already exists
 - Consider the intersection of this category with unexpected domains
 - The MVP must be achievable in 2-4 weeks
@@ -208,6 +209,11 @@ def _format_saturation_section(filter_summary: dict | None) -> str:
         lines.append(
             f"Saturated concepts (do NOT center your idea on these): {', '.join(saturated)}",
         )
+        lines.append(
+            "These exact words are also banned from your tagline and name outright — "
+            "not just as the idea's theme. If a saturated word is the only way to "
+            "describe your idea, that is a signal to pick a different idea.",
+        )
     if high_rate:
         rate_strs = [f"{cat} ({rate:.0%})" for cat, rate in high_rate]
         lines.append(f"High filter-rate categories: {', '.join(rate_strs)}")
@@ -254,7 +260,7 @@ def build_generation_prompt(
     persona = random.choice(PERSONA_SEEDS)
     diversity_section += f"\nPERSPECTIVE: Design this for a {persona['role']}. Their situation: {persona['pain']}\n"
 
-    recent_str = ", ".join(recent_ideas[-5:]) if recent_ideas else "None yet"
+    recent_str = "; ".join(recent_ideas[-10:]) if recent_ideas else "None yet"
 
     if portfolio_context:
         portfolio_section = (

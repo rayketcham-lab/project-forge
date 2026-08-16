@@ -76,3 +76,16 @@ class TestFilterSummaryInjection:
         # Some instruction telling Claude to avoid these
         lower = prompt.lower()
         assert "avoid" in lower or "saturated" in lower
+
+    def test_saturated_words_banned_from_tagline_not_just_theme(self):
+        """Prompt must explicitly forbid using saturated words in the
+        tagline/name outright, not just forbid centering the idea on them —
+        otherwise the LLM keeps surface-reusing banned words in taglines
+        while technically avoiding the "theme"."""
+        summary = {
+            "saturated_concepts": ["certificate", "compliance"],
+            "high_filter_rate_categories": [],
+        }
+        prompt = build_generation_prompt(**_baseline_kwargs(), filter_summary=summary)
+        lower = prompt.lower()
+        assert "banned from your tagline" in lower or "banned" in lower

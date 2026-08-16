@@ -28,6 +28,25 @@ def test_build_prompt_with_recent_ideas():
     assert "Idea B" in prompt
 
 
+def test_build_prompt_keeps_last_ten_recent_ideas():
+    recent = [f"Idea {i}" for i in range(15)]
+    prompt = build_generation_prompt(
+        category=IdeaCategory.AUTOMATION,
+        recent_ideas=recent,
+    )
+    assert "Idea 5" in prompt
+    assert "Idea 14" in prompt
+    assert "Idea 0" not in prompt
+
+
+def test_build_prompt_with_tagline_pairs_surfaces_taglines():
+    prompt = build_generation_prompt(
+        category=IdeaCategory.AUTOMATION,
+        recent_ideas=["Cert Mapper: auto-inventories expiring TLS certs across clouds"],
+    )
+    assert "auto-inventories expiring TLS certs across clouds" in prompt
+
+
 def test_build_contrarian_prompt():
     prompt = build_generation_prompt(
         category=IdeaCategory.MARKET_GAP,
