@@ -313,6 +313,7 @@ All in hours, all overridable. The in-process scheduler owns these — no system
 | `FORGE_FUNDABILITY_INTERVAL_HOURS` | 24 | Fundability back-fill |
 | `FORGE_CASHFLOW_INTERVAL_HOURS` | 24 | Cashflow back-fill |
 | `FORGE_PKI_SCORE_INTERVAL_HOURS` | 24 | PKI urgency back-fill |
+| `FORGE_BOT_SCORE_INTERVAL_HOURS` | 24 | Bot-edge back-fill for gated strategies with no score |
 | `FORGE_MECHANIC_INTERVAL_HOURS` | 24 | Self-improvement PR cadence (disarmed by default) |
 | `FORGE_SCOREBOARD_INTERVAL_HOURS` | 24 | Capture realized outcome signals |
 | `FORGE_CARTOGRAPHER_INTERVAL_HOURS` | 168 | Corpus white-space / saturation memo |
@@ -376,7 +377,7 @@ src/project_forge/
     seeds.py                 Seeded resources
   web/
     app.py                   FastAPI factory, lifespan, dashboard token, CSP middleware
-    lifespan_scheduler.py    In-process multi-cadence supervisor (19 cadences)
+    lifespan_scheduler.py    In-process multi-cadence supervisor (21 cadences)
     auth.py                  Bearer token middleware
     routes.py                All page + API routes
     templates/               22 Jinja2 templates
@@ -397,7 +398,7 @@ src/project_forge/
 
 There's no systemd. The runtime sandbox has no DBus, no sudo, no `/etc/systemd/` writes, so every cadence lives in the FastAPI lifespan as a single supervisor task owning N async loops, one per `Cadence`. A child failing once is logged and retried; a child crashing repeatedly does not stop its siblings; cancelling the supervisor cancels every child.
 
-Nineteen cadences run by default. Defaults are tuned so a single host runs the full engine on roughly **$2–3/month** of LLM spend at API-path Haiku prices — and essentially $0 on a Claude subscription.
+Twenty-one cadences run by default. Defaults are tuned so a single host runs the full engine on roughly **$2–3/month** of LLM spend at API-path Haiku prices — and essentially $0 on a Claude subscription.
 
 **Watermark discipline matters.** Cadences that generate are gated on their *own* watermark, not the global one — keying `pulse` off `MAX(generated_at)` left it effectively dead, because the hourly `expand` cadence kept that timestamp perpetually fresh. The PKI probe goes further: since it deliberately stores nothing most hours, it keys off its **attempt log** (`pki_probes.probed_at`), which advances whether or not an idea was admitted.
 

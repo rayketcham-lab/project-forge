@@ -36,6 +36,37 @@ class TestVersionAndCounts:
         assert m
         assert m.group(1) == ".".join(__version__.split(".")[:2])
 
+    def test_claimed_cadence_count_matches_the_scheduler(self, readme: str):
+        """The README stated 19 cadences for two releases while the scheduler
+        built 21, so two boards' cadences were undocumented."""
+        import ast
+
+        source = (
+            Path(__file__).resolve().parent.parent / "src" / "project_forge" / "web" / "lifespan_scheduler.py"
+        ).read_text()
+        built = sum(
+            1
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.Call)
+            and (node.func.id if isinstance(node.func, ast.Name) else getattr(node.func, "attr", "")) == "Cadence"
+        )
+
+        m = re.search(r"multi-cadence supervisor \((\d+) cadences\)", readme)
+        assert m, "README no longer states the cadence count"
+        assert int(m.group(1)) == built, f"README says {m.group(1)} cadences, scheduler builds {built}"
+
+    def test_every_cadence_interval_env_var_is_documented(self, readme: str):
+        """A live knob nobody can find is the same as no knob."""
+        source = (
+            Path(__file__).resolve().parent.parent / "src" / "project_forge" / "web" / "lifespan_scheduler.py"
+        ).read_text()
+        # Only vars wired to a Cadence matter; a stale reference to a removed
+        # cadence (FORGE_AUTO_PROMOTE_*, dropped in v0.14b) is not a doc gap.
+        in_code = set(re.findall(r"_interval_from_env\(\"(FORGE_[A-Z_]+_INTERVAL_HOURS)\"", source))
+        live = {v for v in in_code if "AUTO_PROMOTE" not in v}
+        documented = set(re.findall(r"FORGE_[A-Z_]+_INTERVAL_HOURS", readme))
+        assert not (live - documented), f"undocumented cadence env vars: {sorted(live - documented)}"
+
     def test_claimed_playbook_size_is_real(self, readme: str):
         from project_forge.engine.strategy_library import STRATEGY_LIBRARY
 
