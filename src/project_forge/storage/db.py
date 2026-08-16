@@ -570,15 +570,36 @@ class Database:
         row = await cursor.fetchone()
         return row[0] if row else 0
 
-    async def search_ideas(self, query: str, limit: int = 50, offset: int = 0) -> list[Idea]:
-        """SQL LIKE search -- no Python-side filtering."""
+    async def search_ideas(
+        self,
+        query: str,
+        limit: int = 50,
+        offset: int = 0,
+        status: IdeaStatus | None = None,
+        category: IdeaCategory | None = None,
+    ) -> list[Idea]:
+        """SQL LIKE search -- no Python-side filtering.
+
+        Takes the same status/category filters as list_ideas. /explore renders
+        those controls next to the search box, but used to drop both the moment
+        a query was typed, so the page showed filters it had not applied.
+
+        The LIKE group is parenthesised: without it, appending `AND status = ?`
+        would bind only to the last LIKE, since AND takes precedence over OR.
+        """
         like_q = f"%{query}%"
-        cursor = await self.db.execute(
-            """SELECT * FROM ideas
-            WHERE name LIKE ? OR tagline LIKE ? OR description LIKE ?
-            ORDER BY feasibility_score DESC LIMIT ? OFFSET ?""",
-            (like_q, like_q, like_q, limit, offset),
-        )
+        sql = """SELECT * FROM ideas
+            WHERE (name LIKE ? OR tagline LIKE ? OR description LIKE ?)"""
+        params: list = [like_q, like_q, like_q]
+        if status:
+            sql += " AND status = ?"
+            params.append(status)
+        if category:
+            sql += " AND category = ?"
+            params.append(category.value)
+        sql += " ORDER BY feasibility_score DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        cursor = await self.db.execute(sql, params)
         rows = await cursor.fetchall()
         return [self._row_to_idea(row) for row in rows]
 

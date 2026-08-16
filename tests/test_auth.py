@@ -216,3 +216,35 @@ async def test_idea_detail_no_api_token_meta(authed_client):
     resp = await authed_client.get(f"/ideas/{idea.id}")
     assert resp.status_code == 200
     assert 'name="api-token"' not in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Tests — /api/admin/reload
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_admin_reload_open_from_loopback_when_no_token_configured(client):
+    resp = await client.post("/api/admin/reload")
+    assert resp.status_code != 401
+
+
+@pytest.mark.asyncio
+async def test_admin_reload_rejected_from_off_host(remote_client):
+    """The bypass is for local operators, not the network."""
+    resp = await remote_client.post("/api/admin/reload")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_admin_reload_requires_token_once_one_is_configured(authed_client):
+    """Configuring FORGE_API_TOKEN is an instruction to gate writes. A
+    loopback path that ignored it left a restart primitive ungated."""
+    resp = await authed_client.post("/api/admin/reload")
+    assert resp.status_code == 401
+
+    ok = await authed_client.post(
+        "/api/admin/reload",
+        headers={"Authorization": "Bearer test-secret"},
+    )
+    assert ok.status_code != 401

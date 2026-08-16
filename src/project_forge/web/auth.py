@@ -40,8 +40,14 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
 
         is_loopback = bool(request.client) and request.client.host in _LOOPBACK
 
-        # Admin reload is localhost-only; no Bearer token required.
-        if request.url.path == "/api/admin/reload" and is_loopback:
+        # Admin reload is localhost-only, and only skips the token when no
+        # token is configured. Configuring one is an explicit instruction to
+        # gate writes; a path that ignores it is a hole in that instruction,
+        # not a convenience. (A remote caller cannot forge loopback here:
+        # uvicorn only honours X-Forwarded-For from a 127.0.0.1 peer. Behind a
+        # same-host reverse proxy every request looks local — see the class
+        # docstring.)
+        if request.url.path == "/api/admin/reload" and is_loopback and not settings.api_token:
             return await call_next(request)
 
         # Validate Authorization header using constant-time comparison.

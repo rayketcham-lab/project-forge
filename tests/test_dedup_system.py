@@ -188,6 +188,65 @@ class TestSQLQueries:
         assert results[0].name == "Quantum CRL Optimizer"
 
     @pytest.mark.asyncio
+    async def test_search_respects_status_filter(self, db):
+        """/explore renders status + category controls beside the search box.
+        They used to be dropped the moment a query was typed, so the page
+        showed filters it had not applied."""
+        keep = Idea(
+            name="Quantum Keeper",
+            tagline="quantum thing",
+            description="d",
+            category=IdeaCategory.PQC_CRYPTOGRAPHY,
+            market_analysis="m",
+            feasibility_score=0.8,
+            mvp_scope="mvp",
+        )
+        gone = Idea(
+            name="Quantum Goner",
+            tagline="quantum thing",
+            description="d",
+            category=IdeaCategory.PQC_CRYPTOGRAPHY,
+            market_analysis="m",
+            feasibility_score=0.9,
+            mvp_scope="mvp",
+            status="archived",
+        )
+        await db.save_idea(keep)
+        await db.save_idea(gone)
+
+        names = {i.name for i in await db.search_ideas("quantum", status="new")}
+        assert names == {"Quantum Keeper"}
+
+    @pytest.mark.asyncio
+    async def test_search_respects_category_filter(self, db):
+        """The LIKE clause must be parenthesised — AND binds tighter than OR,
+        so an unparenthesised group would apply the filter to only the last
+        LIKE and leak the other two."""
+        a = Idea(
+            name="Zeta Alpha",
+            tagline="zeta signal",
+            description="zeta",
+            category=IdeaCategory.PQC_CRYPTOGRAPHY,
+            market_analysis="m",
+            feasibility_score=0.8,
+            mvp_scope="mvp",
+        )
+        b = Idea(
+            name="Zeta Beta",
+            tagline="zeta signal",
+            description="zeta",
+            category=IdeaCategory.AUTOMATION,
+            market_analysis="m",
+            feasibility_score=0.9,
+            mvp_scope="mvp",
+        )
+        await db.save_idea(a)
+        await db.save_idea(b)
+
+        results = await db.search_ideas("zeta", category=IdeaCategory.AUTOMATION)
+        assert {i.name for i in results} == {"Zeta Beta"}
+
+    @pytest.mark.asyncio
     async def test_search_empty_returns_empty(self, db):
         """Searching for nonexistent term returns empty list."""
         results = await db.search_ideas("xyznonexistent")

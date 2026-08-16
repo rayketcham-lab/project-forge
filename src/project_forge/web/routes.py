@@ -190,8 +190,8 @@ async def explore(
     else:
         offset = (page - 1) * limit
         if q:
-            ideas = await db.search_ideas(q, limit=limit, offset=offset)
-            total = len(await db.search_ideas(q, limit=10000))
+            ideas = await db.search_ideas(q, limit=limit, offset=offset, status=typed_status, category=cat)
+            total = len(await db.search_ideas(q, limit=10000, status=typed_status, category=cat))
         else:
             ideas = await db.list_ideas(
                 status=typed_status,
