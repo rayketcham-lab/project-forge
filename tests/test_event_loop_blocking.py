@@ -159,8 +159,55 @@ def _inline_backend_calls(tree: ast.AST) -> list[tuple[str, int]]:
     return found
 
 
+_SUBPROCESS_CALLS = frozenset({"run", "check_output", "call", "check_call", "Popen"})
+
+
+def _inline_subprocess_calls(tree: ast.AST) -> list[tuple[str, int]]:
+    """(function name, lineno) for each `subprocess.X(...)` invoked directly
+    inside an `async def`.
+
+    The sync-helper rule below only catches blocking work one frame down. Two
+    `gh repo view` shell-outs sat directly in async route handlers instead —
+    fired once per repo-linked idea on page load, each up to a 10s stall on
+    the loop — and no existing check looked for that shape.
+    """
+    found: list[tuple[str, int]] = []
+    for fn in ast.walk(tree):
+        if not isinstance(fn, ast.AsyncFunctionDef):
+            continue
+        for node in _direct_body(fn):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if (
+                isinstance(func, ast.Attribute)
+                and isinstance(func.value, ast.Name)
+                and func.value.id == "subprocess"
+                and func.attr in _SUBPROCESS_CALLS
+            ):
+                found.append((fn.name, node.lineno))
+    return found
+
+
 def _modules() -> list[Path]:
     return sorted(p for p in SRC.rglob("*.py") if "__pycache__" not in str(p))
+
+
+@pytest.mark.parametrize("path", _modules(), ids=lambda p: str(p.name))
+def test_no_inline_subprocess_in_async_functions(path: Path):
+    """`await asyncio.to_thread(subprocess.run, ...)` is fine — the reference
+    is an argument, not a call. `subprocess.run(...)` on the loop is not."""
+    rel = str(path.relative_to(SRC))
+    if rel in EXEMPT_FILES:
+        pytest.skip(f"{rel} is sync by design")
+
+    tree = ast.parse(path.read_text())
+    offenders = _inline_subprocess_calls(tree)
+    assert not offenders, (
+        f"{rel} shells out directly inside an async function {offenders} — "
+        f"wrap it in `await asyncio.to_thread(subprocess.run, ...)` or every "
+        f"request the app is serving stalls for the duration."
+    )
 
 
 @pytest.mark.parametrize("path", _modules(), ids=lambda p: str(p.name))

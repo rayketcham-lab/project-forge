@@ -61,3 +61,34 @@ class TestSuperBaseName:
 
     def test_normalizes_hyphens_and_synthesis_suffix(self):
         assert _super_base_name("[SUPER] Data-Cardinality Operations Center") == "data cardinality"
+
+
+class TestExtractSimilarId:
+    """similar_to_id is a foreign key into ideas. The cross-category reason
+    appends ' in another category' after the id, and the old split-on-phrase
+    parser stored that whole tail — orphaning every cross-category row in the
+    audit."""
+
+    def test_cross_category_reason_yields_a_bare_id(self):
+        from project_forge.engine.dedup import _extract_similar_id
+
+        reason = "duplicate:cross_category:0.85 (similar to abc123def in another category)"
+        assert _extract_similar_id(reason) == "abc123def"
+
+    def test_similarity_reason_yields_a_bare_id(self):
+        from project_forge.engine.dedup import _extract_similar_id
+
+        assert _extract_similar_id("duplicate:tagline_similarity:0.91 (similar to 9f2c1a)") == "9f2c1a"
+
+    def test_matches_reason_yields_a_bare_id(self):
+        from project_forge.engine.dedup import _extract_similar_id
+
+        assert _extract_similar_id("duplicate:content_hash (matches 7b31ee)") == "7b31ee"
+        assert _extract_similar_id("duplicate:super_base_name (matches 7b31ee)") == "7b31ee"
+
+    def test_reason_without_a_reference_yields_none(self):
+        from project_forge.engine.dedup import _extract_similar_id
+
+        assert _extract_similar_id("saturation_thin: concept over cap") is None
+        assert _extract_similar_id(None) is None
+        assert _extract_similar_id("") is None

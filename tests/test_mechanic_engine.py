@@ -384,3 +384,75 @@ class TestGuardrails:
         assert captured["input"] == "MY UNIQUE PROMPT TEXT"
         assert "MY UNIQUE PROMPT TEXT" not in captured["argv"]
         assert "--allowedTools" in captured["argv"]
+
+
+class TestChangedPathsSeesCreatedFiles:
+    """The forbidden-path guard is only as good as the path list it is given.
+
+    `git diff --name-only HEAD` reports tracked files only, so a file the
+    agent CREATED was invisible to _forbidden_touched while _open_pr's
+    `git add -A` committed it regardless. The conftest.py case is the sharp
+    one: _quality_gate runs pytest over the clone before a human sees the PR,
+    so a created conftest executes on the host on its way through.
+
+    Uses an isolated tmp_path repo — never the real checkout.
+    """
+
+    @staticmethod
+    def _repo(tmp_path):
+        import subprocess
+
+        def git(*args):
+            subprocess.run(
+                ["git", *args],
+                cwd=str(tmp_path),
+                capture_output=True,
+                check=True,
+                env={
+                    "PATH": os.environ.get("PATH", ""),
+                    "HOME": str(tmp_path),
+                    "GIT_AUTHOR_NAME": "t",
+                    "GIT_AUTHOR_EMAIL": "t@t",
+                    "GIT_COMMITTER_NAME": "t",
+                    "GIT_COMMITTER_EMAIL": "t@t",
+                },
+            )
+
+        git("init", "-q")
+        (tmp_path / "tracked.py").write_text("x = 1\n")
+        git("add", "-A")
+        git("commit", "-q", "-m", "base")
+        return git
+
+    def test_created_workflow_file_is_reported(self, tmp_path):
+        from project_forge.engine.mechanic import _changed_paths, _forbidden_touched
+
+        self._repo(tmp_path)
+        (tmp_path / ".github" / "workflows").mkdir(parents=True)
+        (tmp_path / ".github" / "workflows" / "evil.yml").write_text("on: push\n")
+
+        paths = _changed_paths(tmp_path)
+        assert ".github/workflows/evil.yml" in paths
+        assert _forbidden_touched(paths) is not None
+
+    def test_created_conftest_is_reported(self, tmp_path):
+        from project_forge.engine.mechanic import _changed_paths
+
+        self._repo(tmp_path)
+        (tmp_path / "conftest.py").write_text("import os\n")
+
+        assert "conftest.py" in _changed_paths(tmp_path)
+
+    def test_tracked_modification_is_still_reported(self, tmp_path):
+        from project_forge.engine.mechanic import _changed_paths
+
+        self._repo(tmp_path)
+        (tmp_path / "tracked.py").write_text("x = 2\n")
+
+        assert "tracked.py" in _changed_paths(tmp_path)
+
+    def test_clean_worktree_reports_nothing(self, tmp_path):
+        from project_forge.engine.mechanic import _changed_paths
+
+        self._repo(tmp_path)
+        assert _changed_paths(tmp_path) == []

@@ -230,3 +230,53 @@ class TestExternalSeedAggregator:
         ids = {i["id"] for i in items}
         assert "arxiv:1" in ids
         assert not any(i["id"].startswith("CVE-") for i in items)
+
+
+class TestFeedResponseSizeCap:
+    """Feeds are operator-configured, which makes them trusted to be listed —
+    not trusted to be well behaved. An endpoint that streams without end used
+    to be buffered whole into a single-process app."""
+
+    @staticmethod
+    def _resp(body: bytes, content_length: str | None = None):
+        from unittest.mock import MagicMock
+
+        resp = MagicMock()
+        resp.headers = {"Content-Length": content_length} if content_length else {}
+        resp.read = lambda n=None: body[:n] if n is not None else body
+        resp.__enter__ = lambda self: self
+        resp.__exit__ = lambda self, *a: False
+        return resp
+
+    def test_body_within_the_cap_is_returned(self, monkeypatch):
+        from project_forge.feeds import _http
+
+        monkeypatch.setattr(_http.urllib.request, "urlopen", lambda *a, **k: self._resp(b'{"ok":1}'))
+        assert _http.http_get_bytes("https://example.com/feed") == b'{"ok":1}'
+
+    def test_oversized_body_raises_instead_of_buffering(self, monkeypatch):
+        from project_forge.feeds import _http
+
+        monkeypatch.setattr(_http.urllib.request, "urlopen", lambda *a, **k: self._resp(b"A" * 5000))
+        with pytest.raises(OSError, match="exceeded"):
+            _http.http_get_bytes("https://example.com/huge", max_bytes=1000)
+
+    def test_oversized_content_length_is_rejected_before_reading(self, monkeypatch):
+        from project_forge.feeds import _http
+
+        called = {"read": False}
+
+        def _urlopen(*a, **k):
+            r = self._resp(b"A" * 10, content_length="999999999")
+
+            def _read(n=None):
+                called["read"] = True
+                return b"A" * 10
+
+            r.read = _read
+            return r
+
+        monkeypatch.setattr(_http.urllib.request, "urlopen", _urlopen)
+        with pytest.raises(OSError, match="over the"):
+            _http.http_get_bytes("https://example.com/huge", max_bytes=1000)
+        assert not called["read"], "body was read despite an oversized Content-Length"

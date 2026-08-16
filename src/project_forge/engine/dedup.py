@@ -354,6 +354,22 @@ def _super_base_name(full_name: str) -> str:
     return base.lower()
 
 
+# Rejection reasons carry the winning idea's id in parentheses, in one of two
+# phrasings. The cross-category reason is the awkward one — it appends " in
+# another category" after the id, so splitting on the phrase and stripping ")"
+# stored "abc123 in another category" as a foreign key and quietly broke the
+# orphan audit. Capture the id token itself instead of everything after the phrase.
+_SIMILAR_ID_RE = re.compile(r"\((?:matches|similar to) ([^\s)]+)")
+
+
+def _extract_similar_id(reason: str | None) -> str | None:
+    """Pull the referenced idea id out of a dedup rejection reason."""
+    if not reason:
+        return None
+    m = _SIMILAR_ID_RE.search(reason)
+    return m.group(1) if m else None
+
+
 async def filter_and_save(idea: Idea, db: Database) -> tuple[Idea, bool, str | None]:
     """Run dedup gate, log filtered ideas, and save if accepted.
 
@@ -363,12 +379,7 @@ async def filter_and_save(idea: Idea, db: Database) -> tuple[Idea, bool, str | N
 
     accepted, reason = await should_accept(idea, db)
     if not accepted:
-        # Extract similar_to_id from reason if present
-        similar_to_id = None
-        if reason and "(matches " in reason:
-            similar_to_id = reason.split("(matches ")[-1].rstrip(")")
-        elif reason and "(similar to " in reason:
-            similar_to_id = reason.split("(similar to ")[-1].rstrip(")")
+        similar_to_id = _extract_similar_id(reason)
 
         fi = FilteredIdea(
             idea_name=idea.name,

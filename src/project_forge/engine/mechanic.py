@@ -243,9 +243,36 @@ def run_agent(workspace: Path, prompt: str, *, timeout: int = AGENT_TIMEOUT) -> 
 
 
 def _changed_paths(workspace: Path) -> list[str]:
-    # Uncommitted working-tree changes the agent made (branch starts at main).
-    diff = _run(["git", "diff", "--name-only", "HEAD"], cwd=str(workspace))
-    return [ln.strip() for ln in diff.stdout.splitlines() if ln.strip()]
+    """Every path the agent touched, created ones included.
+
+    This used to run `git diff --name-only HEAD`, which only reports *tracked*
+    files — so anything the agent newly created was invisible to
+    `_forbidden_touched`, while `_open_pr`'s `git add -A` happily committed it.
+    A created `.github/workflows/*.yml` walked straight through the guard, and
+    a created `conftest.py` is worse than that: `_quality_gate` runs pytest
+    over the clone before any human sees the PR, so the file executes on the
+    host on its way past.
+
+    `--porcelain -uall` lists tracked modifications and untracked files alike,
+    one line per file rather than collapsing new directories.
+    """
+    status = _run(
+        ["git", "-c", "core.quotePath=false", "status", "--porcelain", "-uall"],
+        cwd=str(workspace),
+    )
+    paths: list[str] = []
+    for line in status.stdout.splitlines():
+        if not line.strip():
+            continue
+        # Format is 2 status columns, a space, then the path.
+        path = line[3:].strip()
+        # Renames/copies read "old -> new"; both sides matter for the guard.
+        if " -> " in path:
+            before, _, after = path.partition(" -> ")
+            paths.extend(p.strip().strip('"') for p in (before, after) if p.strip())
+        elif path:
+            paths.append(path.strip('"'))
+    return paths
 
 
 def _forbidden_touched(paths: list[str]) -> str | None:

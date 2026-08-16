@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import subprocess
@@ -24,7 +25,10 @@ async def sync_org_repos(db: Database, org: str | None = None) -> list[RepoEntry
     """
     target_org = org or settings.github_org
 
-    result = subprocess.run(
+    # 60s of `gh` on the event loop froze every in-flight request; the CLI is
+    # slow against a cold org and this runs from a route.
+    result = await asyncio.to_thread(
+        subprocess.run,
         [
             "gh",
             "repo",

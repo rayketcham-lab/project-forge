@@ -437,7 +437,11 @@ class TestGitHubAuth:
         seen = {}
 
         class _Resp:
-            def read(self):
+            # urllib responses expose .headers; http_get_bytes checks
+            # Content-Length against its size cap before reading.
+            headers: dict = {}
+
+            def read(self, n=None):
                 return b"{}"
 
             def __enter__(self):
@@ -462,7 +466,11 @@ class TestGitHubAuth:
         seen = {}
 
         class _Resp:
-            def read(self):
+            # urllib responses expose .headers; http_get_bytes checks
+            # Content-Length against its size cap before reading.
+            headers: dict = {}
+
+            def read(self, n=None):
                 return b"{}"
 
             def __enter__(self):
@@ -487,7 +495,11 @@ class TestGitHubAuth:
         seen = {}
 
         class _Resp:
-            def read(self):
+            # urllib responses expose .headers; http_get_bytes checks
+            # Content-Length against its size cap before reading.
+            headers: dict = {}
+
+            def read(self, n=None):
                 return b"{}"
 
             def __enter__(self):

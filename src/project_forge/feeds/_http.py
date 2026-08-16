@@ -33,8 +33,19 @@ def _github_token() -> str | None:
     return None
 
 
-def http_get_bytes(url: str, *, timeout: float = 15.0) -> bytes:
-    """Fetch a URL and return raw bytes. Raises on any HTTP/network error."""
+# Feeds are operator-configured, but "trusted to be listed" is not "trusted to
+# be well-behaved" — a compromised or merely broken endpoint that streams
+# without end would take the single-process app down with it. The largest real
+# feed here is a few MB of IETF JSON; 16 MiB leaves generous headroom.
+MAX_FEED_BYTES = 16 * 1024 * 1024
+
+
+def http_get_bytes(url: str, *, timeout: float = 15.0, max_bytes: int = MAX_FEED_BYTES) -> bytes:
+    """Fetch a URL and return raw bytes. Raises on any HTTP/network error.
+
+    Reads at most ``max_bytes`` and raises OSError past that, rather than
+    buffering whatever the far end decides to send.
+    """
     headers = {"User-Agent": "project-forge/feeds 0.1"}
 
     host = (urllib.parse.urlparse(url).hostname or "").lower()
@@ -50,6 +61,15 @@ def http_get_bytes(url: str, *, timeout: float = 15.0) -> bytes:
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
-            return resp.read()
+            declared = resp.headers.get("Content-Length", "")
+            if declared.isdigit() and int(declared) > max_bytes:
+                raise OSError(f"http_get_bytes: {url} declared {declared} bytes, over the {max_bytes} cap")
+            # Read one byte past the cap so an oversized body is detectable
+            # rather than silently truncated into a half-parsed feed.
+            body = resp.read(max_bytes + 1)
     except urllib.error.URLError as exc:
         raise OSError(f"http_get_bytes failed for {url}: {exc}") from exc
+
+    if len(body) > max_bytes:
+        raise OSError(f"http_get_bytes: {url} exceeded the {max_bytes} byte cap")
+    return body

@@ -59,7 +59,12 @@ async def dashboard(request: Request):
     stats = await db.get_stats()
     all_top = await db.list_ideas(limit=20)
     all_top.sort(key=lambda i: i.feasibility_score, reverse=True)
-    top_ideas = [i for i in all_top if not i.name.startswith("[SUPER]")][:6]
+    # Archived and rejected ideas were reaching the front page: list_ideas
+    # applies no status filter, so a high-feasibility idea the siphon had
+    # already archived still ranked into "top ideas".
+    top_ideas = [i for i in all_top if not i.name.startswith("[SUPER]") and i.status not in ("archived", "rejected")][
+        :6
+    ]
     # Dedicated query for super ideas — no cap, shows all active ones
     super_ideas = await db.list_super_ideas()
     # SQL-optimized category counts + avg scores (no in-memory loading)
@@ -1727,7 +1732,8 @@ async def check_idea_repo(idea_id: str) -> dict:
 
     repo = urlparse(idea.project_repo_url).path.lstrip("/")
     try:
-        result = subprocess.run(
+        result = await asyncio.to_thread(
+            subprocess.run,
             ["gh", "repo", "view", repo, "--json", "name"],
             capture_output=True,
             timeout=10,
@@ -1780,7 +1786,8 @@ async def delete_idea(idea_id: str) -> dict:
     if idea.project_repo_url:
         repo = urlparse(idea.project_repo_url).path.lstrip("/")
         try:
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 ["gh", "repo", "view", repo, "--json", "name"],
                 capture_output=True,
                 timeout=10,
