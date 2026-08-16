@@ -1,6 +1,6 @@
 # Project Forge
 
-![Version](https://img.shields.io/badge/version-0.24-blue) ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/rayketcham-lab/project-forge/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-2630+-passing?color=brightgreen) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+![Version](https://img.shields.io/badge/version-0.24-blue) ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/rayketcham-lab/project-forge/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-2740+-passing?color=brightgreen) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 **[Quickstart](#quick-start) · [Boards](#the-six-boards) · [Dashboard](#dashboard) · [Labs](#labs--autonomous-avenues-v017) · [Architecture](#architecture) · [Config](#configuration) · [Roadmap](#roadmap)**
 
@@ -181,7 +181,7 @@ git clone https://github.com/rayketcham-lab/project-forge.git
 cd project-forge
 pip install -e ".[dev,test]"
 
-# Run tests (~2,630 tests across 163 files)
+# Run tests (~2,745 tests across 163 files)
 pytest tests/ -q
 
 # Start dashboard — the in-process scheduler boots with it
@@ -544,7 +544,7 @@ Every avenue degrades gracefully without an LLM (heuristic fallback) and without
 ## Testing
 
 ```bash
-pytest tests/ -q                                   # ~2,630 tests, 163 files
+pytest tests/ -q                                   # ~2,745 tests, 163 files
 pytest tests/ -k "pki" -v                          # subset — v0.23 PKI board
 pytest tests/ -k "sniper or snipe or market_intel" # subset — Sniper board
 pytest tests/ -k "mechanic" -v                     # subset — self-improvement
