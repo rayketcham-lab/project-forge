@@ -17,7 +17,6 @@ no LLM endpoint / API key was available.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from typing import Protocol

@@ -147,7 +147,7 @@ class TestReviewCycleNoKey:
 
         with (
             patch.dict(os.environ, env, clear=True),
-            patch("project_forge.cron.review_runner.resolve_backend", return_value=None) as mock_resolve,
+            patch("project_forge.cron.review_runner.resolve_backend", return_value=None),
         ):
             result = await run_review_cycle(db, batch_size=5)
 

@@ -16,14 +16,13 @@ Two layers of regression coverage:
 from __future__ import annotations
 
 import inspect
-import re
+import json
 from unittest.mock import MagicMock
 
 import pytest
 
 from project_forge.cron import review_runner
 from project_forge.models import Idea, IdeaCategory
-
 
 # ── Static source check ─────────────────────────────────────────────
 
@@ -91,5 +90,5 @@ async def test_review_propagates_empty_response_as_json_error():
     fake_backend = MagicMock()
     fake_backend.call.return_value = None
 
-    with pytest.raises(Exception):
+    with pytest.raises(json.JSONDecodeError):
         await review_runner._review_idea_with_api(_stub_idea(), backend=fake_backend)

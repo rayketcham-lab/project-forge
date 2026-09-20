@@ -214,7 +214,6 @@ class TestGeneratorPromptOverride:
     @pytest.mark.asyncio
     async def test_generate_with_prompt_override(self):
         """generate() should use prompt_override instead of default prompt when provided."""
-        from unittest.mock import MagicMock
 
         from project_forge.engine.generator import IdeaGenerator
 

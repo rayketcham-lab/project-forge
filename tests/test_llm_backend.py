@@ -15,7 +15,6 @@ from unittest.mock import MagicMock, patch
 
 from project_forge.config import settings as _settings
 
-
 # ── OpenAICompatibleBackend (chat/completions over HTTP) ─────────────
 
 

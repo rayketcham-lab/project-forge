@@ -137,7 +137,6 @@ class TestIdeaGeneratorFilterSummaryForwarding:
     def test_generate_accepts_filter_summary_kwarg(self, monkeypatch):
         """IdeaGenerator.generate must accept and forward filter_summary."""
         import asyncio
-
         from unittest.mock import MagicMock
 
         from project_forge.engine.generator import IdeaGenerator

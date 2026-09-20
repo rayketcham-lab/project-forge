@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import os
 import sys
 
 from project_forge.config import settings
