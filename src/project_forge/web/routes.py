@@ -2265,8 +2265,7 @@ async def builder_step(request_body: _BuilderStepRequest):
         raise HTTPException(
             status_code=503,
             detail=(
-                "No LLM backend available. Set FORGE_LLM_BASE_URL in .env "
-                "so the wizard can call the configured model."
+                "No LLM backend available. Set FORGE_LLM_BASE_URL in .env so the wizard can call the configured model."
             ),
         )
     return result

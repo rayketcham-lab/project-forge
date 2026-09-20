@@ -121,7 +121,7 @@ class TestMigrationExecution:
             for stmt in alter_stmts:
                 try:
                     await conn.execute(stmt)
-                except Exception:
+                except Exception:  # noqa: S110 - column may already exist; best-effort migration
                     pass
             await conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_ideas_content_hash "
@@ -236,11 +236,23 @@ class TestLifespan:
             async def send(msg):
                 events.append(msg)
 
-            await app({"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
-                        "method": "GET", "path": "/health", "raw_path": b"/health",
-                        "root_path": "", "query_string": b"", "server": ("test", 80),
-                        "client": ("127.0.0.1", 12345), "headers": []},
-                      receive, send)
+            await app(
+                {
+                    "type": "http",
+                    "asgi": {"version": "3.0"},
+                    "http_version": "1.1",
+                    "method": "GET",
+                    "path": "/health",
+                    "raw_path": b"/health",
+                    "root_path": "",
+                    "query_string": b"",
+                    "server": ("test", 80),
+                    "client": ("127.0.0.1", 12345),
+                    "headers": [],
+                },
+                receive,
+                send,
+            )
 
             assert events[0]["type"] == "http.response.start"
             assert events[0]["status"] == 200

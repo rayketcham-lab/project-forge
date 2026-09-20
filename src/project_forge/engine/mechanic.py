@@ -41,6 +41,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 # subscription spend.
 AGENT_TIMEOUT = int(os.environ.get("FORGE_MECHANIC_AGENT_TIMEOUT", "2400"))
 
+
 # Model for the headless agent. The BYO-LLM backend resolves the model itself
 # from FORGE_LLM_MODEL / settings.llm_model; FORGE_MECHANIC_MODEL remains as
 # an optional per-mechanic override passed to resolve_backend(model_override=).
@@ -55,6 +56,8 @@ def _resolve_agent_model() -> str:
     if override:
         return override
     return (settings.llm_model or "").strip()
+
+
 AGENT_EFFORT = os.environ.get("FORGE_MECHANIC_EFFORT", "medium").strip()
 
 # The agent may never rewrite its OWN LEASH — the mechanic, the runner,
@@ -144,24 +147,24 @@ def build_task_prompt(idea: Idea) -> str:
         "are clean.\n\n"
         "## Respond with ONLY valid JSON (no markdown wrapping) in this exact format:\n"
         "{\n"
-        "    \"summary\": \"One-line description of what you changed\",\n"
-        "    \"changes\": [\n"
+        '    "summary": "One-line description of what you changed",\n'
+        '    "changes": [\n'
         "        {\n"
-        "            \"path\": \"relative/path/to/file.py\",\n"
-        "            \"action\": \"edit\",\n"
-        "            \"search\": \"exact string to find in the file\",\n"
-        "            \"replace\": \"replacement string\"\n"
+        '            "path": "relative/path/to/file.py",\n'
+        '            "action": "edit",\n'
+        '            "search": "exact string to find in the file",\n'
+        '            "replace": "replacement string"\n'
         "        },\n"
         "        {\n"
-        "            \"path\": \"relative/path/to/new_file.py\",\n"
-        "            \"action\": \"create\",\n"
-        "            \"content\": \"full file content\"\n"
+        '            "path": "relative/path/to/new_file.py",\n'
+        '            "action": "create",\n'
+        '            "content": "full file content"\n'
         "        }\n"
         "    ]\n"
         "}\n\n"
         "Rules:\n"
-        "- action is \"edit\" (modify existing file) or \"create\" (new file)\n"
-        "- For edits, \"search\" must be an exact substring of the current file content\n"
+        '- action is "edit" (modify existing file) or "create" (new file)\n'
+        '- For edits, "search" must be an exact substring of the current file content\n'
         "- Keep changes tightly scoped to this item. Include test changes if appropriate.\n"
         "- All paths are relative to the repo root.\n\n"
         "## Do NOT touch\n"
@@ -396,10 +399,7 @@ def _quality_gate(worktree: Path) -> tuple[bool, str]:
 def _open_pr(worktree: Path, branch: str, idea: Idea) -> str:
     """Commit + push the branch + open a PR. Returns the PR URL."""
     _run(["git", "add", "-A"], cwd=str(worktree))
-    msg = (
-        f"mechanic: {idea.name}\n\n"
-        f"Autonomous self-improvement for Think Tank item {idea.id}."
-    )
+    msg = f"mechanic: {idea.name}\n\nAutonomous self-improvement for Think Tank item {idea.id}."
     _run(["git", "commit", "-m", msg], cwd=str(worktree))
     _run(["git", "push", "-u", "--force-with-lease", "origin", branch], cwd=str(worktree))
     pr = _run(

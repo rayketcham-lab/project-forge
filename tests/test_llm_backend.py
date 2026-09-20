@@ -22,9 +22,7 @@ class TestOpenAICompatibleBackend:
     def _backend(self, model="qwen-local-m", api_key=""):
         from project_forge.engine.llm_backend import OpenAICompatibleBackend
 
-        return OpenAICompatibleBackend(
-            base_url="http://192.0.2.1:8888/v1", model=model, api_key=api_key
-        )
+        return OpenAICompatibleBackend(base_url="http://192.0.2.1:8888/v1", model=model, api_key=api_key)
 
     def test_call_returns_content(self):
         with patch("httpx.post") as post:

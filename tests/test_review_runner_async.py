@@ -35,9 +35,7 @@ class TestSourceOffloadsBlockingCall:
 
     def test_does_not_reference_vendor_sync_client(self):
         src = inspect.getsource(review_runner._review_idea_with_api)
-        assert "anthropic" not in src and "openai" not in src, (
-            "Function must not reference a vendor-specific client."
-        )
+        assert "anthropic" not in src and "openai" not in src, "Function must not reference a vendor-specific client."
 
     def test_offloads_backend_call_with_to_thread(self):
         src = inspect.getsource(review_runner._review_idea_with_api)
@@ -45,9 +43,7 @@ class TestSourceOffloadsBlockingCall:
             "The (synchronous) backend.call() must be off-loaded via "
             "asyncio.to_thread so it doesn't block the event loop."
         )
-        assert "backend.call" in src, (
-            "The generic BYO-LLM backend's .call() must be used."
-        )
+        assert "backend.call" in src, "The generic BYO-LLM backend's .call() must be used."
 
 
 # ── Behavior check (mocked backend) ─────────────────────────────────
@@ -72,9 +68,7 @@ async def test_review_calls_backend_and_parses_verdict():
     .call() (off the event loop) and parse the returned JSON verdict."""
     fake_backend = MagicMock()
     fake_backend.name = "openai-compatible:qwen-local-m"
-    fake_backend.call.return_value = (
-        '{"verdict": "keep", "confidence": 0.7, "reasoning": "ok", "suggestions": []}'
-    )
+    fake_backend.call.return_value = '{"verdict": "keep", "confidence": 0.7, "reasoning": "ok", "suggestions": []}'
 
     result = await review_runner._review_idea_with_api(_stub_idea(), backend=fake_backend)
 
