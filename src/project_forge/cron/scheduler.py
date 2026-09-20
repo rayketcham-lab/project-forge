@@ -116,7 +116,7 @@ async def generate_and_store(db: Database, generator: IdeaGenerator) -> Idea:
     repos = await db.list_repo_registry()
     portfolio_context = "\n".join(f"- {r.repo_full_name}: {r.description}" for r in repos) if repos else None
 
-    # Build saturation/filter-rate summary so Claude knows what to avoid (Phase 4 wiring)
+    # Build saturation/filter-rate summary so the LLM knows what to avoid (Phase 4 wiring)
     from project_forge.engine.telemetry import build_filter_summary
 
     filter_summary = await build_filter_summary(db)
@@ -163,7 +163,7 @@ async def generate_and_store(db: Database, generator: IdeaGenerator) -> Idea:
         if repos:
             from project_forge.engine.router import PortfolioRouter
 
-            router = PortfolioRouter(generator.client, generator.model)
+            router = PortfolioRouter(getattr(generator, "backend", None))
             decision = router.route(idea, repos)
             await db.save_route_decision(
                 idea.id, decision.action, decision.target_repo, decision.reason, decision.confidence

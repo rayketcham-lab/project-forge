@@ -117,20 +117,6 @@ TECH_STACKS = {
         ["typescript", "remotion", "react"],
         ["python", "celery", "yt-dlp", "ffmpeg"],
     ],
-    IdeaCategory.CLAUDE_SKILLS_AGENTS: [
-        ["python", "anthropic", "mcp", "asyncio"],
-        ["typescript", "@anthropic-ai/sdk", "@modelcontextprotocol/sdk"],
-        ["python", "anthropic", "click", "rich"],
-        ["typescript", "node", "@anthropic-ai/sdk", "zod"],
-        ["python", "fastapi", "anthropic", "tree-sitter"],
-    ],
-    IdeaCategory.AI_MARKETPLACE: [
-        ["typescript", "next.js", "supabase", "stripe"],
-        ["python", "fastapi", "postgres", "stripe"],
-        ["rust", "axum", "postgres", "anthropic-rs"],
-        ["typescript", "trpc", "next.js", "prisma"],
-        ["go", "gin", "postgres", "redis"],
-    ],
     # v0.16 money-bot expansion stacks — biased toward fast-to-revenue
     # paid SaaS and seller/finance ops.
     IdeaCategory.MICRO_SAAS: [
@@ -156,32 +142,6 @@ TECH_STACKS = {
         ["typescript", "next.js", "stripe", "postgres"],
         ["python", "fastapi", "pandas", "postgres"],
         ["typescript", "node", "plaid", "prisma"],
-    ],
-    # v0.16 Claude Lab expansion stacks — agent runtime, evals, security,
-    # memory. Frontier (anthropic / mcp) tokens so they score on ambition.
-    IdeaCategory.AGENT_INFRA: [
-        ["python", "anthropic", "asyncio", "redis"],
-        ["typescript", "@anthropic-ai/sdk", "node", "postgres"],
-        ["python", "fastapi", "anthropic", "temporal"],
-        ["rust", "tokio", "anthropic-rs", "redis"],
-    ],
-    IdeaCategory.CLAUDE_EVALS: [
-        ["python", "anthropic", "pytest", "pandas"],
-        ["python", "anthropic", "pydantic", "duckdb"],
-        ["typescript", "@anthropic-ai/sdk", "vitest", "zod"],
-        ["python", "anthropic", "promptfoo", "sqlite"],
-    ],
-    IdeaCategory.AGENT_SECURITY: [
-        ["python", "anthropic", "mcp", "opa"],
-        ["python", "fastapi", "anthropic", "sigstore"],
-        ["typescript", "@modelcontextprotocol/sdk", "zod", "node"],
-        ["go", "anthropic", "ebpf", "opa"],
-    ],
-    IdeaCategory.CONTEXT_MEMORY: [
-        ["python", "anthropic", "pgvector", "postgres"],
-        ["python", "fastapi", "anthropic", "sqlite-vss"],
-        ["typescript", "@anthropic-ai/sdk", "pgvector", "prisma"],
-        ["python", "anthropic", "lancedb", "duckdb"],
     ],
     # v0.19 Crypto/Web3 board stacks — real on-chain tooling (web3 clients,
     # audit/dev frameworks) so keyless local generation produces credible
