@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=oneshot
-User=claude
+User=llm
 WorkingDirectory=/opt/project-forge
 EnvironmentFile=-/opt/project-forge/.env
 # Use Claude Code CLI as LLM backend (no API key needed; rolls into the

@@ -138,6 +138,8 @@ class TestIdeaGeneratorFilterSummaryForwarding:
         """IdeaGenerator.generate must accept and forward filter_summary."""
         import asyncio
 
+        from unittest.mock import MagicMock
+
         from project_forge.engine.generator import IdeaGenerator
 
         captured = {}
@@ -148,23 +150,16 @@ class TestIdeaGeneratorFilterSummaryForwarding:
             '"tech_stack":["py"]}'
         )
 
-        # Stub anthropic + the prompt builder so we observe what was passed
-        class _StubMessages:
-            def create(self, **kwargs):  # noqa: ARG002
-                class _Resp:
-                    content = [type("X", (), {"text": _FAKE_JSON})]
-
-                return _Resp()
-
-        class _StubClient:
-            messages = _StubMessages()
+        backend = MagicMock()
+        backend.name = "stub-backend"
+        backend.call.return_value = _FAKE_JSON
 
         def stub_build_prompt(**kwargs):
             captured.update(kwargs)
             return "PROMPT"
 
         gen = IdeaGenerator.__new__(IdeaGenerator)
-        gen.client = _StubClient()
+        gen.backend = backend
         gen.model = "stub-model"
         monkeypatch.setattr(
             "project_forge.engine.generator.build_generation_prompt",

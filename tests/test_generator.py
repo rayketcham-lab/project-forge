@@ -1,7 +1,8 @@
-"""Tests for idea generator with mocked Anthropic API."""
+"""Tests for idea generator against the BYO-LLM backend."""
 
+import asyncio
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -32,23 +33,23 @@ MOCK_IDEA_DATA = {
 MOCK_RESPONSE_JSON = json.dumps(MOCK_IDEA_DATA)
 
 
-def _make_mock_response(text: str) -> MagicMock:
-    mock_content = MagicMock()
-    mock_content.text = text
-    mock_response = MagicMock()
-    mock_response.content = [mock_content]
-    return mock_response
+def _make_backend(text: str, *, name: str = "fake-backend") -> MagicMock:
+    backend = MagicMock()
+    backend.name = name
+    backend.call.return_value = text
+    return backend
+
+
+def _asyncio_run(coro):
+    return asyncio.run(coro)
 
 
 class TestIdeaGenerator:
-    @patch("project_forge.engine.generator.anthropic.Anthropic")
     @pytest.mark.asyncio
-    async def test_generate_idea(self, mock_anthropic_cls):
-        mock_client = MagicMock()
-        mock_anthropic_cls.return_value = mock_client
-        mock_client.messages.create.return_value = _make_mock_response(MOCK_RESPONSE_JSON)
+    async def test_generate_idea(self):
+        backend = _make_backend(MOCK_RESPONSE_JSON)
+        gen = IdeaGenerator(backend=backend)
 
-        gen = IdeaGenerator(api_key="test-key")
         idea = await gen.generate(category=IdeaCategory.SECURITY_TOOL)
 
         assert idea.name == "Ghost Keys"
@@ -57,47 +58,30 @@ class TestIdeaGenerator:
         assert "python" in idea.tech_stack
         assert idea.status == "new"
 
-    @patch("project_forge.engine.generator.anthropic.Anthropic")
     @pytest.mark.asyncio
-    async def test_generate_handles_markdown_code_block(self, mock_anthropic_cls):
-        mock_client = MagicMock()
-        mock_anthropic_cls.return_value = mock_client
-        wrapped = f"Here's the idea:\n```json\n{MOCK_RESPONSE_JSON}\n```\n"
-        mock_client.messages.create.return_value = _make_mock_response(wrapped)
-
-        gen = IdeaGenerator(api_key="test-key")
+    async def test_generate_handles_markdown_code_block(self):
+        backend = _make_backend(f"Here's the idea:\n```json\n{MOCK_RESPONSE_JSON}\n```\n")
+        gen = IdeaGenerator(backend=backend)
         idea = await gen.generate(category=IdeaCategory.SECURITY_TOOL)
-
         assert idea.name == "Ghost Keys"
 
-    @patch("project_forge.engine.generator.anthropic.Anthropic")
     @pytest.mark.asyncio
-    async def test_generate_clamps_score(self, mock_anthropic_cls):
-        mock_client = MagicMock()
-        mock_anthropic_cls.return_value = mock_client
+    async def test_generate_clamps_score(self):
         data = dict(MOCK_IDEA_DATA)
         data["feasibility_score"] = 1.5
-        mock_client.messages.create.return_value = _make_mock_response(json.dumps(data))
-
-        gen = IdeaGenerator(api_key="test-key")
+        backend = _make_backend(json.dumps(data))
+        gen = IdeaGenerator(backend=backend)
         idea = await gen.generate(category=IdeaCategory.SECURITY_TOOL)
-
         assert idea.feasibility_score == 1.0
 
-    @patch("project_forge.engine.generator.anthropic.Anthropic")
     @pytest.mark.asyncio
-    async def test_generate_with_recent_ideas(self, mock_anthropic_cls):
-        mock_client = MagicMock()
-        mock_anthropic_cls.return_value = mock_client
-        mock_client.messages.create.return_value = _make_mock_response(MOCK_RESPONSE_JSON)
-
-        gen = IdeaGenerator(api_key="test-key")
+    async def test_generate_with_recent_ideas(self):
+        backend = _make_backend(MOCK_RESPONSE_JSON)
+        gen = IdeaGenerator(backend=backend)
         idea = await gen.generate(
             category=IdeaCategory.SECURITY_TOOL,
             recent_ideas=["Previous Idea 1", "Previous Idea 2"],
         )
-
         assert idea.name == "Ghost Keys"
-        call_args = mock_client.messages.create.call_args
-        user_msg = call_args.kwargs["messages"][0]["content"]
-        assert "Previous Idea 1" in user_msg
+        prompt = backend.call.call_args[0][0]
+        assert "Previous Idea 1" in prompt

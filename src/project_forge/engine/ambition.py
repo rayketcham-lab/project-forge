@@ -1,10 +1,10 @@
-"""Ambition scoring — how far does this idea push Claude / agent capability.
+"""Ambition scoring — how far does this idea push LLM / agent capability.
 
 Distinct axis from feasibility (can we build it) and fundability (can we
-sell it). The /claude-lab page sorts the corpus by ambition_score DESC
-so the most boundary-pushing ideas surface to the top.
+sell it). Ranks the corpus by ambition_score so the most boundary-pushing
+ideas surface to the top.
 
-The user framing (2026-06-09): "excel Claude into the 35th century" —
+The user framing (2026-06-09): "excel the frontier" —
 favor ideas that, if they existed, would shift what agents fundamentally
 *can* do. Penalize derivative "$tool for $domain" pitches.
 
@@ -13,8 +13,6 @@ Two-stage:
   1. Heuristic (always runs, ~free):
      - Baseline 0.20.
      - Category bonus:
-         CLAUDE_SKILLS_AGENTS  +0.25
-         AI_MARKETPLACE        +0.22
          AUTOMATION            +0.05 (adjacent space)
      - Frontier keyword density across description + mvp_scope.
      - Anthropic / MCP ecosystem signal in tech_stack.
@@ -54,7 +52,7 @@ _FRONTIER_KEYWORDS = re.compile(
     re.IGNORECASE,
 )
 
-# Tech-stack tokens that imply Anthropic / MCP / agent ecosystem.
+# Tech-stack tokens that imply an LLM / agent ecosystem.
 _FRONTIER_STACK = {
     "anthropic",
     "@anthropic-ai/sdk",
@@ -62,19 +60,9 @@ _FRONTIER_STACK = {
     "mcp",
     "@modelcontextprotocol/sdk",
     "modelcontextprotocol",
-    "claude",
-    "claude-code",
 }
 
 _CATEGORY_BONUS: dict[IdeaCategory, float] = {
-    IdeaCategory.CLAUDE_SKILLS_AGENTS: 0.25,
-    IdeaCategory.AI_MARKETPLACE: 0.22,
-    # v0.16 Claude Lab expansion — the other agent-ecosystem axes. All
-    # frontier work, so all carry a strong ambition bias.
-    IdeaCategory.AGENT_INFRA: 0.24,
-    IdeaCategory.AGENT_SECURITY: 0.23,
-    IdeaCategory.CONTEXT_MEMORY: 0.22,
-    IdeaCategory.CLAUDE_EVALS: 0.21,
     IdeaCategory.AUTOMATION: 0.05,
     IdeaCategory.SELF_IMPROVEMENT: 0.05,
 }
@@ -128,7 +116,7 @@ async def _llm_refine(idea: Idea, heuristic: float) -> float:
         return heuristic
     prompt = (
         "Rate this project idea's *frontier ambition* on a 0.0-1.0 scale. "
-        "Higher = pushes what AI agents / the Claude ecosystem can do. "
+        "Higher = pushes what AI agents can do. "
         "Lower = derivative or templated. Be conservative — most ideas "
         "are derivative. Respond with JSON only, single key 'score'.\n\n"
         f"## Idea: {idea.name}\n"

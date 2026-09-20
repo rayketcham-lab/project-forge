@@ -1,14 +1,14 @@
 """Tests for ambition scoring — fix #v0.15.
 
-ambition_score asks "how far does this push Claude / agent capability".
+ambition_score asks "how far does this push LLM / agent capability".
 Distinct axis from fundability (can we sell it) and feasibility (can we
-build it). Powers the /claude-lab page sort.
+build it). Ranks the corpus by ambition_score.
 
 Heuristic signals:
-  - category bonus (CLAUDE_SKILLS_AGENTS, AI_MARKETPLACE)
+  - category bonus
   - frontier keywords in description / mvp (mcp, sub-agent, attribution,
     marketplace, registry, fanned-out, reproducibility, provenance)
-  - tech stack hints at the Anthropic / MCP ecosystem
+  - tech stack hints at the LLM / agent ecosystem
   - description length proxy for substance
 LLM tie-break in [0.40, 0.75] band when a backend is reachable.
 """
@@ -54,20 +54,6 @@ class TestHeuristic:
         s = score_ambition_heuristic(_idea())
         assert 0.0 <= s <= 0.4
 
-    def test_claude_category_bumps_score(self):
-        from project_forge.engine.ambition import score_ambition_heuristic
-
-        a = score_ambition_heuristic(_idea())
-        b = score_ambition_heuristic(_idea(category=IdeaCategory.CLAUDE_SKILLS_AGENTS))
-        assert b > a
-
-    def test_marketplace_category_bumps_score(self):
-        from project_forge.engine.ambition import score_ambition_heuristic
-
-        a = score_ambition_heuristic(_idea())
-        b = score_ambition_heuristic(_idea(category=IdeaCategory.AI_MARKETPLACE))
-        assert b > a
-
     def test_frontier_keywords_add_signal(self):
         from project_forge.engine.ambition import score_ambition_heuristic
 
@@ -93,7 +79,7 @@ class TestHeuristic:
         from project_forge.engine.ambition import score_ambition_heuristic
 
         idea = _idea(
-            category=IdeaCategory.CLAUDE_SKILLS_AGENTS,
+            category=IdeaCategory.AUTOMATION,
             description=(
                 "fanned-out sub-agent registry marketplace mcp provenance "
                 "attribution reproducibility skills agents skills agents"
@@ -115,11 +101,10 @@ class TestLLMRefine:
         backend.call = MagicMock(return_value='{"score": 0.81}')
         monkeypatch.setattr(ambition, "resolve_cheap_backend", lambda: backend)
 
-        # Borderline — Claude category + a couple of frontier hints,
-        # heuristic should land somewhere in the LLM-verify band.
+        # Borderline — a frontier-heavy description + a couple of frontier
+        # hints — heuristic should land somewhere in the LLM-verify band.
         idea = _idea(
-            category=IdeaCategory.CLAUDE_SKILLS_AGENTS,
-            description="A sub-agent that runs MCP queries.",
+            description="A sub-agent that runs MCP queries with provenance.",
             tech_stack=["python", "anthropic"],
         )
         s = await ambition.score_ambition(idea)

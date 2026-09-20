@@ -3,9 +3,8 @@
 A cycle takes five to twelve minutes: a venue sweep, a generation, four
 adversarial lenses in sequence, often a rewrite and a re-check. The
 operator watched a spinner for all of it with no way to tell a working
-engine from a hung one — the only honest answer was in a `ps` listing
-showing which `claude --print` was in flight. The engine knows exactly what
-it is doing at every step; it just never said so.
+engine from a hung one — the engine now narrates each step so the panel
+shows exactly which phase is in flight.
 
 Deliberately an in-memory ring buffer rather than a table. This is
 ephemeral telemetry about a run in flight, worthless five minutes after it

@@ -248,7 +248,7 @@ _CATEGORY_KEYWORDS: dict[str, list[str]] = {
 def _heuristic_idea_from_content(content: UrlContent, category_hint: str | None = None):
     """Build a basic Idea from URL content without an API call.
 
-    Used as a fallback when no Anthropic API key is configured.
+    Used as a fallback when no LLM backend is configured.
     """
     from project_forge.models import Idea, IdeaCategory
 
@@ -301,20 +301,18 @@ def _heuristic_idea_from_content(content: UrlContent, category_hint: str | None 
 async def generate_idea_from_url(content: UrlContent, category_hint: str | None = None):
     """Generate an idea from URL content via IdeaGenerator.
 
-    Falls back to a heuristic extraction when no Anthropic API key is configured.
+    Falls back to a heuristic extraction when no LLM backend is configured.
     """
-    import os
-
-    from project_forge.config import settings
+    from project_forge.engine.llm_backend import resolve_backend
 
     content.url = clean_url(content.url)
 
-    key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-    if not key:
+    backend = resolve_backend()
+    if backend is None:
         return _heuristic_idea_from_content(content, category_hint=category_hint)
 
     from project_forge.engine.generator import IdeaGenerator
 
-    generator = IdeaGenerator()
+    generator = IdeaGenerator(backend=backend)
     idea = await generator.generate_from_content(content, category_hint=category_hint)
     return idea

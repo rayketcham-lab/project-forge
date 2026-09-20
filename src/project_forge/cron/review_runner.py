@@ -4,16 +4,15 @@ Picks the oldest-unreviewed ideas in round-robin batches, reviews each,
 records the verdict, and auto-archives ideas that score "kill" with high
 confidence.
 
-Works without an API key using heuristic analysis. Claude API enhances
-with deeper reasoning when available, but is optional.
+Works without an LLM backend using heuristic analysis. The configured BYO-LLM
+backend enhances with deeper reasoning when available, but is optional.
 """
 
 import json
 import logging
-import os
 from datetime import UTC, datetime
 
-from project_forge.config import settings
+from project_forge.engine.llm_backend import resolve_backend
 from project_forge.models import Idea
 
 logger = logging.getLogger(__name__)
@@ -22,12 +21,12 @@ _KILL_AUTO_ARCHIVE_THRESHOLD = 0.75
 
 
 # ---------------------------------------------------------------------------
-# Heuristic review — works without an API key
+# Heuristic review — works without an LLM backend
 # ---------------------------------------------------------------------------
 
 
 def heuristic_review(idea: Idea, category_counts: dict, total_ideas: int) -> dict:
-    """Review an idea using local heuristic signals. No API required.
+    """Review an idea using local heuristic signals. No LLM required.
 
     Signals used: feasibility score, age, description quality, category saturation.
     """
@@ -98,12 +97,12 @@ def heuristic_review(idea: Idea, category_counts: dict, total_ideas: int) -> dic
 
 
 # ---------------------------------------------------------------------------
-# Claude-enhanced review — used when API key is available
+# LLM-enhanced review — used when a backend is available
 # ---------------------------------------------------------------------------
 
 
 def build_review_prompt(idea: Idea) -> str:
-    """Build a prompt for Claude to review an existing idea."""
+    """Build a prompt for the LLM to review an existing idea."""
     age_days = (datetime.now(UTC) - idea.generated_at).days
 
     return (
@@ -143,25 +142,18 @@ def build_review_prompt(idea: Idea) -> str:
     )
 
 
-async def _review_idea_with_api(idea: Idea, api_key: str, model: str) -> dict:
-    """Send an idea to Claude for review. Returns verdict dict.
+async def _review_idea_with_api(idea: Idea, backend) -> dict:
+    """Send an idea to the LLM backend for review. Returns verdict dict.
 
-    Uses anthropic.AsyncAnthropic so the HTTP call doesn't block the
-    event loop (#69 — the sync client was blocking review cycles for
-    1-10s per idea on the same loop serving the dashboard).
+    The blocking backend call is run off the event loop (#69 — the sync
+    client was blocking review cycles for 1-10s per idea on the same loop
+    serving the dashboard).
     """
-    import anthropic
+    import asyncio
 
     prompt = build_review_prompt(idea)
-    client = anthropic.AsyncAnthropic(api_key=api_key)
-    resp = await client.messages.create(
-        model=model,
-        max_tokens=2048,
-        system="You are a senior technical reviewer. Respond ONLY with valid JSON.",
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    raw = resp.content[0].text.strip()
+    full_prompt = f"You are a senior technical reviewer. Respond ONLY with valid JSON.\n\n{prompt}"
+    raw = (await asyncio.to_thread(backend.call, full_prompt) or "").strip()
     if "```json" in raw:
         raw = raw.split("```json")[1].split("```")[0].strip()
     elif "```" in raw:
@@ -185,18 +177,11 @@ _review_idea = _review_idea_with_api
 # ---------------------------------------------------------------------------
 
 
-def _get_api_key() -> str:
-    """Resolve API key from settings or environment. Returns empty string if none."""
-    key = settings.anthropic_api_key
-    if not key:
-        key = os.environ.get("ANTHROPIC_API_KEY", "")
-    return key
-
-
 async def run_review_cycle(db, batch_size: int = 10, min_age_days: int = 7) -> dict:
     """Run one review cycle: fetch batch, review each, record results.
 
-    Uses Claude API when available, falls back to heuristic review without it.
+    Uses the LLM backend when available, falls back to heuristic review
+    without it.
     Returns dict with 'reviewed' count and 'results' list.
     """
     ideas = await db.fetch_ideas_for_review(limit=batch_size, min_age_days=min_age_days)
@@ -204,11 +189,11 @@ async def run_review_cycle(db, batch_size: int = 10, min_age_days: int = 7) -> d
         logger.info("No ideas due for review.")
         return {"reviewed": 0, "results": []}
 
-    key = _get_api_key()
-    use_api = bool(key)
+    backend = resolve_backend()
+    use_api = backend is not None
 
     if not use_api:
-        logger.info("No API key — using heuristic review for %d ideas.", len(ideas))
+        logger.info("No LLM backend — using heuristic review for %d ideas.", len(ideas))
         cat_counts = await db.count_ideas_by_category()
         total_ideas = sum(cat_counts.values())
 
@@ -217,11 +202,7 @@ async def run_review_cycle(db, batch_size: int = 10, min_age_days: int = 7) -> d
         logger.info("Reviewing idea %s: %s", idea.id, idea.name)
         try:
             if use_api:
-                review = await _review_idea_with_api(
-                    idea,
-                    api_key=key,
-                    model=settings.anthropic_model,
-                )
+                review = await _review_idea_with_api(idea, backend)
             else:
                 review = heuristic_review(idea, cat_counts, total_ideas)
 

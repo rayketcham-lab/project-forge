@@ -1,6 +1,6 @@
 """Autonomous self-improvement runner for Project Forge.
 
-Fetches open ci-queue issues, asks Claude to implement the fix,
+Fetches open ci-queue issues, asks the LLM backend to propose the fix,
 applies changes, validates with tests+lint, creates a PR, and closes the issue.
 All operations target project-forge itself.
 """
@@ -10,9 +10,6 @@ import logging
 import subprocess
 from pathlib import Path
 
-import anthropic
-
-from project_forge.config import settings
 from project_forge.engine.introspect import gather_self_context
 
 logger = logging.getLogger(__name__)
@@ -41,46 +38,25 @@ def _run_cmd(cmd: list[str], cwd: str | None = None) -> tuple[int, str]:
     return result.returncode, output
 
 
-def _call_claude(prompt: str) -> str:
-    """Send a prompt to Claude and return the raw text response.
+def _call_backend(prompt: str) -> str:
+    """Send a prompt to the configured BYO-LLM backend and return raw text.
 
-    #99 — prefers a configured API key (deterministic model + system
-    prompt); otherwise falls back to the Claude Code SUBSCRIPTION via
-    ClaudeCodeBackend (`claude --print`) so the implement loop works on
-    Pro/Max with no API key — the same backend the generation half already
-    uses. Raises ValueError on an empty/failed response so the caller
-    reverts cleanly.
+    Resolves via `resolve_backend()` — the configured OpenAI-compatible
+    endpoint (FORGE_LLM_BASE_URL). Raises ValueError on an empty/failed
+    response so the caller reverts cleanly.
     """
-    import os
-
-    key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
     system = (
         "You are a senior Python developer improving the Project Forge codebase. "
         "Respond ONLY with valid JSON in the specified format. No markdown wrapping."
     )
-    if key:
-        client = anthropic.Anthropic(api_key=key)
-        response = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=8192,
-            system=system,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        if not response.content:
-            raise ValueError("Claude returned empty response")
-        if response.stop_reason == "max_tokens":
-            raise ValueError("Claude response truncated (max_tokens reached)")
-        return response.content[0].text
-
-    # No API key → subscription (Pro/Max) via the Claude Code CLI backend.
     from project_forge.engine.llm_backend import resolve_backend
 
     backend = resolve_backend()
     if backend is None:
-        raise ValueError("No Claude backend available (no API key, no `claude` CLI on PATH)")
+        raise ValueError("No LLM backend available (no FORGE_LLM_BASE_URL configured)")
     text = backend.call(f"{system}\n\n{prompt}")
     if not text or not text.strip():
-        raise ValueError(f"Empty response from subscription backend {backend.name}")
+        raise ValueError(f"Empty response from backend {backend.name}")
     return text
 
 
@@ -153,7 +129,6 @@ def fetch_ci_queue_issues() -> list[dict]:
 # ---------------------------------------------------------------------------
 # 2. Build implementation prompt
 # ---------------------------------------------------------------------------
-
 _IMPLEMENTATION_PROMPT = """\
 You are implementing a self-improvement for the Project Forge codebase.
 
@@ -197,7 +172,7 @@ Rules:
 
 
 def build_implementation_prompt(issue: dict, context: dict) -> str:
-    """Build a prompt for Claude to implement the issue fix."""
+    """Build a prompt for the LLM to implement the issue fix."""
     context_lines = []
     for key, val in context.items():
         if isinstance(val, dict):
@@ -215,12 +190,12 @@ def build_implementation_prompt(issue: dict, context: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 3. Parse Claude's response
+# 3. Parse the LLM's response
 # ---------------------------------------------------------------------------
 
 
 def parse_implementation_response(raw: str) -> dict:
-    """Parse Claude's JSON response into a structured change set.
+    """Parse the LLM's JSON response into a structured change set.
 
     Returns dict with 'summary' and 'changes' keys.
     Raises ValueError on invalid or missing data.
@@ -234,7 +209,7 @@ def parse_implementation_response(raw: str) -> dict:
     try:
         data = json.loads(text)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"Could not parse Claude response as JSON: {exc}") from exc
+        raise ValueError(f"Could not parse LLM response as JSON: {exc}") from exc
 
     if "changes" not in data:
         raise ValueError("Response missing 'changes' key")
@@ -389,7 +364,7 @@ def create_improvement_pr(
         for f in changed_files:
             _git_checked(["add", "--", f], cwd=root)
 
-        msg = f"fix: self-improvement #{issue_number} — {summary}\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
+        msg = f"fix: self-improvement #{issue_number} — {summary}"
         _git_checked(["commit", "-m", msg], cwd=root)
 
         # Lease guards against clobbering a remote branch someone updated.
@@ -435,31 +410,27 @@ async def run_self_improve_cycle() -> dict:
         logger.info("No ci-queue issues found. Nothing to do.")
         return {"processed": 0, "results": []}
 
-    # Reachable Claude required — an API key OR the subscription CLI backend
-    # (#99). Only skip when NEITHER is available, so Pro/Max boxes (no key,
-    # `claude` on PATH) now proceed instead of no-op'ing forever.
-    import os
+    # A configured LLM backend is required (#99). Skip only when none is
+    # available — a backend on FORGE_LLM_BASE_URL now proceeds instead of
+    # no-op'ing forever.
+    from project_forge.engine.llm_backend import resolve_backend
 
-    key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-    if not key:
-        from project_forge.engine.llm_backend import resolve_backend
-
-        if resolve_backend() is None:
-            logger.warning(
-                "No Claude backend (no API key, no `claude` CLI) — skipping %d ci-queue issues.",
-                len(issues),
-            )
-            return {
-                "processed": len(issues),
-                "results": [
-                    {
-                        "issue": i.get("number", 0),
-                        "status": "skipped",
-                        "detail": "No Claude backend available (no API key, no `claude` CLI).",
-                    }
-                    for i in issues
-                ],
-            }
+    if resolve_backend() is None:
+        logger.warning(
+            "No LLM backend (no FORGE_LLM_BASE_URL) — skipping %d ci-queue issues.",
+            len(issues),
+        )
+        return {
+            "processed": len(issues),
+            "results": [
+                {
+                    "issue": i.get("number", 0),
+                    "status": "skipped",
+                    "detail": "No LLM backend available (no FORGE_LLM_BASE_URL).",
+                }
+                for i in issues
+            ],
+        }
 
     context = gather_self_context()
     results = []
@@ -471,9 +442,9 @@ async def run_self_improve_cycle() -> dict:
 
         changed_files: list[str] = []
         try:
-            # Ask Claude to implement
+            # Ask the LLM to propose the fix
             prompt = build_implementation_prompt(issue, context)
-            raw_response = _call_claude(prompt)
+            raw_response = _call_backend(prompt)
             parsed = parse_implementation_response(raw_response)
 
             # Never touch files the operator has uncommitted work in —

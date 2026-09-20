@@ -1,4 +1,4 @@
-"""Super-idea reasoning — replace slot-fill with Claude reasoning (Direction C).
+"""Super-idea reasoning — replace slot-fill with LLM reasoning (Direction C).
 
 Phase 6 (issue #59). The current super-idea name generation slot-fills
 "{Keyword1} & {Keyword2} {Suffix}" templates from frequency-extracted
@@ -74,7 +74,7 @@ def reason_cluster_name(
 
     Args:
         ideas: cluster members
-        llm_call: function taking a prompt string, returning Claude's response
+        llm_call: function taking a prompt string, returning the LLM's response
 
     Returns the parsed name, or None if the response is unusable. Caller
     should fall back to slot-fill when None is returned.

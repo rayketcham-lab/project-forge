@@ -31,12 +31,6 @@ class IdeaCategory(StrEnum):
     CONSUMER_APP = "consumer-app"
     PRODUCTIVITY = "productivity"
     CREATOR_TOOLS = "creator-tools"
-    # v0.15 — frontier-AI / Claude-ecosystem space. Where money-bots ask
-    # "how do we make a dollar", these ask "how do we extend Claude's
-    # capability ceiling". Different goal, different personas, different
-    # scoring axis (ambition_score) — same generation pipeline.
-    CLAUDE_SKILLS_AGENTS = "claude-skills-agents"
-    AI_MARKETPLACE = "ai-marketplace"
     # v0.16 money-bot expansion — fundable, shippable product shapes that
     # the original content/automation framing missed. These all carry a
     # fundability bonus and surface on /money-bots.
@@ -44,14 +38,6 @@ class IdeaCategory(StrEnum):
     VERTICAL_SAAS = "vertical-saas"
     ECOMMERCE_TOOLS = "ecommerce-tools"
     FINTECH_TOOLS = "fintech-tools"
-    # v0.16 Claude Lab expansion — the other axes of the agent ecosystem
-    # beyond skills/marketplace: the runtime that runs agents, the evals
-    # that prove they work, the security that keeps them safe, and the
-    # memory that gives them continuity. Ambition-scored, artifact-rotated.
-    AGENT_INFRA = "agent-infra"
-    CLAUDE_EVALS = "claude-evals"
-    AGENT_SECURITY = "agent-security"
-    CONTEXT_MEMORY = "context-memory"
     # v0.19 Crypto/Web3 money board — fundable on-chain opportunities. The
     # honest crypto money map: infra, security, DeFi tooling, stablecoin
     # payment rails, and compliance — where the real budgets are — NOT
@@ -102,10 +88,10 @@ class IdeaCategory(StrEnum):
 # --------------------------------------------------------------------------- #
 # Themed-dashboard category groupings                                         #
 # --------------------------------------------------------------------------- #
-# Canonical source of truth for which categories belong to the two themed
-# dashboards. Centralized here so the /money-bots and /claude-lab routes,
-# the dashboard stats counter, and the auto-promote picker can't drift
-# apart — add a category in ONE place and every surface picks it up.
+# Canonical source of truth for which categories belong to the themed
+# dashboards. Centralized here so the board routes, the dashboard stats
+# counter, and the auto-promote picker can't drift apart — add a category
+# in ONE place and every surface picks it up.
 
 # v0.24 — the /money-bots board. A money bot deploys capital through a
 # venue's API and earns from a named mechanism: quoting a book, capturing a
@@ -133,15 +119,6 @@ PRODUCT_MONEY_CATEGORIES: tuple["IdeaCategory", ...] = (
     IdeaCategory.VERTICAL_SAAS,
     IdeaCategory.ECOMMERCE_TOOLS,
     IdeaCategory.FINTECH_TOOLS,
-)
-
-CLAUDE_LAB_CATEGORIES: tuple["IdeaCategory", ...] = (
-    IdeaCategory.CLAUDE_SKILLS_AGENTS,
-    IdeaCategory.AI_MARKETPLACE,
-    IdeaCategory.AGENT_INFRA,
-    IdeaCategory.CLAUDE_EVALS,
-    IdeaCategory.AGENT_SECURITY,
-    IdeaCategory.CONTEXT_MEMORY,
 )
 
 # v0.16 Sniper board — categories the snipe generator hunts incumbents in.
@@ -336,15 +313,12 @@ class Idea(BaseModel):
     # ideas idempotently.
     auto_promoted_at: datetime | None = None
     # v0.15 — frontier scoring. fundability asks "can we sell it"; ambition
-    # asks "does it push Claude's capability ceiling". Used to sort the
-    # /claude-lab page.
+    # asks "does it push LLM/agent capability". Used to rank frontier ideas.
     ambition_score: float | None = None
     # v0.15a — which SHAPE of artifact this idea pitches: skill /
     # sub-agent / mcp-server / hook / slash-command / workflow /
     # protocol / ability. None = the default project-pitch shape
-    # (everything pre-v0.15a). Only Claude Lab categories rotate
-    # through these; money-bot and IT/security categories keep the
-    # project-pitch shape. NOTE: Sniper-board ideas reuse this column to
+    # (everything pre-v0.15a). NOTE: Sniper-board ideas reuse this column to
     # store their snipe ANGLE (price-snipe / unbundle / …) — disjoint
     # vocabulary, same column, no collision since snipe categories never
     # artifact-rotate.

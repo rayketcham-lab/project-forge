@@ -5,12 +5,10 @@ adversarial); artifact_type is the *shape* of the output the LLM is
 asked to produce — skill, sub-agent, MCP server, hook, slash-command,
 workflow, protocol, or raw ability extension. Orthogonal axes.
 
-For Claude Lab categories (CLAUDE_SKILLS_AGENTS, AI_MARKETPLACE) the
-generator rotates through all 8 artifact types so Churn surfaces real
-variety, not 50 paraphrases of the same project pitch.
-
-For every other category the artifact_type stays None (the default
-project-pitch shape that pre-v0.15a generation always used).
+No category auto-rotates artifact types today (the rotation set is
+empty), so a category that does not specify one gets the default
+project-pitch shape (artifact_type = None). An explicit artifact_type is
+still honoured when a caller passes one.
 """
 
 from __future__ import annotations
@@ -100,18 +98,17 @@ class TestArtifactCatalog:
 class TestPickLeastUsedArtifact:
     @pytest.mark.asyncio
     async def test_empty_db_picks_first_type(self, db):
-        picked = await pick_least_used_artifact(db, IdeaCategory.CLAUDE_SKILLS_AGENTS)
+        picked = await pick_least_used_artifact(db, IdeaCategory.AUTOMATION_INCOME)
         assert picked == ARTIFACT_TYPES[0]
 
     @pytest.mark.asyncio
     async def test_skips_the_saturated_type(self, db):
-
         for i in range(3):
             idea = Idea(
                 name=f"Already skill {i}",
                 tagline="t",
                 description="d",
-                category=IdeaCategory.CLAUDE_SKILLS_AGENTS,
+                category=IdeaCategory.AUTOMATION_INCOME,
                 market_analysis="m",
                 feasibility_score=0.7,
                 mvp_scope="mvp",
@@ -119,7 +116,7 @@ class TestPickLeastUsedArtifact:
                 artifact_type="skill",
             )
             await db.save_idea(idea)
-        picked = await pick_least_used_artifact(db, IdeaCategory.CLAUDE_SKILLS_AGENTS)
+        picked = await pick_least_used_artifact(db, IdeaCategory.AUTOMATION_INCOME)
         assert picked != "skill"
 
 
@@ -131,7 +128,7 @@ class TestPickLeastUsedArtifact:
 class TestPromptIncludesArtifact:
     def test_artifact_block_appears_in_prompt(self):
         prompt = _build_prompt(
-            category=IdeaCategory.CLAUDE_SKILLS_AGENTS,
+            category=IdeaCategory.AUTOMATION_INCOME,
             mode="novel",
             persona="someone",
             avoid_list=[],
@@ -160,35 +157,10 @@ class TestPromptIncludesArtifact:
 
 class TestGenerateIdeaLLMArtifact:
     @pytest.mark.asyncio
-    async def test_claude_category_rotates_artifact_types(self, db):
-        result = await generate_idea_llm(
-            db,
-            IdeaCategory.CLAUDE_SKILLS_AGENTS,
-            mode="novel",
-            backend=_stub_backend(),
-        )
-        assert result is not None
-        # Should have been auto-picked even though caller didn't specify.
-        assert result.artifact_type in ARTIFACT_TYPES
-        assert result.idea.artifact_type == result.artifact_type
-
-    @pytest.mark.asyncio
-    async def test_non_claude_category_stays_none(self, db):
-        result = await generate_idea_llm(
-            db,
-            IdeaCategory.AUTOMATION_INCOME,
-            mode="novel",
-            backend=_stub_backend(),
-        )
-        assert result is not None
-        assert result.artifact_type is None
-        assert result.idea.artifact_type is None
-
-    @pytest.mark.asyncio
     async def test_explicit_artifact_overrides_picker(self, db):
         result = await generate_idea_llm(
             db,
-            IdeaCategory.CLAUDE_SKILLS_AGENTS,
+            IdeaCategory.AUTOMATION_INCOME,
             mode="adversarial",
             artifact_type="protocol",
             backend=_stub_backend(),
@@ -198,14 +170,30 @@ class TestGenerateIdeaLLMArtifact:
         assert result.idea.artifact_type == "protocol"
 
     @pytest.mark.asyncio
-    async def test_unknown_artifact_falls_back_to_picker(self, db):
+    async def test_unknown_artifact_becomes_none(self, db):
+        """No category auto-rotates; a junk explicit type falls back to the
+        default project-pitch shape, not a picker pick."""
         result = await generate_idea_llm(
             db,
-            IdeaCategory.CLAUDE_SKILLS_AGENTS,
+            IdeaCategory.AUTOMATION_INCOME,
             mode="bundle",
             artifact_type="not-a-real-type",
             backend=_stub_backend(),
         )
         assert result is not None
-        # Picker took over because the explicit type was junk.
-        assert result.artifact_type in ARTIFACT_TYPES
+        assert result.artifact_type is None
+        assert result.idea.artifact_type is None
+
+    @pytest.mark.asyncio
+    async def test_no_auto_rotation_for_remaining_categories(self, db):
+        """The artifact-rotation set is empty — no category gets an
+        auto-picked artifact shape."""
+        result = await generate_idea_llm(
+            db,
+            IdeaCategory.AUTOMATION_INCOME,
+            mode="novel",
+            backend=_stub_backend(),
+        )
+        assert result is not None
+        assert result.artifact_type is None
+        assert result.idea.artifact_type is None

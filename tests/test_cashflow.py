@@ -13,7 +13,7 @@ keyless-safe), scoped back-fill cadence.
 
 Covers:
   - enum membership + CASHFLOW_CATEGORIES grouping (disjoint from
-    money / claude-lab / crypto)
+    money / crypto)
   - seeds (saturation standard: >=20 concepts / >=12 domains), personas,
     tech stacks, category bonus
   - the corpus guard: honest hustle, not get-rich-quick scam shapes
@@ -37,7 +37,6 @@ from project_forge.engine.categories import CATEGORY_SEEDS
 from project_forge.engine.llm_generator import PERSONAS_BY_CATEGORY
 from project_forge.models import (
     CASHFLOW_CATEGORIES,
-    CLAUDE_LAB_CATEGORIES,
     CRYPTO_CATEGORIES,
     MONEY_CATEGORIES,
     Idea,
@@ -115,7 +114,6 @@ class TestCashflowGrouping:
 
     def test_disjoint_from_other_boards(self):
         assert not (set(CASHFLOW_CATEGORIES) & set(MONEY_CATEGORIES))
-        assert not (set(CASHFLOW_CATEGORIES) & set(CLAUDE_LAB_CATEGORIES))
         assert not (set(CASHFLOW_CATEGORIES) & set(CRYPTO_CATEGORIES))
 
     def test_route_tuple_matches_canonical(self):

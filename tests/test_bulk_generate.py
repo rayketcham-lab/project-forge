@@ -79,27 +79,34 @@ MOCK_IDEA_JSON = json.dumps(
 
 
 class TestBulkGenerator:
-    @patch("project_forge.engine.generator.anthropic.Anthropic")
-    @pytest.mark.asyncio
-    async def test_generate_batch(self, mock_anthropic_cls, db):
-        mock_client = MagicMock()
-        mock_anthropic_cls.return_value = mock_client
+    @staticmethod
+    def _backend(seq) -> MagicMock:
+        """Backend whose .call returns each item of seq in turn."""
+        backend = MagicMock()
+        backend.name = "fake-backend"
 
+        def _call(_prompt):
+            item = seq.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return item
+
+        backend.call.side_effect = _call
+        return backend
+
+    @pytest.mark.asyncio
+    async def test_generate_batch(self, db):
         # Return genuinely distinct ideas per call so dedup doesn't filter them
         taglines = [
             "quantum-safe certificate revocation list signing tool",
             "lattice-based key encapsulation benchmark suite",
             "hybrid TLS handshake protocol analyzer for migration",
         ]
-        call_count = 0
-
-        def _make_response(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            idea_json = json.dumps(
+        seq = [
+            json.dumps(
                 {
-                    "name": f"PQC Tool {call_count}",
-                    "tagline": taglines[call_count - 1],
+                    "name": f"PQC Tool {i + 1}",
+                    "tagline": taglines[i],
                     "description": "PQC tooling for post-quantum migration.",
                     "category": "pqc-cryptography",
                     "market_analysis": "PQC transition is happening now.",
@@ -108,31 +115,22 @@ class TestBulkGenerator:
                     "tech_stack": ["python", "openssl", "cryptography"],
                 }
             )
-            mock_content = MagicMock()
-            mock_content.text = idea_json
-            mock_response = MagicMock()
-            mock_response.content = [mock_content]
-            return mock_response
-
-        mock_client.messages.create.side_effect = _make_response
+            for i in range(len(taglines))
+        ]
+        backend = self._backend(seq)
 
         config = BulkConfig(target_count=3, batch_size=3)
-        bulk = BulkGenerator(db=db, api_key="test-key", config=config)
+        bulk = BulkGenerator(db=db, config=config, backend=backend)
         ideas = await bulk.generate_batch(count=3)
 
         assert len(ideas) == 3
 
-    @patch("project_forge.engine.generator.anthropic.Anthropic")
     @pytest.mark.asyncio
-    async def test_generate_batch_stores_ideas(self, mock_anthropic_cls, db):
-        mock_client = MagicMock()
-        mock_anthropic_cls.return_value = mock_client
-
+    async def test_generate_batch_stores_ideas(self, db):
         # Return genuinely distinct names per call. v0.11 added a
         # name-token Jaccard gate (≥0.55) to INSERT dedup, so numbered
         # variants of the same name now collapse — bulk tests must vary
         # the concept words, not just the suffix.
-        call_count = 0
         distinct_names = [
             "CRL Quantum Guard",
             "Certificate Signature Migrator",
@@ -147,15 +145,11 @@ class TestBulkGenerator:
             "OCSP stapling with PQC fallback",
             "PKI key ceremony scripts for ML-DSA",
         ]
-
-        def _make_response(*args, **kwargs):
-            nonlocal call_count
-            slot = call_count
-            call_count += 1
-            idea_json = json.dumps(
+        seq = [
+            json.dumps(
                 {
-                    "name": distinct_names[slot % len(distinct_names)],
-                    "tagline": distinct_taglines[slot % len(distinct_taglines)],
+                    "name": distinct_names[i % len(distinct_names)],
+                    "tagline": distinct_taglines[i % len(distinct_taglines)],
                     "description": "Manages CRLs with PQC signatures.",
                     "category": "pqc-cryptography",
                     "market_analysis": "PQC transition is happening now.",
@@ -164,16 +158,12 @@ class TestBulkGenerator:
                     "tech_stack": ["python", "openssl", "cryptography"],
                 }
             )
-            mock_content = MagicMock()
-            mock_content.text = idea_json
-            mock_response = MagicMock()
-            mock_response.content = [mock_content]
-            return mock_response
-
-        mock_client.messages.create.side_effect = _make_response
+            for i in range(2)
+        ]
+        backend = self._backend(seq)
 
         config = BulkConfig(target_count=2, batch_size=2)
-        bulk = BulkGenerator(db=db, api_key="test-key", config=config)
+        bulk = BulkGenerator(db=db, config=config, backend=backend)
         await bulk.generate_batch(count=2)
 
         count = await db.count_ideas()
@@ -189,15 +179,11 @@ class TestBulkGenerator:
         # Should cover multiple focus areas
         assert len(distribution) >= 5
 
-    @patch("project_forge.engine.generator.anthropic.Anthropic")
     @pytest.mark.asyncio
-    async def test_generate_handles_errors_gracefully(self, mock_anthropic_cls, db):
-        mock_client = MagicMock()
-        mock_anthropic_cls.return_value = mock_client
-
+    async def test_generate_handles_errors_gracefully(self, db):
         # Return distinct ideas so dedup doesn't filter the second success
         def _make_resp(tagline):
-            idea_json = json.dumps(
+            return json.dumps(
                 {
                     "name": f"Tool for {tagline[:20]}",
                     "tagline": tagline,
@@ -209,20 +195,16 @@ class TestBulkGenerator:
                     "tech_stack": ["python", "openssl", "cryptography"],
                 }
             )
-            content = MagicMock()
-            content.text = idea_json
-            resp = MagicMock()
-            resp.content = [content]
-            return resp
 
-        mock_client.messages.create.side_effect = [
+        seq = [
             _make_resp("quantum-safe certificate revocation list signing"),
             RuntimeError("API error"),
             _make_resp("lattice-based key encapsulation benchmark suite"),
         ]
+        backend = self._backend(seq)
 
         config = BulkConfig(target_count=3, batch_size=3)
-        bulk = BulkGenerator(db=db, api_key="test-key", config=config)
+        bulk = BulkGenerator(db=db, config=config, backend=backend)
         ideas = await bulk.generate_batch(count=3)
 
         # Should get 2 successful, 1 failed

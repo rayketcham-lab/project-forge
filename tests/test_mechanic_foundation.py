@@ -2,11 +2,11 @@
 
 The implement loop (self_improve_runner) already writes code, runs tests +
 ruff, commits, and opens a PR — but `_call_claude` used the raw Anthropic
-SDK, so on a Pro/Max box with no API key it logged "skipped" and did
-nothing. This foundation makes the loop:
+SDK, so on a host with no raw API key it logged "skipped" and did nothing.
+This foundation makes the loop:
 
-  1. run on the SUBSCRIPTION (ClaudeCodeBackend / `claude --print`) when no
-     API key is set — the same backend the generation half already uses;
+  1. run on the configured BYO-LLM backend when one is reachable — the
+     same backend the generation half already uses;
   2. stay DISARMED until FORGE_SELF_IMPROVE_ENABLED is truthy — the
      autonomous cadence no-ops otherwise, so shipping the capability can't
      start an unattended code-modifying loop on the next uvicorn reload;
@@ -21,62 +21,30 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # --------------------------------------------------------------------------- #
-# 1. subscription revival                                                     #
+# 1. backend reachability                                                     #
 # --------------------------------------------------------------------------- #
 
 
-class TestCallClaudeSubscription:
-    def test_uses_api_key_when_present(self):
+class TestCallBackend:
+    def test_uses_backend_when_reachable(self, monkeypatch):
         import project_forge.cron.self_improve_runner as sir
 
-        msg = MagicMock()
-        msg.content = [MagicMock(text='{"ok": 1}')]
-        msg.stop_reason = "end_turn"
-        client = MagicMock()
-        client.messages.create.return_value = msg
-
-        with (
-            patch.object(sir, "settings") as mock_settings,
-            patch.object(sir.anthropic, "Anthropic", return_value=client) as mk,
-        ):
-            mock_settings.anthropic_api_key = "sk-real"
-            mock_settings.anthropic_model = "claude-sonnet-4-6"
-            out = sir._call_claude("hi")
-
-        mk.assert_called_once()
-        assert out == '{"ok": 1}'
-
-    def test_falls_back_to_subscription_without_key(self, monkeypatch):
-        import project_forge.cron.self_improve_runner as sir
-
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         backend = MagicMock()
-        backend.name = "claude-code:sonnet"
-        backend.call = MagicMock(return_value='{"ok": 2}')
+        backend.name = "openai-compatible:test"
+        backend.call = MagicMock(return_value='{"ok": 1}')
 
-        with (
-            patch.object(sir, "settings") as mock_settings,
-            patch("project_forge.engine.llm_backend.resolve_backend", return_value=backend),
-            # The SDK must NOT be touched on the keyless path.
-            patch.object(sir.anthropic, "Anthropic", side_effect=AssertionError("SDK used keyless")),
-        ):
-            mock_settings.anthropic_api_key = ""
-            out = sir._call_claude("hi")
+        with patch("project_forge.engine.llm_backend.resolve_backend", return_value=backend):
+            out = sir._call_backend("hi")
 
-        assert out == '{"ok": 2}'
+        assert out == '{"ok": 1}'
         backend.call.assert_called_once()
 
-    def test_raises_when_no_key_and_no_backend(self, monkeypatch):
+    def test_raises_when_no_backend(self, monkeypatch):
         import project_forge.cron.self_improve_runner as sir
 
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        with (
-            patch.object(sir, "settings") as mock_settings,
-            patch("project_forge.engine.llm_backend.resolve_backend", return_value=None),
-        ):
-            mock_settings.anthropic_api_key = ""
+        with patch("project_forge.engine.llm_backend.resolve_backend", return_value=None):
             with pytest.raises(ValueError):
-                sir._call_claude("hi")
+                sir._call_backend("hi")
 
 
 # --------------------------------------------------------------------------- #

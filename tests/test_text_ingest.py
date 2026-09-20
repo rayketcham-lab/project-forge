@@ -200,14 +200,8 @@ async def test_falls_back_to_heuristic_when_no_backend(monkeypatch):
     """generate_idea_from_text must produce an Idea even without LLM."""
     from project_forge.engine.text_ingest import generate_idea_from_text
 
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    from project_forge.config import settings as _settings
-
-    monkeypatch.setattr(_settings, "anthropic_api_key", "")
-    with patch(
-        "project_forge.engine.llm_backend._has_claude_cli",
-        return_value=False,
-    ):
+    monkeypatch.delenv("FORGE_LLM_BASE_URL", raising=False)
+    with patch("project_forge.engine.llm_backend.resolve_backend", return_value=None):
         idea = await generate_idea_from_text(text="A privacy auditor tool.", category_hint=None)
 
     assert idea is not None

@@ -51,12 +51,6 @@ _CATEGORY_ICP: dict[IdeaCategory, str] = {
     ),
     IdeaCategory.ECOMMERCE_TOOLS: "DTC ecommerce operator running Shopify at $1M–$10M annual GMV",
     IdeaCategory.FINTECH_TOOLS: "Finance or ops lead at a startup needing financial tooling without enterprise pricing",
-    IdeaCategory.CLAUDE_SKILLS_AGENTS: "Developer building Claude-powered workflows or AI agents",
-    IdeaCategory.AI_MARKETPLACE: "AI developer or prompt engineer looking to publish or acquire agent skills",
-    IdeaCategory.AGENT_INFRA: "AI platform engineer running multi-agent systems in production",
-    IdeaCategory.AGENT_SECURITY: "Security team responsible for AI/LLM deployments",
-    IdeaCategory.CONTEXT_MEMORY: "AI developer who needs persistent, structured context across agent sessions",
-    IdeaCategory.CLAUDE_EVALS: "ML engineer or AI product lead shipping LLM-powered features",
     IdeaCategory.PQC_CRYPTOGRAPHY: "Cryptography engineer or CISO preparing for post-quantum migration",
     IdeaCategory.PRIVACY: "Privacy engineer or DPO at a company subject to GDPR or CCPA",
     IdeaCategory.CRYPTO_INFRASTRUCTURE: (
@@ -112,18 +106,6 @@ _CATEGORY_CHANNELS: dict[IdeaCategory, list[str]] = {
         "ProductHunt",
         "newsletter sponsorship",
     ],
-    IdeaCategory.CLAUDE_SKILLS_AGENTS: [
-        "Anthropic developer Discord",
-        "Hacker News",
-        "GitHub trending",
-        "AI Twitter/X",
-    ],
-    IdeaCategory.AI_MARKETPLACE: [
-        "AI Twitter/X",
-        "ProductHunt",
-        "GitHub",
-        "developer newsletters (TLDR AI, The Batch)",
-    ],
 }
 
 _DEFAULT_CHANNELS = ["Hacker News Show HN", "ProductHunt", "Twitter/X build-in-public", "targeted cold email"]
@@ -135,8 +117,6 @@ _CATEGORY_PRICING: dict[IdeaCategory, str] = {
     IdeaCategory.DEVOPS_TOOLING: "$0 open-source; $49/mo hosted SaaS; $999/mo self-hosted enterprise",
     IdeaCategory.CONSUMER_APP: "$0 free tier; $9/mo Pro; $19/mo Pro+",
     IdeaCategory.AUTOMATION_INCOME: "$49 one-time or $9/mo subscription; free 14-day trial",
-    IdeaCategory.CLAUDE_SKILLS_AGENTS: "$0 open-source or $19/mo hosted; marketplace rev-share on paid extensions",
-    IdeaCategory.AI_MARKETPLACE: "Freemium platform; 20% rev-share on paid skill sales; $29/mo Pro creator",
 }
 
 _DEFAULT_PRICING = "Freemium — free tier to remove friction, paid tier at $29–$79/mo once value is proven"

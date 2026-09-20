@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import os
 import sys
 
 from project_forge.config import settings
@@ -19,14 +18,14 @@ async def _run():
     db = Database(settings.db_path)
     await db.connect()
     try:
-        api_key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        from project_forge.engine.llm_backend import resolve_backend
 
-        if api_key:
-            # Use Claude API for high-quality generation
+        if resolve_backend() is not None:
+            # Use the LLM backend for high-quality generation
             from project_forge.cron.scheduler import run_full_cycle
             from project_forge.engine.generator import IdeaGenerator
 
-            generator = IdeaGenerator(api_key=api_key)
+            generator = IdeaGenerator()
             idea = await run_full_cycle(db, generator)
             logger.info("API-generated: %s (score: %.2f)", idea.name, idea.feasibility_score)
         else:

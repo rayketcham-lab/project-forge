@@ -19,7 +19,6 @@ from project_forge.engine.llm_backend import resolve_backend
 from project_forge.engine.scorer import score_summary
 from project_forge.models import (
     CASHFLOW_CATEGORIES,
-    CLAUDE_LAB_CATEGORIES,
     CRYPTO_CATEGORIES,
     MONEY_CATEGORIES,
     PKI_CATEGORIES,
@@ -222,16 +221,14 @@ async def explore(
     )
 
 
-# Derived from the canonical groupings in models.py so /money-bots,
-# /claude-lab, the stats counter, and the auto-promote picker can't drift.
-# Kept as plain .value strings here to match the SQL bindings below.
+# Derived from the canonical groupings in models.py so the board routes,
+# the stats counter, and the auto-promote picker can't drift. Kept as
+# plain .value strings here to match the SQL bindings below.
 _MONEY_CATEGORIES = tuple(c.value for c in MONEY_CATEGORIES)
 
 # v0.24 — the product shapes the money board used to hold. Pulse churn and
 # the promote loop still work this set; only the BOARD changed hands.
 _PRODUCT_MONEY_CATEGORIES = tuple(c.value for c in PRODUCT_MONEY_CATEGORIES)
-
-_CLAUDE_LAB_CATEGORIES = tuple(c.value for c in CLAUDE_LAB_CATEGORIES)
 
 _SNIPER_CATEGORIES = tuple(c.value for c in SNIPER_CATEGORIES)
 
@@ -240,79 +237,6 @@ _CRYPTO_CATEGORIES = tuple(c.value for c in CRYPTO_CATEGORIES)
 _CASHFLOW_CATEGORIES = tuple(c.value for c in CASHFLOW_CATEGORIES)
 
 _PKI_CATEGORIES = tuple(c.value for c in PKI_CATEGORIES)
-
-
-@router.get("/claude-lab", response_class=HTMLResponse)
-async def claude_lab(
-    request: Request,
-    category: str | None = None,
-    limit: int = Query(default=30, ge=1, le=100),
-):
-    """Frontier-AI ideas across the Claude / agent ecosystem, sorted by
-    ambition_score DESC. Mirrors /money-bots but for the
-    'how do we extend Claude' question instead of 'how do we monetize'."""
-    cats = (category,) if category in _CLAUDE_LAB_CATEGORIES else _CLAUDE_LAB_CATEGORIES
-    placeholders = ",".join("?" * len(cats))
-    cur = await db.db.execute(
-        f"SELECT id FROM ideas "  # noqa: S608
-        f"WHERE category IN ({placeholders}) "
-        f"AND status NOT IN ('archived', 'rejected') "
-        f"AND ambition_score IS NOT NULL "
-        f"ORDER BY ambition_score DESC, generated_at DESC LIMIT ?",
-        (*cats, limit),
-    )
-    rows = await cur.fetchall()
-    ideas = []
-    for r in rows:
-        idea = await db.get_idea(r["id"])
-        if idea is not None:
-            ideas.append(idea)
-    cur = await db.db.execute(
-        f"SELECT COUNT(*) FROM ideas WHERE category IN ({placeholders}) "  # noqa: S608
-        f"AND status NOT IN ('archived', 'rejected')",
-        cats,
-    )
-    total = (await cur.fetchone())[0]
-    return templates.TemplateResponse(
-        request,
-        "claude_lab.html",
-        {
-            "ideas": ideas,
-            "total": total,
-            "categories": list(_CLAUDE_LAB_CATEGORIES),
-            "category_filter": category if category in _CLAUDE_LAB_CATEGORIES else None,
-        },
-    )
-
-
-@router.get("/api/claude-lab/top")
-async def api_claude_lab_top(limit: int = Query(default=10, ge=1, le=100)):
-    """JSON: top-N ambition_score-ranked ideas across the Claude / agent
-    ecosystem categories."""
-    placeholders = ",".join("?" * len(_CLAUDE_LAB_CATEGORIES))
-    cur = await db.db.execute(
-        f"SELECT id, name, tagline, category, ambition_score, "  # noqa: S608
-        f"fundability_score, generation_mode, status "
-        f"FROM ideas WHERE category IN ({placeholders}) "
-        f"AND status NOT IN ('archived', 'rejected') "
-        f"AND ambition_score IS NOT NULL "
-        f"ORDER BY ambition_score DESC, generated_at DESC LIMIT ?",
-        (*_CLAUDE_LAB_CATEGORIES, limit),
-    )
-    rows = await cur.fetchall()
-    return [
-        {
-            "id": r["id"],
-            "name": r["name"],
-            "tagline": r["tagline"],
-            "category": r["category"],
-            "ambition_score": r["ambition_score"],
-            "fundability_score": r["fundability_score"],
-            "generation_mode": r["generation_mode"],
-            "status": r["status"],
-        }
-        for r in rows
-    ]
 
 
 @router.get("/sniper", response_class=HTMLResponse)
@@ -766,22 +690,14 @@ async def api_promote(idea_id: str):
 @router.get("/api/backend-info")
 async def api_backend_info():
     """Diagnostic: which LLM backend the engine is actually using, and
-    whether the user's API-key env vars are visible to the running
+    whether the user's LLM env vars are visible to the running
     uvicorn process. Returns a CENSORED view — never the raw key, just
     presence + first-7-char prefix.
-
-    User asked 2026-06-08 "how is that coming and shouldn the money bot
-    have made API hits? Or we using Claude code?" — this is the answer
-    surface so they can self-check without grep'ing logs.
     """
     import os as _os
 
     from project_forge.config import settings as _settings
-    from project_forge.engine.llm_backend import (
-        _has_claude_cli,
-        resolve_backend,
-        resolve_cheap_backend,
-    )
+    from project_forge.engine.llm_backend import resolve_backend, resolve_cheap_backend
 
     def _maskprefix(v: str) -> str | None:
         if not v:
@@ -789,26 +705,23 @@ async def api_backend_info():
         return v[:7] + "…"
 
     env_view = {
-        "ANTHROPIC_API_KEY": _maskprefix(_os.environ.get("ANTHROPIC_API_KEY", "")),
-        "FORGE_ANTHROPIC_API_KEY": _maskprefix(_os.environ.get("FORGE_ANTHROPIC_API_KEY", "")),
-        "FORGE_HAIKU_API_KEY": _maskprefix(_os.environ.get("FORGE_HAIKU_API_KEY", "")),
         "FORGE_LLM_BACKEND": _os.environ.get("FORGE_LLM_BACKEND", ""),
+        "FORGE_LLM_BASE_URL": _maskprefix(_os.environ.get("FORGE_LLM_BASE_URL", "")),
         "FORGE_LLM_MODEL": _os.environ.get("FORGE_LLM_MODEL", ""),
-        "settings.anthropic_api_key": _maskprefix(_settings.anthropic_api_key),
+        "FORGE_LLM_API_KEY": _maskprefix(_os.environ.get("FORGE_LLM_API_KEY", "")),
+        "settings.llm_api_key": _maskprefix(_settings.llm_api_key),
     }
 
     default_b = resolve_backend()
     cheap_b = resolve_cheap_backend()
     return {
-        "claude_cli_on_path": _has_claude_cli(),
         "default_backend": default_b.name if default_b else None,
         "cheap_backend": cheap_b.name if cheap_b else None,
         "env_visible_to_process": env_view,
         "note": (
-            "If cheap_backend starts with 'claude-code:' the calls run "
-            "through your Claude Code (Pro Max) subscription — no API "
-            "token spend. If it starts with 'anthropic-api:' you're "
-            "spending API credits."
+            "The engine routes LLM calls through the configured "
+            "OpenAI-compatible endpoint (FORGE_LLM_BASE_URL). No backend "
+            "means LLM generation is disabled and heuristics take over."
         ),
     }
 
@@ -819,10 +732,9 @@ async def api_churn(request: Request):
     for the given (or auto-picked) category, runs dedup + scoring,
     returns the new idea (or a reason if it couldn't land).
 
-    Powers the Churn Now button on /money-bots, /claude-lab AND /sniper.
+    Powers the Churn Now button on /money-bots AND /sniper.
     The `lab` param picks which family + scoring axis applies:
       lab=money  (default) → fundability scored, money categories
-      lab=claude            → ambition scored, claude-lab categories
       lab=snipe             → snipe scored, grounded incumbent wedge
 
     Cheap — ~1 generation Haiku call + ~1 scoring call (~$0.003 total).
@@ -830,7 +742,6 @@ async def api_churn(request: Request):
     intel (cached per incumbent)."""
     import random as _random
 
-    from project_forge.engine.ambition import score_ambition
     from project_forge.engine.dedup import filter_and_save
     from project_forge.engine.fundability import score_fundability
     from project_forge.engine.llm_generator import (
@@ -848,7 +759,6 @@ async def api_churn(request: Request):
 
     lab = (payload.get("lab") or "money").strip().lower()
     allowed = {
-        "claude": _CLAUDE_LAB_CATEGORIES,
         "snipe": _SNIPER_CATEGORIES,
         "crypto": _CRYPTO_CATEGORIES,
         "cashflow": _CASHFLOW_CATEGORIES,
@@ -918,9 +828,7 @@ async def api_churn(request: Request):
         }
 
     # Score for the right axis.
-    if lab == "claude":
-        result.idea.ambition_score = await score_ambition(result.idea)
-    elif lab == "snipe":
+    if lab == "snipe":
         result.idea.snipe_score = await score_snipe(result.idea)
     elif lab == "cashflow":
         from project_forge.engine.cashflow import score_cashflow
@@ -2282,7 +2190,7 @@ async def ingest_idea_from_url(request_body: UrlIngestRequest):
 async def ingest_url(request_body: UrlIngestRequest, request: Request):
     """Generate a project idea from a URL."""
     # Fix #76 — LLM-backed ingest endpoints were uncapped, far more expensive
-    # than the other rate-limited paths (full Claude round-trip per call).
+    # than the other rate-limited paths (full LLM round-trip per call).
     client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(f"ingest:{client_ip}")
 
@@ -2357,8 +2265,8 @@ async def builder_step(request_body: _BuilderStepRequest):
         raise HTTPException(
             status_code=503,
             detail=(
-                "No LLM backend available. Set ANTHROPIC_API_KEY in .env, or "
-                "ensure `claude` CLI is on PATH so the wizard can call Sonnet."
+                "No LLM backend available. Set FORGE_LLM_BASE_URL in .env "
+                "so the wizard can call the configured model."
             ),
         )
     return result
@@ -2655,14 +2563,9 @@ async def _challenge_idea(
     return structured response + verdict + suggested changes.
 
     Routes through engine.llm_backend.resolve_backend() so it works with:
-      - Anthropic API direct (when ANTHROPIC_API_KEY is set)
-      - Claude Code CLI shell-out (when `claude` is on PATH)
-      - Heuristic fallback (when neither — preserves the question's
+      - the configured BYO-LLM endpoint (FORGE_LLM_BASE_URL)
+      - Heuristic fallback (when none — preserves the question's
         intent in the response so it's not a generic stub).
-
-    Issue #70: previously this function only checked for ANTHROPIC_API_KEY
-    and dropped to a heuristic stub on Claude Code-only hosts, leaving
-    user challenges as inert DB rows.
     """
     backend = resolve_backend()
     if backend is None:

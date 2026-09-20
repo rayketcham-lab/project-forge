@@ -1,7 +1,7 @@
 """Tests for all remaining gaps from team review (P2 + P3).
 
 Covers:
-1. _call_claude: timeout, empty response, stop_reason validation
+1. _call_backend: no-backend, empty response, text return
 2. apply_changes: directory allowlist (block .github/, .env, dotfiles)
 3. gather_self_context: absolute paths (not cwd-dependent)
 4. Dedup: rejected SI ideas should NOT block re-proposals
@@ -51,53 +51,45 @@ def _si_idea(**overrides) -> Idea:
 
 
 # ===================================================================
-# 1. _call_claude: robustness
+# 1. _call_backend: robustness
 # ===================================================================
 
 
-class TestCallClaudeRobustness:
-    """_call_claude should handle edge cases gracefully."""
+class TestCallBackendRobustness:
+    """_call_backend should handle edge cases gracefully."""
 
-    def test_validates_response_has_content(self):
-        """Should raise if Claude returns empty content."""
-        from project_forge.cron.self_improve_runner import _call_claude
+    def test_raises_when_no_backend(self):
+        """Should raise when no LLM backend is configured."""
+        from project_forge.cron.self_improve_runner import _call_backend
 
-        mock_response = MagicMock()
-        mock_response.content = []  # empty
+        with patch("project_forge.engine.llm_backend.resolve_backend", return_value=None):
+            with pytest.raises(ValueError, match="No LLM backend"):
+                _call_backend("test prompt")
 
-        with (
-            patch("project_forge.cron.self_improve_runner.anthropic") as mock_anthropic,
-            patch("project_forge.cron.self_improve_runner.settings") as mock_settings,
-        ):
-            mock_settings.anthropic_api_key = "test-key"
-            mock_settings.anthropic_model = "test-model"
-            mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
-            mock_client.messages.create.return_value = mock_response
+    def test_raises_on_empty_response(self):
+        """Should raise when the backend returns an empty/None response."""
+        from project_forge.cron.self_improve_runner import _call_backend
 
-            with pytest.raises((ValueError, IndexError)):
-                _call_claude("test prompt")
+        backend = MagicMock()
+        backend.call = MagicMock(return_value=None)
+        backend.name = "fake-backend"
 
-    def test_validates_stop_reason_is_end_turn(self):
-        """Should raise if Claude's stop_reason is not end_turn (truncated response)."""
-        from project_forge.cron.self_improve_runner import _call_claude
+        with patch("project_forge.engine.llm_backend.resolve_backend", return_value=backend):
+            with pytest.raises(ValueError, match="Empty response"):
+                _call_backend("test prompt")
 
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text='{"changes": []}')]
-        mock_response.stop_reason = "max_tokens"  # truncated!
+    def test_returns_backend_text(self):
+        """Should return the backend's raw text response."""
+        from project_forge.cron.self_improve_runner import _call_backend
 
-        with (
-            patch("project_forge.cron.self_improve_runner.anthropic") as mock_anthropic,
-            patch("project_forge.cron.self_improve_runner.settings") as mock_settings,
-        ):
-            mock_settings.anthropic_api_key = "test-key"
-            mock_settings.anthropic_model = "test-model"
-            mock_client = MagicMock()
-            mock_anthropic.Anthropic.return_value = mock_client
-            mock_client.messages.create.return_value = mock_response
+        backend = MagicMock()
+        backend.call = MagicMock(return_value='{"changes": []}')
+        backend.name = "fake-backend"
 
-            with pytest.raises(ValueError, match="truncated|max_tokens"):
-                _call_claude("test prompt")
+        with patch("project_forge.engine.llm_backend.resolve_backend", return_value=backend):
+            out = _call_backend("test prompt")
+
+        assert out == '{"changes": []}'
 
 
 # ===================================================================
@@ -382,15 +374,16 @@ class TestMissingFromTesterReport:
                 return_value={"code_stats": {}, "test_count": 10},
             ),
             patch(
-                "project_forge.cron.self_improve_runner._call_claude",
+                "project_forge.cron.self_improve_runner._call_backend",
                 return_value="this is not json at all!!",
             ),
             patch("project_forge.cron.self_improve_runner._revert_changes"),
             patch("project_forge.cron.self_improve_runner.close_issue") as mock_close,
-            patch("project_forge.cron.self_improve_runner.settings") as mock_settings,
+            patch(
+                "project_forge.engine.llm_backend.resolve_backend",
+                return_value=object(),
+            ),
         ):
-            mock_settings.anthropic_api_key = "fake-key"
-            mock_settings.anthropic_model = "claude-sonnet-4-20250514"
             # `asyncio.get_event_loop()` no longer auto-creates a loop in
             # MainThread on Python 3.12 (RuntimeError). `asyncio.run` is the
             # right entry point here — the test itself is synchronous.
@@ -433,7 +426,7 @@ class TestMissingFromTesterReport:
                 "project_forge.cron.self_improve_runner.gather_self_context",
                 return_value={"code_stats": {}, "test_count": 10},
             ),
-            patch("project_forge.cron.self_improve_runner._call_claude", side_effect=mock_claude),
+            patch("project_forge.cron.self_improve_runner._call_backend", side_effect=mock_claude),
             patch("project_forge.cron.self_improve_runner.apply_changes", return_value=["src/fix.py"]),
             patch(
                 "project_forge.cron.self_improve_runner.validate_changes",
@@ -445,10 +438,11 @@ class TestMissingFromTesterReport:
             ),
             patch("project_forge.cron.self_improve_runner.close_issue"),
             patch("project_forge.cron.self_improve_runner._revert_changes"),
-            patch("project_forge.cron.self_improve_runner.settings") as mock_settings,
+            patch(
+                "project_forge.engine.llm_backend.resolve_backend",
+                return_value=object(),
+            ),
         ):
-            mock_settings.anthropic_api_key = "fake-key"
-            mock_settings.anthropic_model = "claude-sonnet-4-20250514"
             result = asyncio.run(run_self_improve_cycle())
 
         assert result["processed"] == 2

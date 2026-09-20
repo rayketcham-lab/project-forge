@@ -339,10 +339,10 @@ _MAX_FIELD_LEN = 8000
 async def _safe_call(backend, prompt: str) -> str | None:
     """One backend call, off the event loop, never raising.
 
-    The CLI backend shells out to `claude --print`, which blocks for tens of
-    seconds per call — and this panel makes up to six. Running that inline
-    would freeze every request the web app is serving for minutes at a time,
-    which is exactly what happened the first time this cadence fired."""
+    The backend call blocks for tens of seconds per call — and this panel
+    makes up to six. Running that inline would freeze every request the web
+    app is serving for minutes at a time, which is exactly what happened the
+    first time this cadence fired."""
     try:
         return await asyncio.to_thread(backend.call, prompt)
     except Exception as exc:  # noqa: BLE001 — a failed call is just no answer

@@ -1,7 +1,7 @@
 """Self-introspection engine for Project Forge.
 
 Gathers context about the project's own codebase, tests, and open issues,
-then builds a prompt that asks Claude to suggest ONE self-improvement idea.
+then builds a prompt that asks the LLM to suggest ONE self-improvement idea.
 
 Modes:
 - 'code-fix' (default): patches lint/test/UX bugs in any file.
@@ -339,7 +339,7 @@ def build_introspection_prompt(
     mode: Literal["code-fix", "generation"] = "code-fix",
     generation_signals: dict | None = None,
 ) -> str:
-    """Build a prompt string for Claude to suggest one self-improvement idea.
+    """Build a prompt string for the LLM to suggest one self-improvement idea.
 
     Args:
         context: Dict returned by gather_self_context().
@@ -350,7 +350,7 @@ def build_introspection_prompt(
             gather_generation_signals(db).
 
     Returns:
-        A formatted prompt string ready to send to Claude.
+        A formatted prompt string ready to send to the LLM.
     """
     if mode == "generation":
         if generation_signals is None:

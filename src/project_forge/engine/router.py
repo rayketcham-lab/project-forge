@@ -14,7 +14,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
-import anthropic
+from project_forge.engine.llm_backend import resolve_backend
 
 if TYPE_CHECKING:
     from project_forge.models import Idea, RepoEntry
@@ -74,23 +74,31 @@ class RouteDecision:
 
 
 class PortfolioRouter:
-    """Routes ideas against the current repo registry using Claude."""
+    """Routes ideas against the current repo registry via the BYO-LLM backend."""
 
-    def __init__(self, client: anthropic.Anthropic, model: str) -> None:
-        self.client = client
-        self.model = model
+    def __init__(self, backend=None, model: str = "") -> None:
+        self.backend = backend if backend is not None else resolve_backend()
+        self.model = model or (self.backend.name if self.backend else "")
 
     def route(self, idea: Idea, repos: list[RepoEntry]) -> RouteDecision:
         """Classify idea against the portfolio and return a routing decision.
 
         If repos is empty the registry hasn't been seeded yet — we conservatively
-        return new_project without calling the API.
+        return new_project without calling the API. If no LLM backend is
+        reachable we classify the same way rather than dropping the idea.
         """
         if not repos:
             return RouteDecision(
                 action="new_project",
                 target_repo=None,
                 reason="Registry empty — cannot classify against portfolio",
+                confidence=0.5,
+            )
+        if self.backend is None:
+            return RouteDecision(
+                action="new_project",
+                target_repo=None,
+                reason="No LLM backend reachable — cannot classify against portfolio",
                 confidence=0.5,
             )
 
@@ -105,16 +113,13 @@ class PortfolioRouter:
         )
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=400,
-                system=ROUTER_SYSTEM,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            text = response.content[0].text
+            full_prompt = f"{ROUTER_SYSTEM}\n\n{prompt}"
+            text = self.backend.call(full_prompt)
+            if not text:
+                raise ValueError("LLM backend returned empty response")
             return self._parse_decision(text)
         except Exception as exc:
-            logger.error("Router API call failed: %s", exc)
+            logger.error("Router LLM call failed: %s", exc)
             return RouteDecision(
                 action="new_project",
                 target_repo=None,

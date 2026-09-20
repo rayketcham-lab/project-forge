@@ -94,7 +94,6 @@ class TestBoardTable:
     @pytest.mark.parametrize(
         ("board", "grouping"),
         [
-            ("/claude-lab", "CLAUDE_LAB_CATEGORIES"),
             ("/crypto", "CRYPTO_CATEGORIES"),
             ("/cashflow", "CASHFLOW_CATEGORIES"),
             ("/pki", "PKI_CATEGORIES"),
@@ -139,8 +138,8 @@ class TestEnvTable:
     @pytest.mark.parametrize(
         ("var", "expected"),
         [
-            ("FORGE_BOT_GEN_MODEL", "sonnet"),
-            ("FORGE_BOT_REVIEW_MODEL", "opus"),
+            ("FORGE_BOT_GEN_MODEL", "(model default)"),
+            ("FORGE_BOT_REVIEW_MODEL", "(model default)"),
             ("FORGE_BOT_INTERVAL_HOURS", 2.0),
             ("FORGE_LLM_TIMEOUT_SEC", 420),
         ],
@@ -153,7 +152,9 @@ class TestEnvTable:
             from project_forge.engine.llm_backend import _ROLE_DEFAULTS
 
             role = "generate" if "GEN" in var else "review"
-            assert _ROLE_DEFAULTS[role] == (var, expected)
+            # Role model overriding is an env-name that maps in _ROLE_DEFAULTS;
+            # the default is the configured BYO-LLM model, not a fixed id.
+            assert _ROLE_DEFAULTS[role] == var
             assert documented[var] == expected
         elif var == "FORGE_LLM_TIMEOUT_SEC":
             from project_forge.engine.llm_backend import _timeout_from_env

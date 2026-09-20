@@ -163,7 +163,7 @@ class TestReviewRunner:
 
         with (
             patch("project_forge.cron.review_runner._review_idea_with_api", return_value=fake_review),
-            patch("project_forge.cron.review_runner._get_api_key", return_value="fake-key"),
+            patch("project_forge.cron.review_runner.resolve_backend", return_value=object()),
         ):
             result = await run_review_cycle(db, batch_size=5)
 
@@ -182,7 +182,7 @@ class TestReviewRunner:
 
         with (
             patch("project_forge.cron.review_runner._review_idea_with_api", return_value=fake_review),
-            patch("project_forge.cron.review_runner._get_api_key", return_value="fake-key"),
+            patch("project_forge.cron.review_runner.resolve_backend", return_value=object()),
         ):
             await run_review_cycle(db, batch_size=5)
 
@@ -201,7 +201,7 @@ class TestReviewRunner:
 
         with (
             patch("project_forge.cron.review_runner._review_idea_with_api", return_value=fake_review),
-            patch("project_forge.cron.review_runner._get_api_key", return_value="fake-key"),
+            patch("project_forge.cron.review_runner.resolve_backend", return_value=object()),
         ):
             await run_review_cycle(db, batch_size=5)
 
@@ -220,7 +220,7 @@ class TestReviewRunner:
 
     @pytest.mark.asyncio
     async def test_review_cycle_handles_claude_error(self, db):
-        """If Claude fails for one idea, others should still be processed."""
+        """If the LLM backend fails for one idea, others should still be processed."""
         from project_forge.cron.review_runner import run_review_cycle
 
         await db.save_idea(_idea("Good Idea"))
@@ -228,7 +228,7 @@ class TestReviewRunner:
 
         call_count = 0
 
-        async def flaky_review(idea, api_key="", model=""):
+        async def flaky_review(idea, backend=None):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -237,7 +237,7 @@ class TestReviewRunner:
 
         with (
             patch("project_forge.cron.review_runner._review_idea_with_api", side_effect=flaky_review),
-            patch("project_forge.cron.review_runner._get_api_key", return_value="fake-key"),
+            patch("project_forge.cron.review_runner.resolve_backend", return_value=object()),
         ):
             result = await run_review_cycle(db, batch_size=5)
 

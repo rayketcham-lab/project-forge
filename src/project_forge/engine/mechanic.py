@@ -1,23 +1,24 @@
 """Forge Mechanic (#99/#100) — the autonomous self-improvement engine.
 
 Picks the highest-priority Think Tank item, implements it with an ISOLATED
-`claude -p` agent run (the operator's Pro/Max subscription), gates on the
-full test suite + ruff, and opens a PR for the operator to review + merge
-via the review panel. PR-gated by design — nothing auto-merges.
+headless agent run, gates on the full test suite + ruff, and opens a PR for
+the operator to review + merge via the review panel. PR-gated by design —
+nothing auto-merges.
 
 Pieces:
   - work selection : rank active self-improvement items, security-debt first
   - orchestrator   : select -> worktree -> agent -> gate -> PR -> cleanup
 
-Every run is isolated in a throwaway `git worktree`, so a bad agent run can
+Every run is isolated in a throwaway workspace clone, so a bad agent run can
 never corrupt the live tree or the running server. The agent is scoped with
-`--allowedTools` (NEVER --dangerously-skip-permissions, per the project's
-permission policy), and a denylist blocks it from touching its own
+an explicit allowed-tool list (NEVER --dangerously-skip-permissions, per the
+project's permission policy), and a denylist blocks it from touching its own
 guardrails, CI, or the permission config.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -27,6 +28,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from project_forge.config import settings
 from project_forge.models import Idea, IdeaCategory
 from project_forge.storage.db import Database
 
@@ -39,27 +41,21 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 # subscription spend.
 AGENT_TIMEOUT = int(os.environ.get("FORGE_MECHANIC_AGENT_TIMEOUT", "2400"))
 
-# Model + reasoning effort the headless agent runs on. Operator's choice:
-# Opus 5 at medium effort — strong implementation quality without maxing the
-# reasoning budget on every item. Override via env; empty AGENT_MODEL inherits
-# the `claude` CLI default, empty AGENT_EFFORT uses the model's default effort.
-AGENT_MODEL = os.environ.get("FORGE_MECHANIC_MODEL", "claude-opus-5").strip()
-AGENT_EFFORT = os.environ.get("FORGE_MECHANIC_EFFORT", "medium").strip()
+# Model for the headless agent. The BYO-LLM backend resolves the model itself
+# from FORGE_LLM_MODEL / settings.llm_model; FORGE_MECHANIC_MODEL remains as
+# an optional per-mechanic override passed to resolve_backend(model_override=).
+def _resolve_agent_model() -> str:
+    """Agent model the mechanic runs on.
 
-# Tools the headless agent may use — read/edit/write code + run tests and ruff.
-# NOT arbitrary bash, NOT git/gh (the orchestrator owns commits + PRs), and
-# NEVER --dangerously-skip-permissions.
-AGENT_ALLOWED_TOOLS = [
-    "Read",
-    "Edit",
-    "Write",
-    "Glob",
-    "Grep",
-    "Bash(python -m pytest:*)",
-    "Bash(pytest:*)",
-    "Bash(python -m ruff:*)",
-    "Bash(ruff:*)",
-]
+    Precedence: FORGE_MECHANIC_MODEL env override, then the configured
+    BYO-LLM model (settings.llm_model / FORGE_LLM_MODEL), else '' (endpoint
+    default). Resolved lazily so env/settings changes take effect per call.
+    """
+    override = os.environ.get("FORGE_MECHANIC_MODEL", "").strip()
+    if override:
+        return override
+    return (settings.llm_model or "").strip()
+AGENT_EFFORT = os.environ.get("FORGE_MECHANIC_EFFORT", "medium").strip()
 
 # The agent may never rewrite its OWN LEASH — the mechanic, the runner,
 # their review gate, CI, or the permission config. A self-modifier that can
@@ -136,8 +132,8 @@ def build_task_prompt(idea: Idea) -> str:
     """The scoped brief handed to the headless agent."""
     return (
         "You are the Forge Mechanic. Implement ONE self-improvement item in this "
-        "Project Forge repo END TO END and leave the working tree with the fix "
-        "COMPLETE and every test passing.\n\n"
+        "Project Forge repo END TO END and specify the edits that leave the "
+        "working tree with the fix COMPLETE.\n\n"
         f"## Item: {idea.name}\n{idea.tagline}\n\n{idea.description or ''}\n\n"
         "## DONE means ALL of these — do not stop until they hold\n"
         "1. You wrote or extended a test that pins the fix.\n"
@@ -146,16 +142,33 @@ def build_task_prompt(idea: Idea) -> str:
         "red, keep working until it is green — never finish on a failing test.\n"
         "4. `python -m ruff check src/ tests/` and `python -m ruff format src/ tests/` "
         "are clean.\n\n"
-        "## Work efficiently\n"
-        "- While iterating, run just the relevant test file "
-        "(`python -m pytest tests/test_<x>.py -q`) — it is much faster. Run the "
-        "FULL suite once at the very end to confirm nothing else broke.\n"
-        "- Keep the change tightly scoped to this item. No drive-by refactors.\n\n"
+        "## Respond with ONLY valid JSON (no markdown wrapping) in this exact format:\n"
+        "{\n"
+        "    \"summary\": \"One-line description of what you changed\",\n"
+        "    \"changes\": [\n"
+        "        {\n"
+        "            \"path\": \"relative/path/to/file.py\",\n"
+        "            \"action\": \"edit\",\n"
+        "            \"search\": \"exact string to find in the file\",\n"
+        "            \"replace\": \"replacement string\"\n"
+        "        },\n"
+        "        {\n"
+        "            \"path\": \"relative/path/to/new_file.py\",\n"
+        "            \"action\": \"create\",\n"
+        "            \"content\": \"full file content\"\n"
+        "        }\n"
+        "    ]\n"
+        "}\n\n"
+        "Rules:\n"
+        "- action is \"edit\" (modify existing file) or \"create\" (new file)\n"
+        "- For edits, \"search\" must be an exact substring of the current file content\n"
+        "- Keep changes tightly scoped to this item. Include test changes if appropriate.\n"
+        "- All paths are relative to the repo root.\n\n"
         "## Do NOT touch\n"
         ".github/, .claude/, scripts/, or the mechanic's own files "
         "(engine/mechanic.py, engine/mechanic_review.py, cron/mechanic_runner.py, "
         "cron/self_improve_runner.py). Everything else — including app.py, db.py, "
-        "auth.py — is fair game. Do NOT run git or gh; just leave the tree changed.\n"
+        "auth.py — is fair game.\n"
     )
 
 
@@ -216,30 +229,94 @@ def _remove_workspace(ws: Path) -> None:
     shutil.rmtree(ws, ignore_errors=True)
 
 
+def _apply_change_set(workspace: Path, changes: list[dict]) -> bool:
+    """Apply a JSON change set to the workspace. Returns True when the tree changed."""
+    applied = False
+    for change in changes:
+        rel = str(change.get("path", "")).lstrip("/")
+        if not rel:
+            continue
+        target = workspace / rel
+        try:
+            target.resolve().relative_to(workspace.resolve())
+        except ValueError:
+            logger.warning("Mechanic agent tried to write outside workspace: %s", rel)
+            continue
+        action = change.get("action")
+        if action == "create":
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(change.get("content", ""))
+            applied = True
+        elif action == "edit":
+            if not target.exists():
+                logger.warning("Mechanic agent edit target missing: %s", rel)
+                continue
+            content = target.read_text()
+            search = change.get("search", "")
+            replace = change.get("replace", "")
+            if search not in content:
+                logger.warning(
+                    "Mechanic agent search string not found in %s: %r…",
+                    rel,
+                    search[:80],
+                )
+                continue
+            target.write_text(content.replace(search, replace, 1))
+            applied = True
+    return applied
+
+
+def _parse_agent_response(text: str) -> list[dict]:
+    """Parse the agent's JSON change set; [] on any failure so the caller no-ops."""
+    text = text.strip()
+    if "```json" in text:
+        text = text.split("```json", 1)[1].split("```", 1)[0]
+    elif "```" in text:
+        text = text.split("```", 1)[1].split("```", 1)[0]
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("Mechanic agent response was not JSON — no changes applied")
+        return []
+    changes = data.get("changes", []) if isinstance(data, dict) else []
+    return [c for c in changes if isinstance(c, dict)]
+
+
 def run_agent(workspace: Path, prompt: str, *, timeout: int = AGENT_TIMEOUT) -> subprocess.CompletedProcess:
-    """Invoke `claude -p` as a scoped agent inside the workspace, on the
-    Pro/Max SUBSCRIPTION (the logged-in CLI). Injectable for tests.
+    """Ask the BYO-LLM backend to implement the task inside the workspace.
 
-    The prompt goes via STDIN, not as a positional arg: `--allowedTools`
-    takes N values and would otherwise swallow a trailing prompt argument
-    (claude then errors 'Input must be provided … when using --print')."""
-    from project_forge.engine.llm_backend import _claude_cli_path
+    The backend receives the task brief and returns a JSON change set that
+    we apply directly to the workspace clone. Returns a
+    :class:`subprocess.CompletedProcess`-shaped object (the orchestration
+    and tests treat this as a CLI run): returncode 0 with stdout when the
+    tree changed, returncode 1 with stderr otherwise.
+    """
+    from project_forge.engine.llm_backend import resolve_backend
 
-    claude = _claude_cli_path() or "claude"
-    cmd = [claude, "--print", "--permission-mode", "acceptEdits", "--allowedTools", *AGENT_ALLOWED_TOOLS]
-    if AGENT_MODEL:
-        cmd += ["--model", AGENT_MODEL]
-    if AGENT_EFFORT:
-        cmd += ["--effort", AGENT_EFFORT]
-    return subprocess.run(
-        cmd,
-        input=prompt,
-        capture_output=True,
-        text=True,
-        cwd=str(workspace),
-        env=_clone_env(workspace),
-        timeout=timeout,
-    )
+    backend = resolve_backend()
+    if backend is None:
+        return subprocess.CompletedProcess(
+            args=["llm-backend"],
+            returncode=1,
+            stderr="No LLM backend configured (FORGE_LLM_BASE_URL empty)",
+        )
+    text = backend.call(prompt) or ""
+    if not text.strip():
+        return subprocess.CompletedProcess(args=["llm-backend"], returncode=1, stderr="LLM backend returned empty")
+    changes = _parse_agent_response(text)
+    if not changes:
+        return subprocess.CompletedProcess(
+            args=["llm-backend"],
+            returncode=1,
+            stderr="LLM returned no usable change set",
+        )
+    if not _apply_change_set(workspace, changes):
+        return subprocess.CompletedProcess(
+            args=["llm-backend"],
+            returncode=1,
+            stderr="LLM change set produced no file changes",
+        )
+    return subprocess.CompletedProcess(args=["llm-backend"], returncode=0, stdout=text)
 
 
 def _changed_paths(workspace: Path) -> list[str]:
@@ -321,8 +398,7 @@ def _open_pr(worktree: Path, branch: str, idea: Idea) -> str:
     _run(["git", "add", "-A"], cwd=str(worktree))
     msg = (
         f"mechanic: {idea.name}\n\n"
-        f"Autonomous self-improvement for Think Tank item {idea.id}.\n\n"
-        "Co-Authored-By: Claude <noreply@anthropic.com>"
+        f"Autonomous self-improvement for Think Tank item {idea.id}."
     )
     _run(["git", "commit", "-m", msg], cwd=str(worktree))
     _run(["git", "push", "-u", "--force-with-lease", "origin", branch], cwd=str(worktree))

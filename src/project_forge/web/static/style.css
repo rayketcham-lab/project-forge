@@ -1637,7 +1637,7 @@ body.picker-mode, body.picker-mode * { cursor: crosshair !important; }
 /* The earlier "nav-link-frontier" rules + their loud gradient backgrounds
    were superseded by the dot+underline pattern at the top of this file
    (search for ".nav-link-money, .nav-link-frontier"). Only the Churn-Now
-   button accent for the Claude Lab page lives here now. */
+   button accent for the frontier board lives here now. */
 .btn-churn-frontier {
     background: var(--surface);
     border: 1px solid var(--purple);
@@ -1648,7 +1648,7 @@ body.picker-mode, body.picker-mode * { cursor: crosshair !important; }
     box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.18);
 }
 
-/* === ARTIFACT TYPE PILLS (Claude Lab v0.15a) === */
+/* === ARTIFACT TYPE PILLS (v0.15a) === */
 /* Each artifact type gets a distinct color so the grid reads as
    "what shape is this" at a glance. Reuses .mode-pill base styling
    from earlier in this file. */

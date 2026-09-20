@@ -14,7 +14,7 @@ supervisor cancels every child.
 Cadences currently scheduled (see `default_cadences`):
 - expand:       1h   (cross-category + super idea generation)
 - review:       12h  (auto-archive sweeps over aged ideas)
-- self_improve: 6h   (GitHub ci-queue → PR loop; self-skips without an API key)
+- self_improve: 6h   (GitHub ci-queue → PR loop; self-skips without an LLM backend)
 - introspect:   24h  (self-improvement idea proposals)
 - challenge:    168h (autonomous adversarial pass on top unchallenged ideas)
 """
@@ -335,21 +335,13 @@ def _delay_from_watermark(last_ts: str | None, interval: timedelta) -> float:
 def _resolve_generator():
     """Pick the best available generator without raising.
 
-    Returns the API generator if `ANTHROPIC_API_KEY` is set, else a
-    Claude-Code-CLI backend generator if `claude` is on PATH, else None
-    (the static fallback path inside each runner takes over).
+    Returns a backend-backed generator when a BYO-LLM endpoint is configured
+    (FORGE_LLM_BASE_URL), else None — the static fallback path inside each
+    runner takes over.
     """
-    from project_forge.config import settings
-
-    api_key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-    if api_key:
-        from project_forge.engine.generator import IdeaGenerator
-
-        return IdeaGenerator(api_key=api_key)
-
     from project_forge.engine.llm_backend import resolve_backend
 
-    backend = resolve_backend(force="claude_code")
+    backend = resolve_backend()
     if backend is not None:
         from project_forge.engine.generator import LLMBackendIdeaGenerator
 
@@ -407,7 +399,7 @@ async def _fire_expand(db: Database) -> None:
 
 
 async def _fire_review(db: Database) -> None:
-    """Run one review cycle (heuristic if no API key, Claude if present)."""
+    """Run one review cycle (heuristic if no LLM backend, LLM if present)."""
     from project_forge.cron.review_runner import run_review_cycle
 
     result = await run_review_cycle(db)

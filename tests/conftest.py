@@ -106,7 +106,7 @@ def _disable_semantic_dedup(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _no_live_llm_in_tests(monkeypatch):
-    """No test may shell out to the real `claude` CLI.
+    """No test may reach a live LLM endpoint.
 
     One cadence test stopped being a no-op after a behaviour change and
     started running the actual pipeline: the suite went from 85 seconds to

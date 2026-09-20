@@ -1,11 +1,11 @@
-"""Idea generation via Claude API."""
+"""Idea generation via a BYO-LLM OpenAI-compatible backend."""
 
+import asyncio
 import json
 import logging
 
-import anthropic
-
 from project_forge.config import settings
+from project_forge.engine.llm_backend import OpenAICompatibleBackend, resolve_backend
 from project_forge.engine.prompts import SYSTEM_PROMPT, build_generation_prompt, build_url_ingest_prompt
 from project_forge.engine.url_ingest import UrlContent
 from project_forge.models import Idea, IdeaCategory
@@ -14,14 +14,27 @@ logger = logging.getLogger(__name__)
 
 
 class IdeaGenerator:
-    def __init__(self, api_key: str | None = None, model: str | None = None):
-        key = api_key or settings.anthropic_api_key
-        if not key:
-            import os
+    """LLM idea generator backed by the generic BYO-LLM backend.
 
-            key = os.environ.get("ANTHROPIC_API_KEY", "")
-        self.client = anthropic.Anthropic(api_key=key)
-        self.model = model or settings.anthropic_model
+    Resolves via `resolve_backend()`; when no endpoint is configured it
+    falls back to a directly-constructed OpenAICompatibleBackend so callers
+    that pass an explicit api_key/model (cron entry points, tests) still
+    construct a usable object.
+    """
+
+    def __init__(self, api_key: str | None = None, model: str | None = None, backend=None):
+        self.backend = backend
+        if self.backend is None:
+            self.backend = resolve_backend(model_override=model)
+        if self.backend is None:
+            self.backend = OpenAICompatibleBackend(
+                base_url=settings.llm_base_url,
+                model=model or settings.llm_model,
+                api_key=api_key or settings.llm_api_key,
+            )
+        self.model = model or settings.llm_model or getattr(self.backend, "model", "") or ""
+        # Compatibility shim — some callers read .client / .model.
+        self.client = None
 
     async def generate(
         self,
@@ -50,14 +63,12 @@ class IdeaGenerator:
 
         logger.info("Generating idea for category: %s", category.value)
 
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=2000,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        full_prompt = f"{SYSTEM_PROMPT}\n\n{prompt}"
+        text = await asyncio.to_thread(self.backend.call, full_prompt)
+        if not text:
+            raise ValueError(f"LLM backend {self.backend.name} returned empty response")
 
-        idea = self._parse_response(response)
+        idea = self._parse_response_text(text)
         logger.info("Generated idea: %s (score: %.2f)", idea.name, idea.feasibility_score)
         return idea
 
@@ -77,14 +88,12 @@ class IdeaGenerator:
 
         logger.info("Generating idea from URL: %s", content.url)
 
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=2000,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        full_prompt = f"{SYSTEM_PROMPT}\n\n{prompt}"
+        text = await asyncio.to_thread(self.backend.call, full_prompt)
+        if not text:
+            raise ValueError(f"LLM backend {self.backend.name} returned empty response")
 
-        idea = self._parse_response(response, source_url=content.url)
+        idea = self._parse_response_text(text, source_url=content.url)
         logger.info("Generated idea from URL: %s (score: %.2f)", idea.name, idea.feasibility_score)
         return idea
 
@@ -120,25 +129,18 @@ class IdeaGenerator:
 
         return Idea(**kwargs)
 
-    @staticmethod
-    def _parse_response(response, source_url: str | None = None) -> Idea:
-        """Extract and parse JSON from an Anthropic API response into an Idea."""
-        text = response.content[0].text
-        return IdeaGenerator._parse_response_text(text, source_url=source_url)
-
 
 class LLMBackendIdeaGenerator:
-    """Adapter that lets introspect_runner use any LLMBackend (including
-    Claude Code CLI) where it expected an IdeaGenerator. Mirrors the
-    minimal IdeaGenerator surface used by run_introspect_cycle:
-    `await .generate(category=..., prompt_override=...)`.
+    """Adapter that lets introspect_runner use any LLMBackend where it
+    expected an IdeaGenerator. Mirrors the minimal IdeaGenerator surface
+    used by run_introspect_cycle: `await .generate(category=..., prompt_override=...)`.
     """
 
     def __init__(self, backend, system_prompt: str | None = None):
         from project_forge.engine.prompts import SYSTEM_PROMPT
 
         self.backend = backend
-        # Concatenate system + user since the Claude Code CLI takes one prompt.
+        # Concatenate system + user since the BYO-LLM backend takes one prompt.
         self.system_prompt = system_prompt or SYSTEM_PROMPT
         # Compatibility shim — IdeaGenerator exposes .client + .model.
         self.client = None
@@ -169,3 +171,22 @@ class LLMBackendIdeaGenerator:
         # Force category in case the LLM picked something else
         idea.category = category
         return idea
+
+    async def generate_from_content(
+        self,
+        content: UrlContent,
+        category_hint: str | None = None,
+    ) -> Idea:
+        """Generate an idea from URL content via the backend."""
+        prompt = build_url_ingest_prompt(
+            title=content.title,
+            url=content.url,
+            domain=content.domain,
+            content=content.text,
+            category_hint=category_hint,
+        )
+        full_prompt = f"{self.system_prompt}\n\n{prompt}"
+        text = self.backend.call(full_prompt)
+        if not text:
+            raise ValueError(f"LLM backend {self.backend.name} returned empty response")
+        return IdeaGenerator._parse_response_text(text, source_url=content.url)

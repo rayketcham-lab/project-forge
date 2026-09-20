@@ -64,10 +64,10 @@ class TestDefaults:
     def test_log_level_default(self):
         assert Settings().log_level == "INFO"
 
-    def test_anthropic_model_default(self):
-        # Sonnet 4 — the project-default reasoning model. Changing the
-        # short alias here would silently change generation behaviour.
-        assert Settings().anthropic_model == "claude-sonnet-4-6"
+    def test_llm_model_default_empty(self):
+        # BYO-LLM (2026-09-19): no default model id — the operator's
+        # endpoint supplies its own default or FORGE_LLM_MODEL is set.
+        assert Settings().llm_model == ""
 
     def test_env_prefix_pattern(self):
         # The settings rely on FORGE_ prefix on every env var. Lock down

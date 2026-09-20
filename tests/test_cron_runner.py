@@ -78,17 +78,12 @@ async def test_pick_category_empty_db(db):
 
 
 @pytest.mark.asyncio
-@patch("project_forge.engine.generator.anthropic.Anthropic")
-async def test_generate_and_store(mock_anthropic_cls, db):
-    mock_client = MagicMock()
-    mock_anthropic_cls.return_value = mock_client
-    mock_content = MagicMock()
-    mock_content.text = MOCK_API_RESPONSE
-    mock_response = MagicMock()
-    mock_response.content = [mock_content]
-    mock_client.messages.create.return_value = mock_response
+async def test_generate_and_store(db):
+    backend = MagicMock()
+    backend.name = "fake-backend"
+    backend.call.return_value = MOCK_API_RESPONSE
 
-    generator = IdeaGenerator(api_key="test-key")
+    generator = IdeaGenerator(backend=backend)
     idea = await generate_and_store(db, generator)
 
     assert idea.name == "Cron Generated Idea"
@@ -104,13 +99,12 @@ async def test_generate_and_store(mock_anthropic_cls, db):
 
 
 @pytest.mark.asyncio
-@patch("project_forge.engine.generator.anthropic.Anthropic")
-async def test_generate_and_store_records_failure(mock_anthropic_cls, db):
-    mock_client = MagicMock()
-    mock_anthropic_cls.return_value = mock_client
-    mock_client.messages.create.side_effect = RuntimeError("API error")
+async def test_generate_and_store_records_failure(db):
+    backend = MagicMock()
+    backend.name = "fake-backend"
+    backend.call.side_effect = RuntimeError("API error")
 
-    generator = IdeaGenerator(api_key="test-key")
+    generator = IdeaGenerator(backend=backend)
 
     with pytest.raises(RuntimeError, match="API error"):
         await generate_and_store(db, generator)

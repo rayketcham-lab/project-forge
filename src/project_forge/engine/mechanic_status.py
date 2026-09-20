@@ -25,7 +25,7 @@ _STALE_AFTER = 3600.0
 STAGE_MESSAGES = {
     "selecting": "Picking the highest-priority Think Tank item…",
     "cloning": "Cloning the repo into an isolated workspace…",
-    "implementing": "Claude is implementing “{item}” — this is the long part (several minutes)…",
+    "implementing": "The agent is implementing “{item}” — this is the long part (several minutes)…",
     "gating": "Running the full test suite + lint on the change…",
     "opening_pr": "All green — opening a pull request…",
     "pr_opened": "✓ PR opened — refresh to review it in the panel.",

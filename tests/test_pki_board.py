@@ -41,7 +41,6 @@ from project_forge.engine.categories import CATEGORY_SEEDS
 from project_forge.engine.llm_generator import PERSONAS_BY_CATEGORY
 from project_forge.models import (
     CASHFLOW_CATEGORIES,
-    CLAUDE_LAB_CATEGORIES,
     CRYPTO_CATEGORIES,
     MONEY_CATEGORIES,
     PKI_CATEGORIES,
@@ -199,7 +198,6 @@ class TestPkiGrouping:
 
     def test_disjoint_from_other_boards(self):
         assert not (set(PKI_CATEGORIES) & set(MONEY_CATEGORIES))
-        assert not (set(PKI_CATEGORIES) & set(CLAUDE_LAB_CATEGORIES))
         assert not (set(PKI_CATEGORIES) & set(CRYPTO_CATEGORIES))
         assert not (set(PKI_CATEGORIES) & set(CASHFLOW_CATEGORIES))
 

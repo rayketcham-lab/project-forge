@@ -214,26 +214,24 @@ class TestGeneratorPromptOverride:
     @pytest.mark.asyncio
     async def test_generate_with_prompt_override(self):
         """generate() should use prompt_override instead of default prompt when provided."""
+        from unittest.mock import MagicMock
+
         from project_forge.engine.generator import IdeaGenerator
 
-        gen = IdeaGenerator(api_key="test-key")
+        backend = MagicMock()
+        backend.name = "test-backend"
+        backend.call.return_value = (
+            '{"name":"Test","tagline":"test","description":"test","category":"self-improvement",'
+            '"market_analysis":"test","feasibility_score":0.8,"mvp_scope":"test","tech_stack":["python"]}'
+        )
+        gen = IdeaGenerator(backend=backend)
 
-        mock_response = MagicMock()
-        mock_response.content = [
-            MagicMock(
-                text='{"name":"Test","tagline":"test","description":"test","category":"self-improvement",'
-                '"market_analysis":"test","feasibility_score":0.8,"mvp_scope":"test","tech_stack":["python"]}'
-            )
-        ]
-
-        with patch.object(gen.client.messages, "create", return_value=mock_response) as mock_create:
-            idea = await gen.generate(
-                category=IdeaCategory.SELF_IMPROVEMENT,
-                prompt_override="Custom introspection prompt here",
-            )
+        idea = await gen.generate(
+            category=IdeaCategory.SELF_IMPROVEMENT,
+            prompt_override="Custom introspection prompt here",
+        )
 
         # Should have used our custom prompt
-        call_args = mock_create.call_args
-        messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
-        assert messages[0]["content"] == "Custom introspection prompt here"
+        prompt = backend.call.call_args[0][0]
+        assert "Custom introspection prompt here" in prompt
         assert idea.name == "Test"

@@ -142,7 +142,7 @@ def semantic_dedup_check(
 
 
 def _normalize(text: str) -> str:
-    """Strip Claude generation suffix artifacts and normalize."""
+    """Strip LLM generation suffix artifacts and normalize."""
     # Remove everything after em dash, en dash, or double hyphen
     for sep in ("\u2014", "\u2013", "--"):
         if sep in text:

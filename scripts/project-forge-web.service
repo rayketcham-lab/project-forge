@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=claude
+User=llm
 WorkingDirectory=/opt/project-forge
 Environment=FORGE_DB_PATH=/opt/project-forge/data/forge.db
 Environment=FORGE_PORT=55443

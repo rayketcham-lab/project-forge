@@ -140,7 +140,7 @@ def push_initial_commit(project_dir: str, remote_url: str) -> None:
             "git",
             "commit",
             "-m",
-            "Initial scaffold from Project Forge\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+            "Initial scaffold from Project Forge",
         ],
         ["git", "remote", "add", "origin", remote_url],
     ]

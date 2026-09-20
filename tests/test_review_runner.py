@@ -138,8 +138,8 @@ class TestRunReviewCycle:
 
         # Use heuristic path — no LLM call.
         with patch(
-            "project_forge.cron.review_runner._get_api_key",
-            return_value="",
+            "project_forge.cron.review_runner.resolve_backend",
+            return_value=None,
         ):
             result = await run_review_cycle(db, batch_size=5, min_age_days=7)
         assert result["reviewed"] == 1
@@ -182,8 +182,8 @@ class TestRunReviewCycle:
             suggestions=[],
         )
         with patch(
-            "project_forge.cron.review_runner._get_api_key",
-            return_value="",
+            "project_forge.cron.review_runner.resolve_backend",
+            return_value=None,
         ):
             result = await run_review_cycle(db, batch_size=5, min_age_days=7)
         assert result["reviewed"] == 0

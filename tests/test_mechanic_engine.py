@@ -1,16 +1,17 @@
 """Forge Mechanic engine (#100) — selection + isolated orchestration.
 
-The mechanic picks the top Think Tank item, implements it with a scoped
-`claude -p` agent in a throwaway worktree, gates on the full suite + ruff,
-and opens a PR (never merges). These tests cover the selection ranking and
-the orchestration state machine with every subprocess seam mocked.
+The mechanic picks the top Think Tank item, implements it via the BYO-LLM
+backend in a throwaway worktree, gates on the full suite + ruff, and opens
+a PR (never merges). These tests cover the selection ranking and the
+orchestration state machine with every external seam mocked.
 """
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -289,55 +290,74 @@ class TestGuardrails:
         assert _forbidden_touched(["src/project_forge/storage/db.py"]) is None
         assert _forbidden_touched(["src/project_forge/engine/fundability.py"]) is None
 
-    def test_allowed_tools_never_bypass_permissions(self):
-        from project_forge.engine.mechanic import AGENT_ALLOWED_TOOLS
-
-        joined = " ".join(AGENT_ALLOWED_TOOLS).lower()
-        assert "dangerously" not in joined
-        assert "bash(git" not in joined  # orchestrator owns commits, not the agent
-
-    def test_run_agent_pins_model_when_configured(self, monkeypatch):
+    def test_run_agent_applies_change_set(self, tmp_path):
+        """run_agent applies the backend's JSON change set to the workspace."""
         import project_forge.engine.mechanic as m
 
-        monkeypatch.setattr(m, "AGENT_MODEL", "opus")
-        captured = {}
-        monkeypatch.setattr(m.subprocess, "run", lambda argv, **kw: captured.setdefault("argv", argv) or _Proc(0))
-        monkeypatch.setattr("project_forge.engine.llm_backend._claude_cli_path", lambda: "claude")
-        m.run_agent(FAKE_WT, "prompt")
-        assert "--model" in captured["argv"]
-        assert "opus" in captured["argv"]
+        backend = MagicMock()
+        backend.name = "test-backend"
+        backend.call.return_value = json.dumps(
+            {
+                "summary": "fix it",
+                "changes": [
+                    {
+                        "path": "src/project_forge/engine/x.py",
+                        "action": "create",
+                        "content": "x = 1\n",
+                    }
+                ],
+            }
+        )
+        with patch("project_forge.engine.llm_backend.resolve_backend", return_value=backend):
+            proc = m.run_agent(tmp_path, "prompt")
 
-    def test_run_agent_inherits_cli_default_when_unset(self, monkeypatch):
+        assert proc.returncode == 0
+        assert (tmp_path / "src/project_forge/engine/x.py").read_text() == "x = 1\n"
+
+    def test_run_agent_returns_failure_when_no_backend(self, monkeypatch):
+        """Without a backend, run_agent returns a failure CompletedProcess."""
         import project_forge.engine.mechanic as m
 
-        monkeypatch.setattr(m, "AGENT_MODEL", "")
-        monkeypatch.setattr(m, "AGENT_EFFORT", "")
-        captured = {}
-        monkeypatch.setattr(m.subprocess, "run", lambda argv, **kw: captured.setdefault("argv", argv) or _Proc(0))
-        monkeypatch.setattr("project_forge.engine.llm_backend._claude_cli_path", lambda: "claude")
-        m.run_agent(FAKE_WT, "prompt")
-        assert "--model" not in captured["argv"]
-        assert "--effort" not in captured["argv"]
+        with patch("project_forge.engine.llm_backend.resolve_backend", return_value=None):
+            proc = m.run_agent(FAKE_WT, "prompt")
+        assert proc.returncode == 1
+        assert "backend" in (proc.stderr or "").lower()
 
-    def test_run_agent_passes_effort_when_configured(self, monkeypatch):
+    def test_run_agent_returns_failure_on_empty_response(self, monkeypatch):
         import project_forge.engine.mechanic as m
 
-        monkeypatch.setattr(m, "AGENT_MODEL", "claude-opus-5")
-        monkeypatch.setattr(m, "AGENT_EFFORT", "medium")
-        captured = {}
-        monkeypatch.setattr(m.subprocess, "run", lambda argv, **kw: captured.setdefault("argv", argv) or _Proc(0))
-        monkeypatch.setattr("project_forge.engine.llm_backend._claude_cli_path", lambda: "claude")
-        m.run_agent(FAKE_WT, "prompt")
-        argv = captured["argv"]
-        assert argv[argv.index("--model") + 1] == "claude-opus-5"
-        assert argv[argv.index("--effort") + 1] == "medium"
+        backend = MagicMock()
+        backend.name = "test-backend"
+        backend.call.return_value = ""
+        with patch("project_forge.engine.llm_backend.resolve_backend", return_value=backend):
+            proc = m.run_agent(FAKE_WT, "prompt")
+        assert proc.returncode == 1
 
-    def test_defaults_are_opus5_medium(self):
-        """The operator's configured defaults (env unset in a clean env)."""
+    def test_run_agent_returns_failure_on_non_json_response(self, monkeypatch):
         import project_forge.engine.mechanic as m
 
-        assert m.AGENT_MODEL == "claude-opus-5"
-        assert m.AGENT_EFFORT == "medium"
+        backend = MagicMock()
+        backend.name = "test-backend"
+        backend.call.return_value = "not json"
+        with patch("project_forge.engine.llm_backend.resolve_backend", return_value=backend):
+            proc = m.run_agent(FAKE_WT, "prompt")
+        assert proc.returncode == 1
+
+    def test_agent_model_inherits_configured_llm_model_when_env_unset(self, monkeypatch):
+        """_resolve_agent_model falls back to settings.llm_model when FORGE_MECHANIC_MODEL is empty."""
+        import project_forge.engine.mechanic as m
+
+        monkeypatch.delenv("FORGE_MECHANIC_MODEL", raising=False)
+        from project_forge.config import settings as cfg
+
+        monkeypatch.setattr(cfg, "llm_model", "qwen-local-m")
+        assert m._resolve_agent_model() == "qwen-local-m"
+
+    def test_agent_model_respects_env_override(self, monkeypatch):
+        import project_forge.engine.mechanic as m
+
+        monkeypatch.setenv("FORGE_MECHANIC_MODEL", "custom-model")
+        assert m._resolve_agent_model() == "custom-model"
 
     def test_clone_env_prepends_workspace_src(self):
         from project_forge.engine.mechanic import _clone_env
@@ -364,26 +384,26 @@ class TestGuardrails:
         assert "--deselect" in pytest_call["cmd"]
         assert pytest_call["env"]["PYTHONPATH"].split(os.pathsep)[0].endswith("/src")
 
-    def test_run_agent_sends_prompt_via_stdin_not_argv(self, monkeypatch):
-        """Regression (found by live validation): --allowedTools is variadic
-        and would swallow a positional prompt, so the prompt MUST go via
-        stdin."""
+    def test_run_agent_blocks_paths_outside_workspace(self, tmp_path):
+        """A change set that escapes the workspace is dropped."""
         import project_forge.engine.mechanic as m
 
-        captured = {}
+        backend = MagicMock()
+        backend.name = "test-backend"
+        backend.call.return_value = json.dumps(
+            {
+                "changes": [
+                    {"path": "../evil.py", "action": "create", "content": "x = 1\n"},
+                    {"path": "ok.py", "action": "create", "content": "y = 2\n"},
+                ]
+            }
+        )
+        with patch("project_forge.engine.llm_backend.resolve_backend", return_value=backend):
+            proc = m.run_agent(tmp_path, "prompt")
 
-        def _fake_run(argv, **kw):
-            captured["argv"] = argv
-            captured["input"] = kw.get("input")
-            return _Proc(0)
-
-        monkeypatch.setattr(m.subprocess, "run", _fake_run)
-        monkeypatch.setattr("project_forge.engine.llm_backend._claude_cli_path", lambda: "claude")
-        m.run_agent(FAKE_WT, "MY UNIQUE PROMPT TEXT")
-
-        assert captured["input"] == "MY UNIQUE PROMPT TEXT"
-        assert "MY UNIQUE PROMPT TEXT" not in captured["argv"]
-        assert "--allowedTools" in captured["argv"]
+        assert proc.returncode == 0
+        assert (tmp_path / "ok.py").read_text() == "y = 2\n"
+        assert not (tmp_path.parent / "evil.py").exists()
 
 
 class TestChangedPathsSeesCreatedFiles:

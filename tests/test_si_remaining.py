@@ -146,60 +146,50 @@ class TestCIGapDetection:
 
 
 class TestGeneratorErrorHandling:
-    """Generator should handle API and parsing errors gracefully."""
+    """Generator should handle backend and parsing errors gracefully."""
+
+    @staticmethod
+    def _backend(text, name="fake-backend") -> MagicMock:
+        backend = MagicMock()
+        backend.name = name
+        backend.call.return_value = text
+        return backend
 
     @pytest.mark.asyncio
     async def test_generate_handles_json_decode_error(self):
-        """generate() should raise a clear error on malformed JSON from API."""
+        """generate() should raise a clear error on malformed JSON from the backend."""
         from project_forge.engine.generator import IdeaGenerator
         from project_forge.models import IdeaCategory
 
-        gen = IdeaGenerator(api_key="test-key")
+        gen = IdeaGenerator(backend=self._backend("not valid json at all"))
 
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="not valid json at all")]
-
-        with patch.object(gen.client.messages, "create", return_value=mock_response):
-            with pytest.raises(ValueError, match="(?i)parse|json|malformed|invalid"):
-                await gen.generate(category=IdeaCategory.SELF_IMPROVEMENT)
+        with pytest.raises(ValueError, match="(?i)parse|json|malformed|invalid"):
+            await gen.generate(category=IdeaCategory.SELF_IMPROVEMENT)
 
     @pytest.mark.asyncio
-    async def test_generate_handles_api_error(self):
-        """generate() should wrap anthropic.APIError with context."""
-        import anthropic
-
+    async def test_generate_handles_backend_error(self):
+        """generate() should propagate a backend error with context."""
         from project_forge.engine.generator import IdeaGenerator
         from project_forge.models import IdeaCategory
 
-        gen = IdeaGenerator(api_key="test-key")
+        backend = self._backend("")
+        backend.call.side_effect = RuntimeError("rate limited")
 
-        with patch.object(
-            gen.client.messages,
-            "create",
-            side_effect=anthropic.APIStatusError(
-                message="rate limited",
-                response=MagicMock(status_code=429),
-                body={"error": {"message": "rate limited"}},
-            ),
-        ):
-            with pytest.raises((anthropic.APIStatusError, RuntimeError)):
-                await gen.generate(category=IdeaCategory.SELF_IMPROVEMENT)
+        gen = IdeaGenerator(backend=backend)
+
+        with pytest.raises((RuntimeError, ValueError)):
+            await gen.generate(category=IdeaCategory.SELF_IMPROVEMENT)
 
     @pytest.mark.asyncio
     async def test_generate_handles_missing_fields(self):
-        """generate() should raise clear error when API response missing required fields."""
+        """generate() should raise clear error when backend response missing required fields."""
         from project_forge.engine.generator import IdeaGenerator
         from project_forge.models import IdeaCategory
 
-        gen = IdeaGenerator(api_key="test-key")
+        gen = IdeaGenerator(backend=self._backend('{"name": "Test"}'))  # missing other fields
 
-        # JSON is valid but missing required fields
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text='{"name": "Test"}')]  # missing other fields
-
-        with patch.object(gen.client.messages, "create", return_value=mock_response):
-            with pytest.raises((KeyError, ValueError)):
-                await gen.generate(category=IdeaCategory.SELF_IMPROVEMENT)
+        with pytest.raises((KeyError, ValueError)):
+            await gen.generate(category=IdeaCategory.SELF_IMPROVEMENT)
 
     @pytest.mark.asyncio
     async def test_generate_from_content_handles_json_error(self):
@@ -207,15 +197,11 @@ class TestGeneratorErrorHandling:
         from project_forge.engine.generator import IdeaGenerator
         from project_forge.engine.url_ingest import UrlContent
 
-        gen = IdeaGenerator(api_key="test-key")
+        gen = IdeaGenerator(backend=self._backend("broken json {{{"))
         content = UrlContent(url="https://example.com", title="Test", domain="example.com", text="Test content")
 
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="broken json {{{")]
-
-        with patch.object(gen.client.messages, "create", return_value=mock_response):
-            with pytest.raises(ValueError, match="(?i)parse|json|malformed|invalid"):
-                await gen.generate_from_content(content=content)
+        with pytest.raises(ValueError, match="(?i)parse|json|malformed|invalid"):
+            await gen.generate_from_content(content=content)
 
 
 # ---------------------------------------------------------------------------

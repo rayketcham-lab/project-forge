@@ -13,7 +13,6 @@ An autonomous project idea generator. It runs an in-process scheduler inside the
 | `feasibility_score` | Can we build it? | universal, required |
 | `fundability_score` | Can we sell it? | `/crypto` |
 | `bot_edge_score` | Does this edge survive fees, competition and capacity? | `/money-bots` |
-| `ambition_score` | Does it push the frontier? | `/claude-lab` |
 | `snipe_score` | Can we wedge into a proven incumbent? | `/sniper` |
 | `cashflow_score` | How fast does it become actual dollars? | `/cashflow` |
 | `pki_urgency_score` | Does this matter to the certificate industry? | `/pki` |
@@ -28,7 +27,7 @@ This is a personal project that's been running for several months. It's open-sou
 > 2. **Claude Code CLI** when `claude` is on `$PATH` (uses your Claude subscription)
 > 3. **Static heuristics** when neither
 >
-> Override via `FORGE_LLM_BACKEND={api|claude_code|static}` and `FORGE_LLM_MODEL={sonnet|opus|haiku}`.
+> Override via `FORGE_LLM_BACKEND={auto|none}` and `FORGE_LLM_MODEL={model-id}` (BYO-LLM).
 >
 > **On the CLI path the cheap-path resolver returns Opus**, not Haiku — there's no per-call cost on a subscription, so the strongest model wins for generation, scoring tie-breaks, and semantic-dedup verification. API-path users get Haiku 4.5 there for cost discipline. Override via `FORGE_CLI_MODEL`.
 >
@@ -36,20 +35,19 @@ This is a personal project that's been running for several months. It's open-sou
 
 ---
 
-## The six boards
+## The boards
 
 Each board frames the corpus with its own question, its own category family, and its own scoring axis. Board membership is centralized in `models.py` so every surface — routes, stats, churn, promotion — stays in lockstep.
 
 | Board | Question | Categories | Sorted by |
 |-------|----------|-----------|-----------|
 | **/money-bots** | Can a bot make money with capital? | 5 capital-deployment (market-making, incentive-capture, cross-venue-arbitrage, basis-carry, capital-automation) | `bot_edge_score` |
-| **/claude-lab** | Does it push the frontier? | 6 Claude/agent (claude-skills-agents, ai-marketplace, agent-infra, claude-evals, agent-security, context-memory) | `ambition_score` |
 | **/sniper** | Can we take a slice of a proven market? | 14 hunting grounds (the money categories + fat-incumbent IT/security) | `snipe_score` |
 | **/crypto** | Where are the real crypto budgets? | 5 on-chain (onchain-security, web3-infra, defi-tooling, stablecoin-payments, crypto-compliance) | `fundability_score` |
 | **/cashflow** | How soon is the first invoice? | 5 folding-cash (productized-services, digital-products, commerce-ops, lead-generation, flipping-arbitrage) | `cashflow_score` |
 | **/pki** | Does this matter to the industry? | 5 certificate-infra (pki-revocation, cert-lifecycle, pqc-migration, ca-operations, cert-identity) | `pki_urgency_score` |
 
-Every board has a **Churn Now** button that fires the generator on demand against the right category family and the right axis. On /claude-lab, Churn rotates through 8 artifact shapes; on /sniper, through 7 wedge angles — so each click produces a meaningfully different starting frame.
+Every board has a **Churn Now** button that fires the generator on demand against the right category family and the right axis. On /sniper, Churn rotates through 7 wedge angles — so each click produces a meaningfully different starting frame.
 
 ### /pki — the selective board (v0.23)
 
@@ -161,7 +159,7 @@ The engine proposing patches to *itself*. A disarmed-by-default cadence selects 
 
 | Step | Implementation |
 |------|---------------|
-| **Generate** | Two paths. The **LLM-first generator** (`engine/llm_generator.py`) asks the configured cheap-path model for a whole idea using one of 5 modes (novel / inversion / bundle / microservice / adversarial), a category-specific persona, and anti-similarity injection (the 30 most-recent active names — "do NOT produce anything like these"). Claude Lab categories additionally pick one of 8 artifact shapes. The **template generator** (`cron/auto_scan.py`) is the deterministic fallback when no backend is reachable. |
+| **Generate** | Two paths. The **LLM-first generator** (`engine/llm_generator.py`) asks the configured cheap-path model for a whole idea using one of 5 modes (novel / inversion / bundle / microservice / adversarial), a category-specific persona, and anti-similarity injection (the 30 most-recent active names — "do NOT produce anything like these"). The **template generator** (`cron/auto_scan.py`) is the deterministic fallback when no backend is reachable. |
 | **Ground** | Several paths inject live, keyless signal into prompts before generation: `feeds/market_intel.py` (HN + GitHub challenger stars, for Sniper), `feeds/pulse.py` (HN front page + GitHub trending, for Pulse), `feeds/pki_probe.py` (IETF drafts + implementation trackers, for PKI), and the NVD / arXiv / IETF caches. All degrade to empty on a network blip. |
 | **Score** | Every axis is two-stage: a free deterministic heuristic always runs; borderline scores get an LLM tie-break (~$0.001 on API, free on CLI). With no backend, the heuristic always stands — **every axis works fully keyless**. |
 | **Dedup** | INSERT-time gates fired before commit: SHA-256 content hash, tagline token-overlap (Jaccard ≥ 0.7), name-token Jaccard on vertical-stripped names, super-component overlap, and a vertical-cap rejecting the Nth clone in a family. Cross-category dedup and a daily siphon keep the pool near its density cap. Filtered ideas go to an audit table with `filter_reason` and `similar_to_id` — they're signal, not silently dropped. |
@@ -203,7 +201,7 @@ The dashboard is plain HTML + vanilla JS. No build step. Every cadence kicks in 
 Thirteen nav items:
 
 ```
-Dashboard · Explore · Money Bots · Claude Lab · Sniper · Crypto
+Dashboard · Explore · Money Bots · Sniper · Crypto
 Cashflow · PKI · Missions · Labs · Projects · Think Tank · Mechanic
 ```
 
@@ -211,7 +209,7 @@ Cashflow · PKI · Missions · Labs · Projects · Think Tank · Mechanic
 |------|---------------|
 | `/` | Stats grid, top ideas, super ideas, "Add Idea" tab (URL ingest, text ingest, 5-phase wizard), category + industry browse cards. |
 | `/explore` | All ideas, two-axis filtering (industry vertical + tech category), status filter, full-text search, pagination. |
-| `/money-bots` `/claude-lab` `/sniper` `/crypto` `/cashflow` `/pki` | The six boards. Per-category filter chips, in-scope totals, Churn Now. |
+| `/money-bots` `/sniper` `/crypto` `/cashflow` `/pki` | The themed boards. Per-category filter chips, in-scope totals, Churn Now. |
 | `/missions` | Operator directives + per-mission idea grids. |
 | `/labs` | Hub for the six autonomous avenues (below). |
 | `/mechanic` | Self-improvement PR review panel. |
@@ -235,9 +233,9 @@ A subset of `web/routes.py` — hit `/docs` for the full OpenAPI page.
 | `GET` | `/health` | `{"status": "ok"}` |
 | `GET` | `/api/stats` · `/api/categories` · `/api/ideas` | Aggregates + paginated list |
 | `GET` | `/api/ideas/{id}` | JSON detail + challenges + related. Powers tooltip + modal |
-| `GET` | `/api/money-bots/top` · `/api/claude-lab/top` · `/api/sniper/top` · `/api/crypto/top` · `/api/cashflow/top` · `/api/pki/top` | Top-N per board, each sorted by its own axis |
+| `GET` | `/api/money-bots/top` · `/api/sniper/top` · `/api/crypto/top` · `/api/cashflow/top` · `/api/pki/top` | Top-N per board, each sorted by its own axis |
 | `GET` | `/api/pki/probes` | Probe attempts + admission rate — why the PKI board is short |
-| `POST` | `/api/churn` | On-demand generation. Body: `{"lab": "money"\|"claude"\|"snipe"\|"crypto"\|"cashflow"\|"pki", "category": "..."}`. `lab` switches both the allowed category set and the scoring axis |
+| `POST` | `/api/churn` | On-demand generation. Body: `{"lab": "money"\|"snipe"\|"crypto"\|"cashflow"\|"pki", "category": "..."}`. `lab` switches both the allowed category set and the scoring axis |
 | `POST` | `/api/promote/{id}` | Manual promote → GH issue |
 | `GET` | `/api/backend-info` | Which LLM backend is live + censored key-env view |
 | `GET`/`POST` | `/api/missions` · `/api/missions/{id}/generate` · `/api/missions/{id}/status` | Mission CRUD + directed generation |
@@ -259,14 +257,13 @@ Non-read methods require a Bearer token when `FORGE_API_TOKEN` is set. The dashb
 |----------|---------|---------|
 | `FORGE_DB_PATH` | `data/forge.db` | SQLite path |
 | `FORGE_PORT` | `55443` | Web port |
-| `ANTHROPIC_API_KEY` / `FORGE_ANTHROPIC_API_KEY` | (unset) | Primary API key, optional |
-| `FORGE_HAIKU_API_KEY` | (unset) | Dedicated cheap-path key; falls back to the primary |
-| `FORGE_LLM_BACKEND` | auto | `api` \| `claude_code` \| `static` \| `none` |
-| `FORGE_LLM_MODEL` | `sonnet` | `sonnet` \| `opus` \| `haiku` |
-| `FORGE_CLI_MODEL` | `opus` | Cheap-path model on the CLI backend |
-| `FORGE_BOT_GEN_MODEL` | `sonnet` | Money-bot strategy generation |
-| `FORGE_BOT_REVIEW_MODEL` | `opus` | Money-bot red team |
-| `FORGE_LLM_TIMEOUT_SEC` | 420 | CLI call timeout; a timeout is not a verdict |
+| `FORGE_LLM_BASE_URL` | (unset) | BYO-LLM OpenAI-compatible endpoint (local vLLM/Ollama/GGUF or Grok/any provider); unset = LLM features off |
+| `FORGE_LLM_API_KEY` | (unset) | Optional bearer key for the LLM endpoint |
+| `FORGE_LLM_BACKEND` | auto | `auto` \| `none` \| `static` (disable LLM entirely) |
+| `FORGE_LLM_MODEL` | (endpoint default) | Model id sent to the BYO-LLM endpoint |
+| `FORGE_LLM_TIMEOUT_SEC` | 420 | LLM call timeout; a timeout is not a verdict |
+| `FORGE_BOT_GEN_MODEL` | (model default) | Money-bot strategy generation override |
+| `FORGE_BOT_REVIEW_MODEL` | (model default) | Money-bot red team override |
 | `FORGE_OPERATOR_JURISDICTION` | (unset) | Stated in the generation seed and judged by the legality lens |
 | `FORGE_SUPER_REASONING` | unset | `1` to use the LLM for super-idea cluster naming |
 | `FORGE_API_TOKEN` | (unset) | Bearer token for non-read methods. See [Access control](#access-control) — unset does **not** mean "open to the network" |
@@ -337,20 +334,20 @@ Both default **off**. Autonomous work that could touch code or GitHub state is o
 ```
 src/project_forge/
   config.py                  Pydantic-settings
-  models.py                  Idea, Mission, Challenge, IdeaCategory (42 values),
-                             and the canonical board groupings: MONEY / CLAUDE_LAB /
+  models.py                  Idea, Mission, Challenge, IdeaCategory,
+                             and the canonical board groupings: MONEY /
                              SNIPER / CRYPTO / CASHFLOW / PKI_CATEGORIES
   engine/
     llm_generator.py         LLM-first generator: 5 modes, personas, anti-similarity,
-                             8 artifact shapes, snipe path
+                             snipe path
     llm_backend.py           Resolver: AnthropicAPI | ClaudeCode | static
-    categories.py            CATEGORY_SEEDS (42 categories; ~20+ seeds, 12+ domains each)
+    categories.py            CATEGORY_SEEDS (categories; ~20+ seeds, 12+ domains each)
     prompts.py               Generation / URL-ingest / text-ingest templates
     diversity_prompts.py     Combinatoric / contrarian / persona templates
     scorer.py                novelty + specificity + scope realism → feasibility
     fundability.py           "Can we sell it"        → /crypto
     bot_edge.py              "Does the edge hold"    → /money-bots
-    ambition.py              "Does it push the ceiling" → /claude-lab
+    ambition.py              "Does it push the ceiling"
     snipe.py                 "Can we wedge an incumbent" → /sniper
     cashflow.py              "How soon is the first dollar" → /cashflow
     pki.py                   "Does the industry care" + the /pki admission gate
@@ -429,11 +426,11 @@ class Idea(BaseModel):
     generation_mode: str | None      # which generator mode/cadence produced it
     fundability_score: float | None  # "can we sell it?"      → /crypto
     bot_edge_score: float | None     # "does the edge hold?"  → /money-bots
-    ambition_score: float | None     # "frontier?"            → /claude-lab
+    ambition_score: float | None     # "does it push the ceiling?"
     snipe_score: float | None        # "wedge an incumbent?"  → /sniper
     target_incumbent: str | None     # powers the "vs. X" badge
-    artifact_type: str | None        # Claude Lab: artifact shape.
-                                     # Sniper reuses it for the wedge angle.
+    artifact_type: str | None        # artifact shape.        Sniper reuses
+                                     # it for the wedge angle.
     cashflow_score: float | None     # "first dollar?"        → /cashflow
     pki_urgency_score: float | None  # "industry cares?"      → /pki
     pki_anchor: str | None           # the RFC/draft/ballot/CVE/URL a PKI
@@ -448,7 +445,7 @@ Filtered ideas (`FilteredIdea`) live in their own table with `filter_reason` and
 
 ## Categories
 
-42 as of v0.23, in `engine/categories.py` as a `dict[IdeaCategory, dict]`. The original 13 lean security / infrastructure (it's what the project was built for); each later wave opens fresh idea space once the prior seeds saturate.
+In `engine/categories.py` as a `dict[IdeaCategory, dict]`. The original 13 lean security / infrastructure (it's what the project was built for); each later wave opens fresh idea space once the prior seeds saturate.
 
 ```
 # Original 13 — IT / security
@@ -456,13 +453,13 @@ security-tool · vulnerability-research · pqc-cryptography · nist-standards
 rfc-security · crypto-infrastructure · privacy · compliance · observability
 devops-tooling · automation · market-gap · self-improvement
 
-# v0.12 — money-friendly            # v0.15 — Claude / agent frontier
-automation-income · consumer-app     claude-skills-agents · ai-marketplace
+# v0.12 — money-friendly
+automation-income · consumer-app
 productivity · creator-tools
 
-# v0.16 — fundable product shapes   # v0.16 — rest of the agent ecosystem
-micro-saas · vertical-saas           agent-infra · claude-evals
-ecommerce-tools · fintech-tools      agent-security · context-memory
+# v0.16 — fundable product shapes
+micro-saas · vertical-saas
+ecommerce-tools · fintech-tools
 
 # v0.19 — on-chain                  # v0.20 — folding cash
 onchain-security · web3-infra        productized-services · digital-products
@@ -493,9 +490,9 @@ A parallel **vertical** axis is inferred at query time from idea text (governmen
 
 ---
 
-## The 8 artifact shapes (Claude Lab)
+## The artifact shapes
 
-On Claude Lab generation the LLM additionally picks one of 8 shapes and gets a per-shape prompt section pinning down what to produce. The picker prefers under-represented shapes.
+Callers may request one of the 8 artifact shapes to vary an idea's output shape; the picker prefers under-represented shapes when a caller drives rotation directly.
 
 | Shape | What the LLM designs |
 |-------|--------------------|
@@ -507,8 +504,6 @@ On Claude Lab generation the LLM additionally picks one of 8 shapes and gets a p
 | `workflow` | Multi-step orchestration. The DAG + recovery shape + success criterion. |
 | `protocol` | Convention multiple agents follow. Framing + versioning + negotiation. |
 | `ability` | Capability primitive. I/O contract + failure modes + inference cost. |
-
-Combinatorics for one Claude Lab click: **6 categories × 5 modes × 8 artifacts × ~9 personas ≈ 2,000+ distinct starting frames**, before anti-similarity narrows further.
 
 ---
 

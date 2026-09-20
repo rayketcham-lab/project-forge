@@ -100,8 +100,8 @@ class TestMissionModel:
         assert len(m.urls) == 2
 
     def test_category_typed(self):
-        m = _mk_mission(category=IdeaCategory.AGENT_SECURITY)
-        assert m.category is IdeaCategory.AGENT_SECURITY
+        m = _mk_mission(category=IdeaCategory.MICRO_SAAS)
+        assert m.category is IdeaCategory.MICRO_SAAS
 
 
 class TestMissionCreateRequest:
@@ -340,14 +340,14 @@ class TestGenerateMissionIdea:
         from project_forge.engine.mission import generate_mission_idea
 
         _patch_scoring(monkeypatch)
-        m = _mk_mission(category=IdeaCategory.AGENT_SECURITY)
+        m = _mk_mission(category=IdeaCategory.MICRO_SAAS)
         await db.save_mission(m)
         captured: dict = {}
 
         async def _fake_generate(db_, category, **kw):
             captured["category"] = category
             return LLMGenerationResult(
-                idea=_mk_idea(category=IdeaCategory.AGENT_SECURITY, content_hash="gen2"),
+                idea=_mk_idea(category=IdeaCategory.MICRO_SAAS, content_hash="gen2"),
                 mode="novel",
                 persona="p",
                 backend="stub",
@@ -356,7 +356,7 @@ class TestGenerateMissionIdea:
 
         monkeypatch.setattr(gen, "generate_idea_llm", _fake_generate)
         await generate_mission_idea(db, m)
-        assert captured["category"] is IdeaCategory.AGENT_SECURITY
+        assert captured["category"] is IdeaCategory.MICRO_SAAS
 
     @pytest.mark.asyncio
     async def test_no_backend_returns_none_without_touch(self, db, monkeypatch):

@@ -354,9 +354,8 @@ class TestIdeaFromUrl:
             assert idea.source_url == "https://feistyduck.com/article"
 
     @pytest.mark.asyncio
-    async def test_generate_idea_heuristic_fallback_when_no_api_key(self):
-        """When ANTHROPIC_API_KEY is not set, use heuristic extraction without API call."""
-        from project_forge.config import settings
+    async def test_generate_idea_heuristic_fallback_when_no_backend(self):
+        """When no LLM backend is configured, use heuristic extraction without LLM call."""
         from project_forge.engine.url_ingest import UrlContent, generate_idea_from_url
 
         content = UrlContent(
@@ -369,17 +368,13 @@ class TestIdeaFromUrl:
             ),
         )
 
-        original_key = settings.anthropic_api_key
-        settings.anthropic_api_key = ""
-        try:
-            env_without_key = {k: v for k, v in __import__("os").environ.items() if k != "ANTHROPIC_API_KEY"}
-            with patch.dict("os.environ", env_without_key, clear=True):
-                # IdeaGenerator must NOT be instantiated (would fail with empty key)
-                with patch("project_forge.engine.generator.IdeaGenerator") as mock_gen:
-                    idea = await generate_idea_from_url(content)
-                    mock_gen.assert_not_called()
-        finally:
-            settings.anthropic_api_key = original_key
+        with (
+            patch.object(__import__("os").environ, "get", side_effect=lambda k, d="": d),
+            patch("project_forge.engine.llm_backend.resolve_backend", return_value=None),
+            patch("project_forge.engine.generator.IdeaGenerator") as mock_gen,
+        ):
+            idea = await generate_idea_from_url(content)
+            mock_gen.assert_not_called()
 
         assert idea is not None
         assert idea.name
@@ -726,14 +721,13 @@ class TestGenerateFromContent:
         from project_forge.engine.generator import IdeaGenerator
         from project_forge.engine.url_ingest import UrlContent
 
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text=MOCK_IDEA_JSON)]
+        backend = MagicMock()
+        backend.name = "test-backend"
+        backend.call.return_value = MOCK_IDEA_JSON
 
         with patch.object(IdeaGenerator, "__init__", lambda self, **kw: None):
             gen = IdeaGenerator()
-            gen.client = MagicMock()
-            gen.model = "test-model"
-            gen.client.messages.create = MagicMock(return_value=mock_response)
+            gen.backend = backend
 
             content = UrlContent(
                 url="https://feistyduck.com/newsletter/issue_135",
@@ -752,14 +746,13 @@ class TestGenerateFromContent:
         from project_forge.engine.generator import IdeaGenerator
         from project_forge.engine.url_ingest import UrlContent
 
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text=MOCK_IDEA_JSON)]
+        backend = MagicMock()
+        backend.name = "test-backend"
+        backend.call.return_value = MOCK_IDEA_JSON
 
         with patch.object(IdeaGenerator, "__init__", lambda self, **kw: None):
             gen = IdeaGenerator()
-            gen.client = MagicMock()
-            gen.model = "test-model"
-            gen.client.messages.create = MagicMock(return_value=mock_response)
+            gen.backend = backend
 
             content = UrlContent(
                 url="https://example.com/article",
@@ -771,8 +764,7 @@ class TestGenerateFromContent:
 
         assert isinstance(idea, Idea)
         # Verify the prompt included the category hint
-        call_args = gen.client.messages.create.call_args
-        prompt_text = call_args.kwargs["messages"][0]["content"]
+        prompt_text = gen.backend.call.call_args[0][0]
         assert "security-tool" in prompt_text
 
 

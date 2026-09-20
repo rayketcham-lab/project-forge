@@ -1,6 +1,6 @@
 # Project Forge — Roadmap
 
-**Status (v0.17).** Three themed generation boards — **Money Bots** (fundability), **Claude Lab** (ambition), **Sniper** (web-grounded competitive-displacement) — over 27 categories, plus a **`/labs`** hub of autonomous thinking/doing avenues (Scoreboard, Foundry, Pulse, Cartographer, Kill Board, Launchpad, Recruiter). LLM-first generation with deterministic fallback; in-process multi-cadence scheduler; ~$2–3/mo on the API path, ~$0 on a Claude subscription. CI green.
+**Status (v0.17).** Three themed generation boards — **Money Bots** (bot edges), **Sniper** (web-grounded competitive-displacement), **Crypto** — plus a **`/labs`** hub of autonomous thinking/doing avenues (Scoreboard, Foundry, Pulse, Cartographer, Kill Board, Launchpad, Recruiter). LLM-first generation with deterministic fallback; in-process multi-cadence scheduler; ~$2–3/mo on the API path, ~$0 on a Claude subscription. CI green.
 
 **North star.** *From "generates and scores ideas" → "builds, ships, and learns from real outcomes" — without losing the variety the LLM-first pivot won back.*
 
@@ -352,7 +352,7 @@ The original, fully-sketched proposals (pitch / implementation / effort / why). 
 The original v0.15→v0.18 ladder below is kept for the record; reality took a different, faster route and front-loaded the quality/variety + autonomy work:
 
 - **v0.13–0.14** — LLM-first pivot + the money-flipper loop (the variety win).
-- **v0.15 / v0.15a** — Claude Lab board, ambition axis, 8 artifact shapes, Opus on the CLI path.
+- **v0.15 / v0.15a** — ambition axis + artifact shapes, Opus on the CLI path.
 - **v0.16** — Sniper board (web-grounded competitive-displacement) + 27-category expansion.
 - **v0.17** — the `/labs` avenues: Scoreboard (#3), Foundry (#1), Pulse (#4/#8), Kill Board (#10), Recruiter (#7), Cartographer, Launchpad (#20 partial). CI fixed + green.
 

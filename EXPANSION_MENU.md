@@ -6,7 +6,7 @@ This is a menu of vetted next-step options for Project Forge. Each item has
 **Picking system:** reply to me with any combination of codes (e.g. `A2 A8 B1 B11 C1 D1 D3`) and I'll build them. No cap — Pro Max isn't metered. The ★ marks each agent's strongest pick.
 
 Sections:
-- **A. New Labs** — themed idea-generation surfaces (like Money Bots and Claude Lab)
+- **A. New Labs** — themed idea-generation surfaces (like Money Bots)
 - **B. Better Churn** — improve the quality/variety of LLM-generated ideas
 - **C. Architecture Pivots** — change what the system fundamentally IS
 - **D. Bonus Pile** — small UX/quality wins to mix freely
@@ -15,7 +15,7 @@ Sections:
 
 ## A. New Labs — themed idea-generation surfaces
 
-Each lab adds: a new nav tab, a dedicated page (`/your-lab`), 2-4 new IdeaCategory enum values, 12 personas, 15-20 seed concepts, and a new score axis. Same shape as `/money-bots` and `/claude-lab`. Implementation cost per lab: ~M (1-2 days each).
+Each lab adds: a new nav tab, a dedicated page (`/your-lab`), 2-4 new IdeaCategory enum values, 12 personas, 15-20 seed concepts, and a new score axis. Same shape as `/money-bots`. Implementation cost per lab: ~M (1-2 days each).
 
 ### Business lens — money is the goal
 
@@ -190,7 +190,7 @@ Pick at most one of these. They reshape rather than extend.
 **C1. ★ MCP Server**
 - **What**: Expose the engine as a Model Context Protocol server. `forge.churn(lab=…)` becomes a tool any Claude session can call directly.
 - **Why**: Highest leverage-per-effort. Pure wrapper layer, zero schema risk. Makes the engine composable inside Claude Code where you already work. Strategic foundation for everything else (CLI, builder agent, discovery layer all become alternate clients of the same surface).
-- **How**: ~S (1 week). New `src/project_forge/mcp/server.py` using the MCP Python SDK. Tools: `churn`, `top_money_bots`, `top_claude_lab`, `promote`, `reject`. Stdio transport for local; SSE for remote.
+- **How**: ~S (1 week). New `src/project_forge/mcp/server.py` using the MCP Python SDK. Tools: `churn`, `top_money_bots`, `promote`, `reject`. Stdio transport for local; SSE for remote.
 
 **C2. ★ Long-Running Builder Agent**
 - **What**: The engine doesn't just produce static ideas; it actively *builds* the top idea each week. Auto-scaffold → starter code → first PR. The output isn't ideas, it's repos.
@@ -222,7 +222,7 @@ Pick at most one of these. They reshape rather than extend.
 ## D. Bonus Pile — small UX/quality wins, mix freely
 
 **D1. ★ Reverse-Chronological Sort Toggle**
-- **What**: One query param (`?sort=newest`) on /money-bots, /claude-lab, /projects.
+- **What**: One query param (`?sort=newest`) on /money-bots, /projects.
 - **Why**: Daily visibility. Fixes the "where are today's ideas?" frustration.
 - **How**: XS (30 min). Add `?sort=newest` parsing in routes; flip ORDER BY clause.
 

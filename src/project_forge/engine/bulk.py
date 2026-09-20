@@ -172,9 +172,9 @@ class BulkConfig(BaseModel):
 
 
 class BulkGenerator:
-    def __init__(self, db: Database, api_key: str, config: BulkConfig | None = None):
+    def __init__(self, db: Database, api_key: str | None = None, config: BulkConfig | None = None, backend=None):
         self.db = db
-        self.generator = IdeaGenerator(api_key=api_key)
+        self.generator = IdeaGenerator(api_key=api_key, backend=backend)
         self.config = config or BulkConfig()
 
     def plan_distribution(self) -> dict[str, int]:

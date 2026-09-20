@@ -188,11 +188,8 @@ class TestBug30NoApiKey:
             )
             await db.save_idea(idea)
 
-        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": ""}, clear=False):
-            with patch("project_forge.cron.review_runner.settings") as mock_settings:
-                mock_settings.anthropic_api_key = ""
-                mock_settings.anthropic_model = "test"
-                result = await run_review_cycle(db, batch_size=3, min_age_days=7)
+        with patch("project_forge.cron.review_runner.resolve_backend", return_value=None):
+            result = await run_review_cycle(db, batch_size=3, min_age_days=7)
 
         assert result["reviewed"] == 3
         assert all(r["status"] == "reviewed" for r in result["results"])
@@ -207,14 +204,8 @@ class TestBug30NoApiKey:
                 {"number": 99, "title": "Test Issue", "body": "Fix something"},
             ]
 
-            with patch.dict("os.environ", {"ANTHROPIC_API_KEY": ""}, clear=False):
-                with patch("project_forge.cron.self_improve_runner.settings") as mock_settings:
-                    mock_settings.anthropic_api_key = ""
-                    # #99: without a key AND without the `claude` CLI is the true
-                    # no-Claude path → skip. (With the subscription CLI present
-                    # the loop now proceeds — see test_mechanic_foundation.py.)
-                    with patch("project_forge.engine.llm_backend.resolve_backend", return_value=None):
-                        result = await run_self_improve_cycle()
+            with patch("project_forge.engine.llm_backend.resolve_backend", return_value=None):
+                result = await run_self_improve_cycle()
 
         assert result["processed"] == 1
         assert result["results"][0]["status"] == "skipped"

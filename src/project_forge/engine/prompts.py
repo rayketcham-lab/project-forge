@@ -165,7 +165,7 @@ def build_url_ingest_prompt(
     else:
         all_cats = ", ".join(c.value for c in IdeaCategory)
         category_section = f"Choose the most fitting category from: {all_cats}"
-        category_value = "security-tool"  # default placeholder, Claude will pick
+        category_value = "security-tool"  # default placeholder, the LLM picks
 
     return URL_INGEST_PROMPT_TEMPLATE.format(
         title=title,

@@ -12,8 +12,8 @@ Why a separate module instead of importing the dashboard handler:
   request-scoped middleware. The cron path should not pull that in.
 - The handler hard-codes a heuristic fallback that says "add an API key
   for deeper review" — fine for a dashboard but misleading on a cron log.
-- Backend selection in cron prefers Claude Code CLI when no API key is
-  present (the user runs Pro Max, not a raw API key).
+- Backend selection in cron uses the configured BYO-LLM backend when no
+  raw API endpoint is configured.
 """
 
 from __future__ import annotations

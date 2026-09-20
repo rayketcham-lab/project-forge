@@ -12,8 +12,16 @@ class Settings(BaseSettings):
     db_path: Path = Path("data/forge.db")
     host: str = "0.0.0.0"  # noqa: S104
     port: int = 55443
-    anthropic_api_key: str = ""
-    anthropic_model: str = "claude-sonnet-4-6"
+    # BYO-LLM (2026-09-19): generic OpenAI-compatible endpoint — a local
+    # model (Ollama / vLLM / GGUF server) or any provider that speaks the
+    # chat/completions protocol (Grok, OpenAI, Claude-via-proxy, ...). Empty
+    # base_url means LLM generation is disabled and the engine falls back to
+    # its deterministic heuristics.
+    llm_base_url: str = ""
+    llm_model: str = ""
+    llm_api_key: str = ""
+    llm_api_backend: str = "chat_completions"
+    llm_timeout_sec: int = 420
     auto_scaffold_threshold: float = 0.7
     github_owner: str = "rayketcham-lab"
     github_org: str = "rayketcham-lab"

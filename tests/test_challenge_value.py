@@ -36,12 +36,8 @@ def _stub_idea() -> Idea:
 
 @pytest_asyncio.fixture
 async def client(tmp_path, monkeypatch):
-    """App + DB + LLM-backend free of API key (forces resolver to try
-    Claude Code path, which we then mock)."""
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    from project_forge.config import settings as _settings
-
-    monkeypatch.setattr(_settings, "anthropic_api_key", "")
+    """App + DB + LLM-backend unavailable (forces the resolver to None)."""
+    monkeypatch.delenv("FORGE_LLM_BASE_URL", raising=False)
 
     from project_forge.web.app import app, db
 

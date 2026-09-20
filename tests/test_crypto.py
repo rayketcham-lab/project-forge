@@ -26,7 +26,6 @@ from project_forge.engine.categories import CATEGORY_SEEDS
 from project_forge.engine.fundability import _CATEGORY_BONUS as FUNDABILITY_BONUS
 from project_forge.engine.llm_generator import PERSONAS_BY_CATEGORY
 from project_forge.models import (
-    CLAUDE_LAB_CATEGORIES,
     CRYPTO_CATEGORIES,
     MONEY_CATEGORIES,
     Idea,
@@ -90,9 +89,8 @@ class TestCryptoGrouping:
     def test_crypto_grouping_is_exactly_the_new_set(self):
         assert set(CRYPTO_CATEGORIES) == set(NEW_CRYPTO)
 
-    def test_crypto_disjoint_from_money_and_lab(self):
+    def test_crypto_disjoint_from_money(self):
         assert not (set(CRYPTO_CATEGORIES) & set(MONEY_CATEGORIES))
-        assert not (set(CRYPTO_CATEGORIES) & set(CLAUDE_LAB_CATEGORIES))
 
     def test_route_tuple_matches_canonical(self):
         # Import app first so routes loads via the normal path; importing

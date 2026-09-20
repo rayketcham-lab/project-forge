@@ -521,7 +521,11 @@ class TestRunSelfImproveCycle:
                 "project_forge.cron.self_improve_runner.gather_self_context",
                 return_value={"code_stats": {}, "test_count": 10},
             ),
-            patch("project_forge.cron.self_improve_runner._call_claude") as mock_claude,
+            patch("project_forge.cron.self_improve_runner._call_backend") as mock_backend,
+            patch(
+                "project_forge.engine.llm_backend.resolve_backend",
+                return_value=object(),
+            ),
             patch("project_forge.cron.self_improve_runner._git_dirty_paths", return_value=set()),
             patch("project_forge.cron.self_improve_runner.apply_changes"),
             patch(
@@ -533,11 +537,8 @@ class TestRunSelfImproveCycle:
                 return_value="https://github.com/rayketcham-lab/project-forge/pull/7",
             ),
             patch("project_forge.cron.self_improve_runner.close_issue"),
-            patch("project_forge.cron.self_improve_runner.settings") as mock_settings,
         ):
-            mock_settings.anthropic_api_key = "fake-key"
-            mock_settings.anthropic_model = "claude-sonnet-4-20250514"
-            mock_claude.return_value = json.dumps(FAKE_CLAUDE_RESPONSE)
+            mock_backend.return_value = json.dumps(FAKE_CLAUDE_RESPONSE)
             result = await run_self_improve_cycle()
 
         assert result["processed"] == 1
@@ -556,7 +557,11 @@ class TestRunSelfImproveCycle:
                 "project_forge.cron.self_improve_runner.gather_self_context",
                 return_value={"code_stats": {}, "test_count": 10},
             ),
-            patch("project_forge.cron.self_improve_runner._call_claude") as mock_claude,
+            patch("project_forge.cron.self_improve_runner._call_backend") as mock_backend,
+            patch(
+                "project_forge.engine.llm_backend.resolve_backend",
+                return_value=object(),
+            ),
             patch("project_forge.cron.self_improve_runner._git_dirty_paths", return_value=set()),
             patch("project_forge.cron.self_improve_runner.apply_changes"),
             patch(
@@ -565,11 +570,8 @@ class TestRunSelfImproveCycle:
             ),
             patch("project_forge.cron.self_improve_runner._revert_changes"),
             patch("project_forge.cron.self_improve_runner.close_issue") as mock_close,
-            patch("project_forge.cron.self_improve_runner.settings") as mock_settings,
         ):
-            mock_settings.anthropic_api_key = "fake-key"
-            mock_settings.anthropic_model = "claude-sonnet-4-20250514"
-            mock_claude.return_value = json.dumps(FAKE_CLAUDE_RESPONSE)
+            mock_backend.return_value = json.dumps(FAKE_CLAUDE_RESPONSE)
             result = await run_self_improve_cycle()
 
         # Should NOT close the issue when validation fails
@@ -589,7 +591,11 @@ class TestRunSelfImproveCycle:
                 "project_forge.cron.self_improve_runner.gather_self_context",
                 return_value={"code_stats": {}, "test_count": 10},
             ),
-            patch("project_forge.cron.self_improve_runner._call_claude") as mock_claude,
+            patch("project_forge.cron.self_improve_runner._call_backend") as mock_backend,
+            patch(
+                "project_forge.engine.llm_backend.resolve_backend",
+                return_value=object(),
+            ),
             patch("project_forge.cron.self_improve_runner._git_dirty_paths", return_value=set()),
             patch("project_forge.cron.self_improve_runner.apply_changes"),
             patch(
@@ -598,11 +604,8 @@ class TestRunSelfImproveCycle:
             ),
             patch("project_forge.cron.self_improve_runner._revert_changes") as mock_revert,
             patch("project_forge.cron.self_improve_runner.close_issue"),
-            patch("project_forge.cron.self_improve_runner.settings") as mock_settings,
         ):
-            mock_settings.anthropic_api_key = "fake-key"
-            mock_settings.anthropic_model = "claude-sonnet-4-20250514"
-            mock_claude.return_value = json.dumps(FAKE_CLAUDE_RESPONSE)
+            mock_backend.return_value = json.dumps(FAKE_CLAUDE_RESPONSE)
             await run_self_improve_cycle()
 
         mock_revert.assert_called_once()
@@ -621,7 +624,11 @@ class TestRunSelfImproveCycle:
                 "project_forge.cron.self_improve_runner.gather_self_context",
                 return_value={"code_stats": {}, "test_count": 10},
             ),
-            patch("project_forge.cron.self_improve_runner._call_claude") as mock_claude,
+            patch("project_forge.cron.self_improve_runner._call_backend") as mock_backend,
+            patch(
+                "project_forge.engine.llm_backend.resolve_backend",
+                return_value=object(),
+            ),
             patch(
                 "project_forge.cron.self_improve_runner._git_dirty_paths",
                 return_value={"src/project_forge/web/app.py"},
@@ -629,11 +636,8 @@ class TestRunSelfImproveCycle:
             patch("project_forge.cron.self_improve_runner.apply_changes") as mock_apply,
             patch("project_forge.cron.self_improve_runner.create_improvement_pr") as mock_pr,
             patch("project_forge.cron.self_improve_runner.close_issue") as mock_close,
-            patch("project_forge.cron.self_improve_runner.settings") as mock_settings,
         ):
-            mock_settings.anthropic_api_key = "fake-key"
-            mock_settings.anthropic_model = "claude-sonnet-4-20250514"
-            mock_claude.return_value = json.dumps(FAKE_CLAUDE_RESPONSE)
+            mock_backend.return_value = json.dumps(FAKE_CLAUDE_RESPONSE)
             result = await run_self_improve_cycle()
 
         mock_apply.assert_not_called()
@@ -655,7 +659,11 @@ class TestRunSelfImproveCycle:
                 "project_forge.cron.self_improve_runner.gather_self_context",
                 return_value={"code_stats": {}, "test_count": 10},
             ),
-            patch("project_forge.cron.self_improve_runner._call_claude") as mock_claude,
+            patch("project_forge.cron.self_improve_runner._call_backend") as mock_backend,
+            patch(
+                "project_forge.engine.llm_backend.resolve_backend",
+                return_value=object(),
+            ),
             patch(
                 "project_forge.cron.self_improve_runner._git_dirty_paths",
                 return_value={"docs/unrelated.md"},
@@ -670,11 +678,8 @@ class TestRunSelfImproveCycle:
                 return_value="https://example.com/pull/9",
             ),
             patch("project_forge.cron.self_improve_runner.close_issue"),
-            patch("project_forge.cron.self_improve_runner.settings") as mock_settings,
         ):
-            mock_settings.anthropic_api_key = "fake-key"
-            mock_settings.anthropic_model = "claude-sonnet-4-20250514"
-            mock_claude.return_value = json.dumps(FAKE_CLAUDE_RESPONSE)
+            mock_backend.return_value = json.dumps(FAKE_CLAUDE_RESPONSE)
             result = await run_self_improve_cycle()
 
         mock_apply.assert_called_once()

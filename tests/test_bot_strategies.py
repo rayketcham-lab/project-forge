@@ -22,7 +22,6 @@ from pydantic import ValidationError
 
 from project_forge.models import (
     CASHFLOW_CATEGORIES,
-    CLAUDE_LAB_CATEGORIES,
     CRYPTO_CATEGORIES,
     MONEY_CATEGORIES,
     PKI_CATEGORIES,
@@ -98,7 +97,7 @@ class TestBotCategories:
         assert not (set(MONEY_CATEGORIES) & set(PRODUCT_MONEY_CATEGORIES))
 
     def test_disjoint_from_every_other_board(self):
-        for other in (CLAUDE_LAB_CATEGORIES, CRYPTO_CATEGORIES, CASHFLOW_CATEGORIES, PKI_CATEGORIES):
+        for other in (CRYPTO_CATEGORIES, CASHFLOW_CATEGORIES, PKI_CATEGORIES):
             assert not (set(MONEY_CATEGORIES) & set(other))
 
     def test_sniper_scope_unchanged(self):

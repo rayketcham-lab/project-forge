@@ -1,66 +1,57 @@
-"""TDD: review_runner._review_idea_with_api must use AsyncAnthropic (#69).
+"""TDD: review_runner._review_idea_with_api must not block the event loop.
 
-Bug: the function is declared `async def` but uses the synchronous
-`anthropic.Anthropic` client and calls `client.messages.create()`
-without `await`. HTTP request blocks the event loop for the duration
-of the Anthropic call. Sonnet flagged this in two consecutive
-autonomous introspect cycles — convergence is the quality signal.
+Bug (#69): the function used a synchronous Anthropic client and called
+`client.messages.create()` without awaiting — the HTTP call blocked the
+event loop for the duration. Fixed by moving to the generic BYO-LLM backend
+and running the (synchronous) `backend.call(prompt)` off the event loop via
+`asyncio.to_thread`.
 
 Two layers of regression coverage:
-1. Static check: the function source does NOT reference the sync client
-   class and DOES await the response.
-2. Behavior check: mocked AsyncAnthropic is invoked; sync class is not.
+1. Static check: the function source DOES offload the blocking call with
+   `asyncio.to_thread` and does not reference any synchronous vendor client.
+2. Behavior check: a fake backend's `.call()` is invoked (via to_thread) and
+   its JSON parsed into a verdict.
 """
 
 from __future__ import annotations
 
 import inspect
 import re
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from project_forge.cron import review_runner
 from project_forge.models import Idea, IdeaCategory
 
+
 # ── Static source check ─────────────────────────────────────────────
 
 
-class TestSourceUsesAsyncClient:
+class TestSourceOffloadsBlockingCall:
     def test_function_is_async(self):
         assert inspect.iscoroutinefunction(review_runner._review_idea_with_api), (
             "_review_idea_with_api must remain async"
         )
 
-    def test_does_not_use_sync_client(self):
+    def test_does_not_reference_vendor_sync_client(self):
         src = inspect.getsource(review_runner._review_idea_with_api)
-        # Sync client looks like: anthropic.Anthropic(  (NOT AsyncAnthropic)
-        # The negative lookbehind avoids matching AsyncAnthropic itself.
-        sync_call = re.search(r"(?<!Async)\banthropic\.Anthropic\s*\(", src)
-        assert sync_call is None, (
-            "Function must not instantiate the sync anthropic.Anthropic "
-            "client — it blocks the event loop. Use AsyncAnthropic."
+        assert "anthropic" not in src and "openai" not in src, (
+            "Function must not reference a vendor-specific client."
         )
 
-    def test_uses_async_anthropic(self):
+    def test_offloads_backend_call_with_to_thread(self):
         src = inspect.getsource(review_runner._review_idea_with_api)
-        assert re.search(r"anthropic\.AsyncAnthropic\s*\(", src), (
-            "Function must use anthropic.AsyncAnthropic in an async context."
+        assert "asyncio.to_thread" in src, (
+            "The (synchronous) backend.call() must be off-loaded via "
+            "asyncio.to_thread so it doesn't block the event loop."
         )
-
-    def test_awaits_messages_create(self):
-        src = inspect.getsource(review_runner._review_idea_with_api)
-        # Must have `await client.messages.create` (or `await self.client.…`)
-        assert "await client.messages.create" in src or "await self.client.messages.create" in src, (
-            "messages.create() must be awaited."
-        )
-        # And no bare unsuffixed call
-        assert not re.search(r"^\s*resp\s*=\s*client\.messages\.create", src, re.MULTILINE), (
-            "Found a non-awaited messages.create — would block the event loop."
+        assert "backend.call" in src, (
+            "The generic BYO-LLM backend's .call() must be used."
         )
 
 
-# ── Behavior check (mocked) ─────────────────────────────────────────
+# ── Behavior check (mocked backend) ─────────────────────────────────
 
 
 def _stub_idea() -> Idea:
@@ -77,33 +68,28 @@ def _stub_idea() -> Idea:
 
 
 @pytest.mark.asyncio
-async def test_review_calls_async_client_not_sync():
-    """Calling _review_idea_with_api must instantiate AsyncAnthropic
-    (not Anthropic) and await its messages.create."""
-    fake_resp = MagicMock()
-    fake_resp.content = [MagicMock(text='{"verdict": "keep", "confidence": 0.7, "reasoning": "ok", "suggestions": []}')]
-
-    fake_async_client = MagicMock()
-    fake_async_client.messages.create = AsyncMock(return_value=fake_resp)
-    fake_async_anthropic_class = MagicMock(return_value=fake_async_client)
-
-    fake_sync_anthropic_class = MagicMock(
-        side_effect=AssertionError(
-            "_review_idea_with_api called the SYNC anthropic.Anthropic class. It must use AsyncAnthropic.",
-        ),
+async def test_review_calls_backend_and_parses_verdict():
+    """Calling _review_idea_with_api with a fake backend must invoke its
+    .call() (off the event loop) and parse the returned JSON verdict."""
+    fake_backend = MagicMock()
+    fake_backend.name = "openai-compatible:qwen-local-m"
+    fake_backend.call.return_value = (
+        '{"verdict": "keep", "confidence": 0.7, "reasoning": "ok", "suggestions": []}'
     )
 
-    fake_module = MagicMock()
-    fake_module.AsyncAnthropic = fake_async_anthropic_class
-    fake_module.Anthropic = fake_sync_anthropic_class
+    result = await review_runner._review_idea_with_api(_stub_idea(), backend=fake_backend)
 
-    with patch.dict("sys.modules", {"anthropic": fake_module}):
-        result = await review_runner._review_idea_with_api(
-            _stub_idea(),
-            api_key="sk-test",
-            model="claude-sonnet-4-6",
-        )
-
-    assert fake_async_anthropic_class.called, "AsyncAnthropic was never called"
-    assert fake_async_client.messages.create.await_count == 1, "messages.create must be awaited exactly once"
+    fake_backend.call.assert_called_once()
     assert result["verdict"] == "keep"
+    assert result["confidence"] == 0.7
+
+
+@pytest.mark.asyncio
+async def test_review_propagates_empty_response_as_json_error():
+    """A backend returning None produces empty raw -> json.loads('') raises.
+    Callers catching the exception (run_review_cycle) record an error row."""
+    fake_backend = MagicMock()
+    fake_backend.call.return_value = None
+
+    with pytest.raises(Exception):
+        await review_runner._review_idea_with_api(_stub_idea(), backend=fake_backend)

@@ -68,11 +68,7 @@ GENERATION_MODES = ["novel", "inversion", "bundle", "microservice", "adversarial
 
 # ARTIFACT TYPES — orthogonal to MODE. Mode is the *thinking lens*
 # (novel/inversion/bundle/…); artifact type is the *shape* of the
-# output. Default behaviour: a project-pitch. For Claude Lab categories
-# we rotate through 8 specific artifact shapes so Churn doesn't just
-# produce 50 variants of the same "project pitch" — it produces ideas
-# for skills, sub-agents, MCP servers, hooks, slash commands, workflows,
-# protocols, and raw capability extensions.
+# output. Default behaviour: a project-pitch.
 ARTIFACT_TYPES = [
     "skill",  # .claude/skills/ entry — single-purpose, focused
     "sub-agent",  # .claude/agents/ entry — specialized agent w/ role
@@ -85,17 +81,9 @@ ARTIFACT_TYPES = [
 ]
 
 # Categories that get artifact-type variety. Everything else stays on
-# the default project-pitch shape (artifact_type = None).
-_ARTIFACT_ROTATION_CATEGORIES = {
-    IdeaCategory.CLAUDE_SKILLS_AGENTS,
-    IdeaCategory.AI_MARKETPLACE,
-    # v0.16 Claude Lab expansion — same artifact-shape rotation so these
-    # categories also pitch skills / sub-agents / MCP servers / etc.
-    IdeaCategory.AGENT_INFRA,
-    IdeaCategory.CLAUDE_EVALS,
-    IdeaCategory.AGENT_SECURITY,
-    IdeaCategory.CONTEXT_MEMORY,
-}
+# the default project-pitch shape (artifact_type = None). No category
+# rotates today.
+_ARTIFACT_ROTATION_CATEGORIES: set[IdeaCategory] = set()
 
 
 _ARTIFACT_PROMPTS: dict[str, str] = {
@@ -239,34 +227,6 @@ PERSONAS_BY_CATEGORY: dict[IdeaCategory, list[str]] = {
         "solo developer running 6 side projects + a day job",
         "remote PM running two product squads, async-first, drowning in Notion docs",
     ],
-    IdeaCategory.CLAUDE_SKILLS_AGENTS: [
-        "indie dev shipping Claude Code skills for their 5-person team, wants a skill that wins on day one",
-        "platform engineer at a 200-person org, building MCP servers for internal infra, needs auth + audit baked in",
-        "AI researcher prototyping agentic workflows, wants fanned-out sub-agents that compose without glue",
-        "engineering manager who wants per-PR review sub-agents that learn from accepted/rejected diffs",
-        "terminal power user automating their life: dotfiles + email + RSS + bills via Claude Code agents",
-        "DevSecOps engineer building a sub-agent that grades code for safety + hallucination risk before merge",
-        "ML engineer wanting Claude integrated into experiment tracking with auto-tagged regressions",
-        "founder building an AI-first dev tool, looking for a primitive everyone will need but nobody has built",
-        "consultant who wants reproducible agent workflows for clients — same input, same output, every time",
-        "open-source maintainer building skills they wish existed for their own repo",
-        "educator turning a CS curriculum into agent-led labs with auto-graded code reviews",
-        "DevRel engineer building MCP demos for a platform team, needs each one to be impressive in 90 seconds",
-    ],
-    IdeaCategory.AI_MARKETPLACE: [
-        "founder building 'the App Store for agents' — needs discovery + payment + reputation that doesn't suck",
-        "VC scouting AI marketplaces, wants to know which primitive everyone will pay for once it exists",
-        "AI engineer at a platform company designing the agent layer that handles attribution + revenue split",
-        "skill author wanting income from their distribution without building a whole storefront",
-        "team lead at a 500-engineer org wanting skill governance: who installed what, where's the budget cap",
-        "buyer comparing two agents for the same task, needs a trust signal that isn't 'GitHub stars'",
-        "DevRel for an AI platform launching a marketplace, wants the right primitives shipped at GA",
-        "compliance officer worried about agent provenance — who trained this, on what data, with what consent",
-        "researcher studying agent quality signals, wants a measurement framework the market will respect",
-        "educator teaching prompt engineering, wants an exemplar marketplace students can browse + learn from",
-        "indie developer wanting to bundle 5 skills as 'my style' and rent them to others",
-        "platform engineer building the rev-share rails so 3-agent collaborations distribute earnings fairly",
-    ],
     IdeaCategory.CREATOR_TOOLS: [
         "podcaster releasing weekly, edits everything herself in Descript, hates the export step",
         "YouTube creator at 80k subs, thumbnails are the bottleneck — A/B testing is a fantasy",
@@ -329,55 +289,6 @@ PERSONAS_BY_CATEGORY: dict[IdeaCategory, list[str]] = {
         "e-commerce seller who just learned they owe sales tax in five states retroactively",
         "creator with real business income missing deductions because receipts are everywhere",
         "bookkeeper for 15 micro-clients drowning in receipt-to-QuickBooks data entry",
-    ],
-    # v0.16 Claude Lab expansion personas.
-    IdeaCategory.AGENT_INFRA: [
-        "platform engineer running 200 agents nightly, token spend is unpredictable and scary",
-        "infra lead who needs agent runs to survive crashes and resume from a checkpoint",
-        "founder of an AI-first product whose cold-start latency is killing the demo",
-        "SRE on call for an agent fleet with no backpressure, queues melt during spikes",
-        "data engineer fanning out 500 sub-agents, half do redundant work with no shared context",
-        "cost owner who needs per-team token attribution before finance kills the project",
-        "platform team standardizing how agents get short-lived secrets without leaking them",
-        "ML infra engineer wanting deterministic replay of any agent run for debugging",
-        "engineering manager who needs blue/green agent deploys with shadow comparison",
-        "startup CTO who must hard-cap spend per task or one runaway loop bankrupts the month",
-    ],
-    IdeaCategory.CLAUDE_EVALS: [
-        "AI product lead who ships prompt changes blind, no idea if quality regressed",
-        "ML researcher whose evals are flaky and can't tell model variance from real change",
-        "DevSecOps engineer wanting an eval gate that blocks merges on quality regressions",
-        "team lead building an LLM-as-judge harness but worried the judge is biased",
-        "founder comparing two models, needs a cost-vs-quality frontier, not a vibe check",
-        "QA engineer who needs golden datasets mined from real production traces",
-        "researcher measuring hallucination rate grounded against a source corpus",
-        "platform engineer wiring tool-call correctness scoring into CI",
-        "AI eng who needs to prove jailbreak + injection resistance before launch",
-        "product owner who wants a leaderboard ranked by validated outcomes, not downloads",
-    ],
-    IdeaCategory.AGENT_SECURITY: [
-        "security engineer treating the agent as an attack surface, fears indirect prompt injection",
-        "platform owner who needs MCP servers verified + signed before anyone installs one",
-        "DevSecOps lead wanting least-privilege tool grants per task, not blanket session access",
-        "compliance officer demanding tamper-evident audit logs for every agent action",
-        "AppSec engineer red-teaming agents by fuzzing their tools with adversarial inputs",
-        "enterprise architect worried about agents exfiltrating data to new domains",
-        "PKI engineer designing agent identity + attestation so tools can trust the caller",
-        "incident responder who needs a kill-switch + quarantine for misbehaving agents",
-        "security lead scanning the skill supply chain — who wrote it, what it reads, what it sends",
-        "fintech security engineer blocking PII from crossing a classification boundary",
-    ],
-    IdeaCategory.CONTEXT_MEMORY: [
-        "agent builder whose sessions forget every decision the moment the window fills",
-        "consultant running 7 client agents that must never leak one client's facts to another",
-        "developer who wants project memory that survives across sessions and machines",
-        "ML engineer building recall that surfaces only the memories a task actually needs",
-        "team lead who wants shared agent memory with provenance and access control per fact",
-        "researcher needing time-aware memory: 'what did this codebase look like 3 months ago'",
-        "power user whose agent keeps repeating approaches that already failed last week",
-        "platform engineer who needs a memory write-policy: is this even worth remembering",
-        "founder whose agent's stored facts contradict current reality and nobody reconciles them",
-        "knowledge-management lead wanting citation-backed memory linking every fact to a source",
     ],
     # v0.19 Crypto/Web3 board personas — on-chain operators feeling the
     # security / infra / payments / compliance pain each category targets.
@@ -568,8 +479,7 @@ class LLMGenerationResult:
     backend: str
     raw_response: str
     # v0.15a — which artifact shape this draw produced. None for the
-    # default project-pitch shape, one of ARTIFACT_TYPES for the
-    # Claude Lab categories.
+    # default project-pitch shape.
     artifact_type: str | None = None
 
 
@@ -694,8 +604,8 @@ def _build_prompt(
     # space attracts. Rendered by saturation.density_prompt_block.
     density_section = f"{density_block}\n\n" if density_block else ""
 
-    # Two prompt frames: the project-pitch (default — every category before
-    # v0.15a used this) and the artifact-shape pitch (Claude Lab categories).
+    # Two prompt frames: the project-pitch (default) and the
+    # artifact-shape pitch.
     if artifact_type is None:
         artifact_block = ""
         headline = f"You are pitching a project idea in the {category.value} category."
@@ -790,11 +700,8 @@ async def generate_idea_llm(
     """One LLM-first generation. Returns None when no backend reaches or the
     response fails parsing — caller falls back to the template path.
 
-    `artifact_type` is None for the default project-pitch shape. For the
-    Claude Lab categories (CLAUDE_SKILLS_AGENTS, AI_MARKETPLACE) we rotate
-    through 8 artifact shapes (skill / sub-agent / mcp-server / hook /
-    slash-command / workflow / protocol / ability) — pick happens here if
-    the caller doesn't specify.
+    `artifact_type` is None for the default project-pitch shape; callers
+    may pass one of ARTIFACT_TYPES explicitly.
     """
     backend = backend if backend is not None else resolve_cheap_backend()
     if backend is None:
@@ -802,7 +709,8 @@ async def generate_idea_llm(
 
     mode = mode if mode in GENERATION_MODES else await pick_least_used_mode(db, category)
 
-    # Artifact rotation: only Claude Lab categories cycle through types.
+    # Artifact rotation: no category rotates today (the rotation set is
+    # empty); a caller-supplied type is validated and kept.
     if artifact_type is not None and artifact_type not in ARTIFACT_TYPES:
         artifact_type = None
     if artifact_type is None and category in _ARTIFACT_ROTATION_CATEGORIES:

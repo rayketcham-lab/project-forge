@@ -31,7 +31,7 @@ CONTRARIAN_PROMPTS = [
     "What's the 'spreadsheet that should be a product' in your domain?",
 ]
 
-# User persona seeds — each gives Claude a concrete human POV to generate from.
+# User persona seeds — each gives the LLM a concrete human POV to generate from.
 # The goal is to ground ideas in real pain, not abstract concept recombination.
 PERSONA_SEEDS: list[dict] = [
     {

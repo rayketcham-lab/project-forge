@@ -343,13 +343,11 @@ class Database:
             # is idempotent. NULL = never auto-promoted; non-NULL = the
             # weekly picker should skip this idea.
             "ALTER TABLE ideas ADD COLUMN auto_promoted_at TEXT",
-            # v0.15 — frontier scoring axis (parallel to fundability_score)
-            # for the Claude-ecosystem categories. 0.0 = derivative,
-            # 1.0 = paradigm-shift potential. Sorted DESC on /claude-lab.
+            # v0.15 — frontier scoring axis (parallel to fundability_score).
+            # 0.0 = derivative, 1.0 = paradigm-shift potential.
             "ALTER TABLE ideas ADD COLUMN ambition_score REAL",
-            # v0.15a — which SHAPE of artifact this idea pitches. Only the
-            # Claude Lab categories rotate through 8 types; everything else
-            # stays NULL (= default project-pitch shape).
+            # v0.15a — which SHAPE of artifact this idea pitches. NULL
+            # (= default project-pitch shape) for everything today.
             "ALTER TABLE ideas ADD COLUMN artifact_type TEXT",
             # v0.16 — Sniper board: competitive-displacement axis (parallel
             # to fundability/ambition) and the named incumbent the wedge

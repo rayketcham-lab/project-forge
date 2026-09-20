@@ -426,9 +426,8 @@ async def _llm_refine(idea: Idea, heuristic: float) -> float:
         f"{spec_block}\n"
         'Reply: {"score": 0.0-1.0}'
     )
-    # Off the event loop: the CLI backend shells out to `claude --print`,
-    # which blocks for tens of seconds and would freeze every request the
-    # web app is serving while it runs.
+    # Off the event loop: the backend call blocks for tens of seconds and
+    # would freeze every request the web app is serving while it runs.
     raw = (await asyncio.to_thread(backend.call, prompt) or "").strip()
     if "```json" in raw:
         raw = raw.split("```json", 1)[1].split("```", 1)[0].strip()

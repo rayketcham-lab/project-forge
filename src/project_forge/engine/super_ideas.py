@@ -26,10 +26,9 @@ logger = logging.getLogger(__name__)
 def _reasoning_llm_call() -> Callable[[str], str] | None:
     """Construct a callable that sends a prompt to an LLM and returns text.
 
-    Uses the pluggable backend resolver — Anthropic API direct (when
-    ANTHROPIC_API_KEY is set) OR Claude Code CLI shell-out (when `claude`
-    is on PATH). Returns None when neither is available — caller falls
-    back to slot-fill in that case.
+    Uses the pluggable backend resolver — the configured BYO-LLM endpoint
+    (FORGE_LLM_BASE_URL). Returns None when none is configured — caller
+    falls back to slot-fill in that case.
     """
     from project_forge.engine.llm_backend import resolve_backend
 
@@ -563,26 +562,9 @@ DAILY_ROTATION = [
             "tools for creators making content — writing, audio, video, newsletters, social, design, education"
         ),
     },
-    # v0.15 — frontier / Claude-ecosystem slots. Push to 35th-century
-    # framing: ideas where someone reading the pitch wants to drop
-    # everything and build it.
+    # v0.16 — paid-product money slot.
     {
         "slot": 8,
-        "label": "Claude Frontier",
-        "seed_categories": {
-            IdeaCategory.CLAUDE_SKILLS_AGENTS,
-            IdeaCategory.AI_MARKETPLACE,
-        },
-        "perspective": (
-            "frontier ideas for the Claude / agent ecosystem — skills, "
-            "sub-agents, MCP servers, marketplaces, attribution, "
-            "discovery. Ambitious enough to redefine how agents and "
-            "their authors trade value"
-        ),
-    },
-    # v0.16 — paid-product money slot + the rest of the agent-ecosystem.
-    {
-        "slot": 9,
         "label": "Paid Products & Vertical SaaS",
         "seed_categories": {
             IdeaCategory.MICRO_SAAS,
@@ -595,22 +577,6 @@ DAILY_ROTATION = [
             "micro-SaaS, deep vertical software for underserved trades, "
             "seller operations, and finance ops. One paying buyer, clear "
             "Stripe button, no money-transmitter or financial-advice scope"
-        ),
-    },
-    {
-        "slot": 10,
-        "label": "Agent Platform & Safety",
-        "seed_categories": {
-            IdeaCategory.AGENT_INFRA,
-            IdeaCategory.CLAUDE_EVALS,
-            IdeaCategory.AGENT_SECURITY,
-            IdeaCategory.CONTEXT_MEMORY,
-        },
-        "perspective": (
-            "the layers that make agents production-grade — the runtime "
-            "that runs a fleet cheaply and durably, the evals that prove "
-            "they work, the security that treats them as an attack surface, "
-            "and the memory that gives them continuity"
         ),
     },
 ]
@@ -781,7 +747,7 @@ class SuperIdeaGenerator:
                         sig,
                     )
                     continue
-            # `llm_call` is a blocking CLI shell-out when reasoning is on, and
+            # `llm_call` is a blocking LLM call when reasoning is on, and
             # synthesize_super_idea invokes it — off the loop, or the web app
             # stops answering for the length of every cluster naming.
             candidate = await asyncio.to_thread(

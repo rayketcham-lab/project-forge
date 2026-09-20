@@ -63,9 +63,8 @@ async def generate_idea_from_text(
 ) -> Idea:
     """Expand a text fragment into a structured Idea.
 
-    Uses resolve_backend() — Anthropic API direct (when key set) OR
-    Claude Code CLI shell-out (when `claude` is on PATH). Falls back to
-    a heuristic extractor when neither is available.
+    Uses resolve_backend() — any configured BYO-LLM endpoint. Falls back to
+    a heuristic extractor when no backend is available.
     """
     backend = resolve_backend()
     if backend is None:

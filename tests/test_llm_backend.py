@@ -1,77 +1,79 @@
-"""TDD: pluggable LLM backend — Anthropic API direct OR Claude Code CLI shell-out.
+"""BYO-LLM backend — generic OpenAI-compatible endpoint.
 
-The user runs Claude Code (Pro Max). We can invoke `claude --print` to
-get LLM reasoning without ever provisioning a separate ANTHROPIC_API_KEY
-for project-forge — cost rolls into their subscription.
+The operator configures their own model endpoint (local vLLM/Ollama/GGUF or
+any chat/completions provider: Grok, OpenAI, Claude-via-proxy). No
+vendor-specific SDK. Resolution:
 
-Backend resolution priority:
-  FORGE_LLM_BACKEND (api|claude_code|static|none) override
-  → ANTHROPIC_API_KEY set → AnthropicAPIBackend
-  → `claude` on $PATH → ClaudeCodeBackend
+  FORGE_LLM_BACKEND (auto|none|static) override
+  → FORGE_LLM_BASE_URL set → OpenAICompatibleBackend
   → None (caller falls back to static heuristics)
 """
 
 from __future__ import annotations
 
-import subprocess
 from unittest.mock import MagicMock, patch
 
-# ── ClaudeCodeBackend (shells out to `claude --print`) ───────────────
+from project_forge.config import settings as _settings
 
 
-class TestClaudeCodeBackend:
-    def test_call_returns_stripped_stdout(self):
-        from project_forge.engine.llm_backend import ClaudeCodeBackend
+# ── OpenAICompatibleBackend (chat/completions over HTTP) ─────────────
 
-        with patch("subprocess.run") as run:
-            run.return_value = MagicMock(stdout='{"name": "Test"}\n', returncode=0)
-            be = ClaudeCodeBackend(model="sonnet")
-            result = be.call("test prompt")
+
+class TestOpenAICompatibleBackend:
+    def _backend(self, model="qwen-local-m", api_key=""):
+        from project_forge.engine.llm_backend import OpenAICompatibleBackend
+
+        return OpenAICompatibleBackend(
+            base_url="http://192.0.2.1:8888/v1", model=model, api_key=api_key
+        )
+
+    def test_call_returns_content(self):
+        with patch("httpx.post") as post:
+            post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: {"choices": [{"message": {"content": '{"name": "Test"}\n'}}]},
+            )
+            result = self._backend().call("test prompt")
         assert result == '{"name": "Test"}'
 
-    def test_call_passes_model_flag(self):
-        from project_forge.engine.llm_backend import ClaudeCodeBackend
+    def test_call_posts_to_chat_completions_with_model_and_key(self):
+        from project_forge.engine.llm_backend import OpenAICompatibleBackend
 
-        with patch("subprocess.run") as run:
-            run.return_value = MagicMock(stdout="x", returncode=0)
-            ClaudeCodeBackend(model="sonnet").call("p")
-            args = run.call_args[0][0]
-        assert "claude" in args[0]
-        assert "--print" in args
-        assert "--model" in args
-        assert "sonnet" in args
-        assert "p" in args
+        with patch("httpx.post") as post:
+            post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: {"choices": [{"message": {"content": "x"}}]},
+            )
+            be = OpenAICompatibleBackend(
+                base_url="http://192.0.2.1:8888/v1",
+                model="qwen-local-m",
+                api_key="bearer-token",
+            )
+            be.call("p")
+            args, kwargs = post.call_args
+        assert args[0] == "http://192.0.2.1:8888/v1/chat/completions"
+        assert kwargs["json"]["model"] == "qwen-local-m"
+        assert kwargs["headers"]["Authorization"] == "Bearer bearer-token"
 
-    def test_call_returns_none_on_timeout(self):
-        from project_forge.engine.llm_backend import ClaudeCodeBackend
+    def test_call_returns_none_on_http_error(self):
+        with patch("httpx.post") as post:
+            post.return_value = MagicMock(status_code=503, raise_for_status=MagicMock(side_effect=Exception("boom")))
+            assert self._backend().call("p") is None
 
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=1)):
-            assert ClaudeCodeBackend().call("p") is None
+    def test_call_returns_none_on_exception(self):
+        with patch("httpx.post", side_effect=RuntimeError("conn refused")):
+            assert self._backend().call("p") is None
 
-    def test_call_returns_none_when_claude_missing(self):
-        from project_forge.engine.llm_backend import ClaudeCodeBackend
-
-        with patch("subprocess.run", side_effect=FileNotFoundError):
-            assert ClaudeCodeBackend().call("p") is None
-
-    def test_call_returns_none_on_nonzero_exit(self):
-        from project_forge.engine.llm_backend import ClaudeCodeBackend
-
-        with patch("subprocess.run", side_effect=subprocess.CalledProcessError(returncode=1, cmd=["claude"])):
-            assert ClaudeCodeBackend().call("p") is None
-
-    def test_call_returns_none_on_empty_stdout(self):
-        from project_forge.engine.llm_backend import ClaudeCodeBackend
-
-        with patch("subprocess.run") as run:
-            run.return_value = MagicMock(stdout="   \n  ", returncode=0)
-            assert ClaudeCodeBackend().call("p") is None
+    def test_call_returns_none_on_empty_content(self):
+        with patch("httpx.post") as post:
+            post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: {"choices": [{"message": {"content": "   \n  "}}]},
+            )
+            assert self._backend().call("p") is None
 
     def test_name_includes_model(self):
-        from project_forge.engine.llm_backend import ClaudeCodeBackend
-
-        assert "sonnet" in ClaudeCodeBackend(model="sonnet").name
-        assert "haiku" in ClaudeCodeBackend(model="haiku").name
+        assert "qwen-local-m" in self._backend(model="qwen-local-m").name
 
 
 # ── resolve_backend ──────────────────────────────────────────────────
@@ -91,104 +93,37 @@ class TestResolveBackend:
         assert resolve_backend() is None
 
     def test_cheap_backend_honours_static_kill_switch(self, monkeypatch):
-        """Regression (found during #84): FORGE_LLM_BACKEND=static/none
-        disabled the main generators but resolve_cheap_backend still shelled
-        out to the claude CLI for scorers + dedup verification."""
+        """FORGE_LLM_BACKEND=static/none must disable the cheap path too."""
         from project_forge.engine.llm_backend import resolve_cheap_backend
 
-        with patch("shutil.which", return_value="/home/x/bin/claude"):
-            monkeypatch.setenv("FORGE_LLM_BACKEND", "static")
-            assert resolve_cheap_backend() is None
-            monkeypatch.setenv("FORGE_LLM_BACKEND", "none")
-            assert resolve_cheap_backend() is None
+        monkeypatch.setenv("FORGE_LLM_BACKEND", "static")
+        assert resolve_cheap_backend() is None
+        monkeypatch.setenv("FORGE_LLM_BACKEND", "none")
+        assert resolve_cheap_backend() is None
 
-    def test_force_claude_code_returns_claude_when_available(self, monkeypatch):
-        from project_forge.engine.llm_backend import (
-            ClaudeCodeBackend,
-            resolve_backend,
-        )
-
-        monkeypatch.setenv("FORGE_LLM_BACKEND", "claude_code")
-        with patch("shutil.which", return_value="/home/x/bin/claude"):
-            be = resolve_backend()
-        assert isinstance(be, ClaudeCodeBackend)
-
-    def test_force_claude_code_returns_none_when_unavailable(self, monkeypatch):
-        from project_forge.engine.llm_backend import resolve_backend
-
-        monkeypatch.setenv("FORGE_LLM_BACKEND", "claude_code")
-        with patch(
-            "project_forge.engine.llm_backend._has_claude_cli",
-            return_value=False,
-        ):
-            assert resolve_backend() is None
-
-    def test_auto_prefers_api_when_key_set(self, monkeypatch):
-        from project_forge.engine.llm_backend import (
-            AnthropicAPIBackend,
-            resolve_backend,
-        )
-
-        monkeypatch.delenv("FORGE_LLM_BACKEND", raising=False)
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
-        with patch("project_forge.engine.llm_backend._has_claude_cli", return_value=True):
-            be = resolve_backend()
-        # API beats Claude Code in auto-detect (lower latency)
-        assert isinstance(be, AnthropicAPIBackend)
-
-    def test_auto_falls_back_to_claude_code_when_no_api_key(self, monkeypatch):
-        from project_forge.engine.llm_backend import (
-            ClaudeCodeBackend,
-            resolve_backend,
-        )
-
-        monkeypatch.delenv("FORGE_LLM_BACKEND", raising=False)
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        # Also clear settings.anthropic_api_key
-        from project_forge.config import settings as _settings
-
-        monkeypatch.setattr(_settings, "anthropic_api_key", "")
-        with patch("project_forge.engine.llm_backend._has_claude_cli", return_value=True):
-            be = resolve_backend()
-        assert isinstance(be, ClaudeCodeBackend)
-
-    def test_auto_returns_none_when_nothing_available(self, monkeypatch):
+    def test_returns_none_when_no_base_url(self, monkeypatch):
         from project_forge.engine.llm_backend import resolve_backend
 
         monkeypatch.delenv("FORGE_LLM_BACKEND", raising=False)
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        from project_forge.config import settings as _settings
+        monkeypatch.delenv("FORGE_LLM_BASE_URL", raising=False)
+        monkeypatch.setattr(_settings, "llm_base_url", "")
+        assert resolve_backend() is None
 
-        monkeypatch.setattr(_settings, "anthropic_api_key", "")
-        with patch("project_forge.engine.llm_backend._has_claude_cli", return_value=False):
-            assert resolve_backend() is None
-
-    def test_default_model_is_sonnet(self, monkeypatch):
-        """User said sonnet for cost. Default must be sonnet, not opus."""
-        from project_forge.engine.llm_backend import ClaudeCodeBackend, resolve_backend
+    def test_returns_backend_when_base_url_set(self, monkeypatch):
+        from project_forge.engine.llm_backend import OpenAICompatibleBackend, resolve_backend
 
         monkeypatch.delenv("FORGE_LLM_BACKEND", raising=False)
-        monkeypatch.delenv("FORGE_LLM_MODEL", raising=False)
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        from project_forge.config import settings as _settings
-
-        monkeypatch.setattr(_settings, "anthropic_api_key", "")
-        with patch("project_forge.engine.llm_backend._has_claude_cli", return_value=True):
-            be = resolve_backend()
-        assert isinstance(be, ClaudeCodeBackend)
-        assert be.model == "sonnet"
+        monkeypatch.setenv("FORGE_LLM_BASE_URL", "http://192.0.2.1:8888/v1")
+        monkeypatch.setenv("FORGE_LLM_MODEL", "qwen-local-m")
+        monkeypatch.setattr(_settings, "llm_base_url", "http://192.0.2.1:8888/v1")
+        be = resolve_backend()
+        assert isinstance(be, OpenAICompatibleBackend)
 
     def test_model_override_via_env(self, monkeypatch):
         from project_forge.engine.llm_backend import resolve_backend
 
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        # This test is ABOUT resolution, so it opts out of the suite-wide
-        # kill switch that stops every other test reaching a live model.
         monkeypatch.delenv("FORGE_LLM_BACKEND", raising=False)
-        from project_forge.config import settings as _settings
-
-        monkeypatch.setattr(_settings, "anthropic_api_key", "")
-        monkeypatch.setenv("FORGE_LLM_MODEL", "haiku")
-        with patch("project_forge.engine.llm_backend._has_claude_cli", return_value=True):
-            be = resolve_backend()
-        assert be.model == "haiku"
+        monkeypatch.setenv("FORGE_LLM_BASE_URL", "http://192.0.2.1:8888/v1")
+        monkeypatch.setenv("FORGE_LLM_MODEL", "other-model")
+        be = resolve_backend(model_override="cheap-model")
+        assert be.model == "cheap-model"

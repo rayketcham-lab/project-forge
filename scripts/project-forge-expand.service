@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=oneshot
-User=claude
+User=llm
 WorkingDirectory=/opt/project-forge
 Environment=FORGE_DB_PATH=/opt/project-forge/data/forge.db
 # Enable Sonnet-driven super-idea cluster naming (Phase 6 reasoning

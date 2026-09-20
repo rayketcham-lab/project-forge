@@ -1,48 +1,45 @@
-"""Pluggable LLM backend — Anthropic API direct OR Claude Code CLI shell-out.
+"""Pluggable LLM backend — BYO-LLM (bring-your-own OpenAI-compatible endpoint).
 
-The user runs Claude Code (Pro Max). When `claude` is on PATH we can invoke
-`claude --print` to get LLM reasoning without ever provisioning a separate
-ANTHROPIC_API_KEY for project-forge — cost rolls into their subscription.
+The operator supplies their own model endpoint: a LOCAL model (Ollama, vLLM,
+LLaMA.cpp GGUF) or any provider that speaks the OpenAI chat/completions
+protocol (Grok, OpenAI, or a Claude-compatible proxy). There is no
+vendor-specific SDK dependency — configuration is three knobs:
 
-Resolution priority:
-  FORGE_LLM_BACKEND env (api|claude_code|static|none) — explicit override
-  → ANTHROPIC_API_KEY set → AnthropicAPIBackend (lower latency)
-  → `claude` on $PATH → ClaudeCodeBackend
-  → None (caller falls back to static heuristics)
+  FORGE_LLM_BASE_URL  e.g. http://192.168.1.130:8888/v1
+  FORGE_LLM_MODEL     e.g. Qwen3.8-27B M (UD-Q4_K_M)
+  FORGE_LLM_API_KEY   optional bearer key (empty for local/no-auth endpoints)
+  FORGE_LLM_BACKEND   explicit override: auto|api|none (defaults to auto)
 
-Default model: sonnet (creative idea generation doesn't need opus, doesn't
-benefit from haiku — sonnet is the sweet spot). Override via FORGE_LLM_MODEL.
+When no endpoint is configured, backend resolution returns None and callers
+fall back to deterministic heuristics — exactly the pre-existing behavior when
+no LLM endpoint / API key was available.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-import shutil
-import subprocess
 from typing import Protocol
+
+import httpx
+
+from project_forge.config import settings
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "sonnet"
+DEFAULT_MODEL = ""
 
 
 def _timeout_from_env(default_seconds: int = 420) -> int:
-    """How long to wait on one CLI generation, in seconds.
+    """How long to wait on one LLM call, in seconds.
 
-    Raised from 180s after a live failure: the money-bot panel's revision
-    pass timed out, `stress` read that as "no usable revision", and a
-    strategy was flagged as failing review because the reviewer ran out of
-    clock. A verdict caused by a stopwatch is the least honest failure mode
-    this engine has, and on a subscription there is no per-call cost to
-    waiting longer.
-
-    Override with FORGE_LLM_TIMEOUT_SEC; a garbage value warns and falls
-    back rather than crashing the process at import (see #77).
+    Override with FORGE_LLM_TIMEOUT_SEC (or settings.llm_timeout_sec). A
+    garbage value warns and falls back rather than crashing at import.
     """
     raw = os.environ.get("FORGE_LLM_TIMEOUT_SEC")
     if raw is None:
-        return default_seconds
+        return max(1, int(settings.llm_timeout_sec or default_seconds))
     try:
         value = int(float(raw))
     except ValueError:
@@ -59,128 +56,68 @@ class LLMBackend(Protocol):
 
     @property
     def name(self) -> str:
-        """Human-readable identifier for logs (e.g. 'claude-code:sonnet')."""
-        ...
+        """Human-readable identifier for logs (e.g. 'openai-compatible:Qwen3')."""
 
     def call(self, prompt: str) -> str | None:
         """Send prompt, return raw text response (or None on any failure)."""
-        ...
 
 
-class AnthropicAPIBackend:
-    """Direct Anthropic API call. Faster than Claude Code (~1-2s vs ~3-8s)
-    but requires ANTHROPIC_API_KEY to be set (separate billing tier)."""
+class OpenAICompatibleBackend:
+    """Generic chat/completions client against FORGE_LLM_BASE_URL.
 
-    def __init__(self, api_key: str, model: str = DEFAULT_MODEL):
-        import anthropic
-
-        self.client = anthropic.Anthropic(api_key=api_key)
-        # Anthropic API expects full model IDs like 'claude-sonnet-4-6';
-        # accept short aliases too for symmetry with the CLI backend.
-        self.model = _expand_model_alias(model)
-
-    @property
-    def name(self) -> str:
-        return f"anthropic-api:{self.model}"
-
-    def call(self, prompt: str) -> str | None:
-        try:
-            resp = self.client.messages.create(
-                model=self.model,
-                max_tokens=2000,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            text = resp.content[0].text if resp.content else ""
-            return text.strip() or None
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Anthropic API call failed: %s", exc)
-            return None
-
-
-class ClaudeCodeBackend:
-    """Shell out to `claude --print --model <m> <prompt>`.
-
-    Uses host's Claude Code OAuth — no separate API key needed.
-    Latency ~3-8s; cost rolls into the user's Claude subscription.
+    Works with any OpenAI-compatible server — a local vLLM/Ollama/GGUF
+    endpoint or a hosted provider. No SDK dependency beyond httpx.
     """
 
-    def __init__(self, model: str = DEFAULT_MODEL, timeout: int = DEFAULT_TIMEOUT):
+    def __init__(
+        self,
+        base_url: str,
+        model: str = DEFAULT_MODEL,
+        api_key: str = "",
+        timeout: int = DEFAULT_TIMEOUT,
+    ):
+        self.base_url = base_url.rstrip("/")
         self.model = model
+        self.api_key = api_key
         self.timeout = timeout
 
     @property
     def name(self) -> str:
-        return f"claude-code:{self.model}"
+        label = self.model or "default"
+        return f"openai-compatible:{label}"
 
     def call(self, prompt: str) -> str | None:
-        # Resolve absolute path each call so a systemd-launched service
-        # without ~/.local/bin on PATH still finds the binary.
-        bin_path = _claude_cli_path() or "claude"
+        url = f"{self.base_url}/chat/completions"
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 2000,
+        }
         try:
-            result = subprocess.run(
-                [bin_path, "--print", "--model", self.model, prompt],
-                capture_output=True,
-                text=True,
-                timeout=self.timeout,
-                check=True,
-            )
-        except FileNotFoundError as exc:
-            logger.warning("claude CLI not found on PATH: %s", exc)
-            return None
-        except subprocess.TimeoutExpired:
-            logger.warning("claude --print timed out after %ds", self.timeout)
-            return None
-        except subprocess.CalledProcessError as exc:
-            logger.warning(
-                "claude --print exited %d: %s",
-                exc.returncode,
-                (exc.stderr or "")[:200],
-            )
+            resp = httpx.post(url, headers=headers, json=payload, timeout=self.timeout)
+            resp.raise_for_status()
+            data = resp.json()
+            content = data["choices"][0]["message"]["content"]
+            return (content or "").strip() or None
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("LLM call to %s failed: %s", url, exc)
             return None
 
-        out = (result.stdout or "").strip()
-        return out or None
+
+def _configured_base_url() -> str:
+    """Base URL from settings/env, or empty when BYO-LLM is disabled."""
+    return (settings.llm_base_url or os.environ.get("FORGE_LLM_BASE_URL", "")).strip()
 
 
-def _expand_model_alias(model: str) -> str:
-    """Map short aliases (sonnet/opus/haiku) to current full IDs.
-
-    Used for the Anthropic API backend (which wants the full ID); the
-    Claude Code CLI accepts the short aliases natively.
-    """
-    aliases = {
-        "sonnet": "claude-sonnet-4-6",
-        "opus": "claude-opus-4-7",
-        "haiku": "claude-haiku-4-5-20251001",
-    }
-    return aliases.get(model, model)
+def _configured_model() -> str:
+    return (settings.llm_model or os.environ.get("FORGE_LLM_MODEL", "")).strip()
 
 
-def _claude_cli_path() -> str | None:
-    """Locate the `claude` CLI. Tries $PATH first, then common install
-    locations (npm-global, ~/.local/bin) since systemd services often
-    start with a minimal PATH that excludes user-local bin directories.
-    """
-    found = shutil.which("claude")
-    if found:
-        return found
-    candidates = [
-        os.path.expanduser("~/.local/bin/claude"),
-        os.path.expanduser("~/.npm-global/bin/claude"),
-        "/usr/local/bin/claude",
-    ]
-    for p in candidates:
-        if os.path.isfile(p) and os.access(p, os.X_OK):
-            return p
-    return None
-
-
-def _has_claude_cli() -> bool:
-    """True if `claude` is on $PATH or a common install location.
-
-    Wrapped so tests can monkeypatch.
-    """
-    return _claude_cli_path() is not None
+def _configured_api_key() -> str:
+    return settings.llm_api_key or os.environ.get("FORGE_LLM_API_KEY", "")
 
 
 def resolve_backend(
@@ -188,126 +125,61 @@ def resolve_backend(
     force: str | None = None,
     model_override: str | None = None,
 ) -> LLMBackend | None:
-    """Pick the best available LLM backend.
+    """Resolve the configured LLM backend, or None when BYO-LLM is disabled.
 
     `model_override` lets callers pick a different model for cheap, batchy
-    work (e.g. Haiku 4.5 for semantic dedup verification) without changing
-    the global default Sonnet model. Falls back to `FORGE_LLM_MODEL` env,
-    then `DEFAULT_MODEL`.
-
-    Returns None when nothing is available — callers must handle this and
-    fall back to deterministic heuristics.
+    work without changing the global default. `FORGE_LLM_BACKEND` can force
+    `none` to disable LLM use entirely; `auto`/empty auto-detects from
+    FORGE_LLM_BASE_URL.
     """
-    forced = force or os.environ.get("FORGE_LLM_BACKEND")
-    model = model_override or os.environ.get("FORGE_LLM_MODEL", DEFAULT_MODEL)
-
-    # Settings is a pydantic instance — read the api_key off it (also picks
-    # up FORGE_ANTHROPIC_API_KEY via the env_prefix).
-    from project_forge.config import settings
-
-    # For Haiku-specific work, prefer a dedicated Haiku key so the user can
-    # plumb a cheap key without giving project-forge their Sonnet/Opus key.
-    if model_override == "haiku":
-        api_key = os.environ.get("FORGE_HAIKU_API_KEY", "") or (
-            settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-        )
-    else:
-        api_key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-
+    forced = force or os.environ.get("FORGE_LLM_BACKEND", "")
     if forced in ("static", "none"):
         return None
-    if forced == "api":
-        return AnthropicAPIBackend(api_key, model=model) if api_key else None
-    if forced == "claude_code":
-        return ClaudeCodeBackend(model=model) if _has_claude_cli() else None
 
-    # Auto-detect: API beats Claude Code (3-4× lower latency).
-    if api_key:
-        return AnthropicAPIBackend(api_key, model=model)
-    if _has_claude_cli():
-        return ClaudeCodeBackend(model=model)
-    return None
+    base_url = _configured_base_url()
+    if not base_url:
+        if forced in ("api", "auto"):
+            logger.info("BYO-LLM disabled: no FORGE_LLM_BASE_URL configured")
+        return None
+
+    model = model_override or _configured_model()
+    return OpenAICompatibleBackend(
+        base_url=base_url,
+        model=model,
+        api_key=_configured_api_key(),
+        timeout=DEFAULT_TIMEOUT,
+    )
 
 
 def resolve_cheap_backend() -> LLMBackend | None:
-    """Backend for high-volume, batchy work (dedup verification, cluster
-    naming, tie-break scoring).
-
-    Model selection differs by path because the cost model differs:
-
-      - API path (FORGE_HAIKU_API_KEY or ANTHROPIC_API_KEY set):
-        prefer Haiku 4.5. ~$0.001/call, fast. The cost discipline
-        matters because every API call shows up on a bill.
-
-      - Claude Code CLI path (no API key, running on the user's Pro
-        Max subscription): the 'cheap' name is misleading — there is
-        no per-call cost — so we use the strongest available model.
-        Default `FORGE_CLI_MODEL` is `opus`; override via env.
-
-    Falls through to `resolve_backend()` if nothing usable resolves.
-    """
-    # API path: Haiku is the right call because cost is real per token.
-    haiku_via_api = resolve_backend(model_override="haiku")
-    if haiku_via_api is not None and isinstance(haiku_via_api, AnthropicAPIBackend):
-        return haiku_via_api
-
-    # Honour the explicit kill-switch. Without this, FORGE_LLM_BACKEND=
-    # static/none disabled the main generators but the cheap path (scorers,
-    # dedup verification) still shelled out to the claude CLI.
-    forced = os.environ.get("FORGE_LLM_BACKEND", "")
-    if forced in ("static", "none"):
+    """Backend for high-volume, batchy work. Same BYO-LLM resolution; model
+    falls back to the configured default (there is no separate 'haiku' tier
+    in the BYO-LLM model — the operator controls cost at the endpoint)."""
+    if os.environ.get("FORGE_LLM_BACKEND", "") in ("static", "none"):
         return None
-
-    # CLI path: no per-call cost on Pro Max. Use the most capable model
-    # the user has access to. Default Opus; FORGE_CLI_MODEL overrides
-    # ("sonnet" / "haiku" / etc.) for users who want a different tradeoff.
-    if forced != "api" and _has_claude_cli():
-        cli_model = os.environ.get("FORGE_CLI_MODEL", "opus")
-        return ClaudeCodeBackend(model=cli_model)
-
     return resolve_backend()
 
 
-# Which model each role gets on the CLI path. Drafting a strategy is a
-# variety task — a faster model means more attempts per hour and more shots
-# on goal — while reviewing one is where rigor actually pays. Splitting them
-# keeps the red team on the strongest model without slowing generation to
-# its speed.
-_ROLE_DEFAULTS: dict[str, tuple[str, str]] = {
-    # role: (env var, default CLI model)
-    "generate": ("FORGE_BOT_GEN_MODEL", "sonnet"),
-    "review": ("FORGE_BOT_REVIEW_MODEL", "opus"),
+# Which model each role gets. With BYO-LLM the operator controls a single
+# endpoint/model; role defaults are kept for API-passthrough servers that
+# alias short names, otherwise the configured model wins.
+_ROLE_DEFAULTS: dict[str, str] = {
+    "generate": "FORGE_BOT_GEN_MODEL",
+    "review": "FORGE_BOT_REVIEW_MODEL",
 }
 
 
 def resolve_role_backend(role: str) -> LLMBackend | None:
-    """Backend for a named role ('generate' / 'review').
-
-    Falls back to `resolve_cheap_backend()` for any unknown role, and
-    honours the FORGE_LLM_BACKEND kill switch exactly like every other
-    resolver here — a role must never be a way around it.
-    """
-    env_var, default_model = _ROLE_DEFAULTS.get(role, ("FORGE_CLI_MODEL", "opus"))
-
-    forced = os.environ.get("FORGE_LLM_BACKEND", "")
-    if forced in ("static", "none"):
+    """Backend for a named role ('generate' / 'review'). Fell back to the
+    configured model unless the role env override names a different one."""
+    if os.environ.get("FORGE_LLM_BACKEND", "") in ("static", "none"):
         return None
-
-    # API path keeps its own cost discipline — role splitting is a CLI-path
-    # idea, where there is no per-call cost to spend on the review.
-    api_backend = resolve_backend()
-    if api_backend is not None and isinstance(api_backend, AnthropicAPIBackend):
-        return api_backend
-
-    if forced != "api" and _has_claude_cli():
-        return ClaudeCodeBackend(model=os.environ.get(env_var, default_model))
-
-    return resolve_cheap_backend()
+    model_override = os.environ.get(_ROLE_DEFAULTS.get(role, ""), "") or None
+    return resolve_backend(model_override=model_override)
 
 
 __all__ = [
-    "AnthropicAPIBackend",
-    "ClaudeCodeBackend",
+    "OpenAICompatibleBackend",
     "LLMBackend",
     "resolve_backend",
     "resolve_cheap_backend",
